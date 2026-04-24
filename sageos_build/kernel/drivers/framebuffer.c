@@ -3,6 +3,7 @@
 #include "bootinfo.h"
 #include "console.h"
 #include "serial.h"
+#include "timer.h"
 
 #define VGA_W 80
 #define VGA_H 25
@@ -60,6 +61,7 @@ static void fb_putpixel(uint32_t x, uint32_t y, uint32_t rgb) {
 }
 
 static void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t rgb) {
+    timer_poll();
     for (uint32_t yy = 0; yy < h; yy++) {
         for (uint32_t xx = 0; xx < w; xx++) {
             fb_putpixel(x + xx, y + yy, rgb);
@@ -197,11 +199,15 @@ static void scroll(void) {
     uint32_t h = g_info->height;
     uint32_t w = g_info->width;
 
+    timer_poll();
+
     for (uint32_t y = char_h; y < h; y++) {
         for (uint32_t x = 0; x < w; x++) {
             fb[(uint64_t)(y - char_h) * pitch + x] = fb[(uint64_t)y * pitch + x];
         }
     }
+
+    timer_poll();
 
     for (uint32_t y = h - char_h; y < h; y++) {
         for (uint32_t x = 0; x < w; x++) {
@@ -373,6 +379,8 @@ static uint32_t str_len32(const char *s) {
     return n;
 }
 
+static char status_shadow[256];
+
 void console_draw_status_bar(const char *right_text) {
     if (!g_have_fb || !g_info || cols == 0) {
         return;
@@ -386,25 +394,32 @@ void console_draw_status_bar(const char *right_text) {
     fg = 0x05070A;
     bg = 0x79FFB0;
 
-    for (uint32_t i = 0; i < cols; i++) {
-        draw_cell(i, 0, ' ');
-    }
+    char current[256];
+    for (uint32_t i = 0; i < 255; i++) current[i] = ' ';
+    current[255] = 0;
+
+    if (cols < 255) current[cols] = 0;
 
     const char *left = " SageOS v0.0.10 ";
-
-    for (uint32_t i = 0; left[i] && i < cols; i++) {
-        draw_cell(i, 0, left[i]);
+    for (uint32_t i = 0; left[i] && i < 255 && i < cols; i++) {
+        current[i] = left[i];
     }
 
     uint32_t len = str_len32(right_text);
     uint32_t start = 0;
-
-    if (len + 1 < cols) {
+    if (len + 1 < cols && len < 255) {
         start = cols - len - 1;
+        for (uint32_t i = 0; right_text[i] && start + i < 255 && start + i < cols; i++) {
+            current[start + i] = right_text[i];
+        }
     }
 
-    for (uint32_t i = 0; right_text && right_text[i] && start + i < cols; i++) {
-        draw_cell(start + i, 0, right_text[i]);
+    /* Only draw characters that changed */
+    for (uint32_t i = 0; i < cols && i < 255; i++) {
+        if (current[i] != status_shadow[i]) {
+            draw_cell(i, 0, current[i]);
+            status_shadow[i] = current[i];
+        }
     }
 
     fg = saved_fg;

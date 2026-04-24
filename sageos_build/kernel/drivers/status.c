@@ -50,6 +50,18 @@ static uint32_t ram_percent(void) {
     }
 
     /*
+     * Sanity check: memory_total shouldn't be Petabytes on a Lenovo 300e.
+     * 128 GB (0x20 0000 0000) is a safe upper bound for sanity.
+     */
+    if (b->memory_total > 0x2000000000ULL || b->memory_total < 0x100000ULL) {
+        return 0xFFFFFFFFU;
+    }
+
+    if (b->memory_usable > b->memory_total) {
+        return 0xFFFFFFFFU;
+    }
+
+    /*
      * Memory Usable is what the firmware reported as EfiConventionalMemory.
      * Everything else (Total - Usable) is already taken by the firmware,
      * kernel, or reserved for MMIO.
@@ -121,8 +133,6 @@ void status_tick_poll(void) {
      * this while waiting for input, so the bar updates without interrupt-time
      * framebuffer drawing.
      */
-    timer_idle_poll();
-
     uint64_t now = timer_ticks();
 
     if (now == last_draw_tick) {
@@ -130,9 +140,10 @@ void status_tick_poll(void) {
     }
 
     /*
-     * PIT is 100 Hz. Refresh about 4 times/sec.
+     * PIT is 100 Hz. Refresh 10 times/sec (every 10 ticks).
+     * With optimized drawing, this is very cheap.
      */
-    if ((now % 25) == 0) {
+    if ((now % 10) == 0) {
         status_refresh();
     }
 }

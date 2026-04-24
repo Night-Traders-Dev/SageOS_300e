@@ -151,6 +151,7 @@ char keyboard_getchar(void) {
         return ev.ascii;
     }
 
+    timer_idle_poll();
     status_tick_poll();
   }
 }
@@ -164,6 +165,7 @@ void keyboard_keydebug(void) {
     KeyEvent ev;
 
     if (!keyboard_poll_event(&ev)) {
+      timer_idle_poll();
       status_tick_poll();
       continue;
     }

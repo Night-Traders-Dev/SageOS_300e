@@ -17,6 +17,13 @@ static uint64_t last_idle_loops;
 static uint64_t last_total_loops;
 static volatile uint32_t cached_cpu_percent;
 
+#define CPU_WINDOW_SIZE 100
+
+static uint32_t cpu_history[CPU_WINDOW_SIZE];
+static uint32_t cpu_history_idx;
+static uint32_t cpu_history_sum;
+static uint32_t cpu_history_count;
+
 void timer_init(void) {
     pit_reload = (uint16_t)(PIT_BASE_HZ / PIT_HZ);
 
@@ -37,6 +44,11 @@ void timer_init(void) {
     last_idle_loops = 0;
     last_total_loops = 0;
     cached_cpu_percent = 0;
+
+    for (int i = 0; i < CPU_WINDOW_SIZE; i++) cpu_history[i] = 0;
+    cpu_history_idx = 0;
+    cpu_history_sum = 0;
+    cpu_history_count = 0;
 }
 
 void timer_irq(void) {
@@ -44,23 +56,25 @@ void timer_irq(void) {
 
     uint64_t idle_delta = idle_loops - last_idle_loops;
     uint64_t total_delta = total_loops - last_total_loops;
+    uint32_t current_pct = 0;
 
     if (total_delta > 0) {
         uint64_t idle_pct = (idle_delta * 100ULL) / total_delta;
-
-        if (idle_pct > 100) {
-            idle_pct = 100;
-        }
-
-        cached_cpu_percent = (uint32_t)(100 - (uint32_t)idle_pct);
+        if (idle_pct > 100) idle_pct = 100;
+        current_pct = (uint32_t)(100 - (uint32_t)idle_pct);
     } else {
-        /*
-         * If total_delta is 0, it means no poll/idle loops were performed
-         * since the last tick, meaning the CPU was fully occupied by
-         * kernel or command execution.
-         */
-        cached_cpu_percent = 100;
+        current_pct = 100;
     }
+
+    /* Update sliding window */
+    cpu_history_sum -= cpu_history[cpu_history_idx];
+    cpu_history[cpu_history_idx] = current_pct;
+    cpu_history_sum += current_pct;
+    cpu_history_idx = (cpu_history_idx + 1) % CPU_WINDOW_SIZE;
+    
+    if (cpu_history_count < CPU_WINDOW_SIZE) cpu_history_count++;
+    
+    cached_cpu_percent = cpu_history_sum / cpu_history_count;
 
     last_idle_loops = idle_loops;
     last_total_loops = total_loops;

@@ -390,7 +390,7 @@ typedef struct {
 
     UINT64 kernel_base;
     UINT64 kernel_size;
-} SageOSBootInfo;
+} __attribute__((packed)) SageOSBootInfo;
 
 #define SAGEOS_BOOT_MAGIC 0x534147454F534249ULL
 

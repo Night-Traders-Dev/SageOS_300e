@@ -6,7 +6,8 @@
 #include "timer.h"
 #include "battery.h"
 
-static uint32_t tick_counter;
+static uint64_t last_draw_tick;
+static uint32_t draw_counter;
 
 static void append_char(char *buf, size_t cap, size_t *pos, char c) {
     if (*pos + 1 < cap) {
@@ -77,8 +78,6 @@ void status_refresh(void) {
 
     text[0] = 0;
 
-    tick_counter++;
-
     append_str(text, sizeof(text), &pos, "BAT ");
     uint32_t bat = battery_percent_status();
 
@@ -109,16 +108,52 @@ void status_refresh(void) {
     append_char(text, sizeof(text), &pos, '%');
 
     console_draw_status_bar(text);
+    last_draw_tick = timer_ticks();
+    draw_counter++;
+}
+
+void status_tick_poll(void) {
+    /*
+     * Do not draw from the IRQ handler. The shell/keyboard idle path calls
+     * this while waiting for input, so the bar updates without interrupt-time
+     * framebuffer drawing.
+     */
+    uint64_t now = timer_ticks();
+
+    if (now == last_draw_tick) {
+        return;
+    }
+
+    /*
+     * PIT is 100 Hz. Refresh about 4 times/sec.
+     */
+    if ((now % 25) == 0) {
+        status_refresh();
+    }
 }
 
 void status_print(void) {
     SageOSBootInfo *b = console_boot_info();
 
     console_write("\nStatus:");
-    console_write("\n  battery: ACPI/EC detector active; percentage pending AML/EC query");
-    console_write("\n  cpu: PIT polling + idle-loop accounting");
-    console_write("\n  ram: ");
+    console_write("\n  status refreshes: ");
+    console_u32(draw_counter);
 
+    console_write("\n  battery: ");
+    int bat = battery_percent();
+
+    if (bat >= 0) {
+        console_u32((uint32_t)bat);
+        console_write("%");
+    } else {
+        console_write("unavailable until ACPI battery AML/EC query");
+    }
+
+    console_write("\n  cpu: ");
+    console_u32(timer_cpu_percent());
+    console_write("%");
+
+    console_write("\n  ram: ");
     uint32_t ram = ram_percent();
 
     if (ram == 0xFFFFFFFFU) {
@@ -127,6 +162,9 @@ void status_print(void) {
         console_u32(ram);
         console_write("% reserved/used by early firmware/kernel view");
     }
+
+    console_write("\n  ticks: ");
+    console_hex64(timer_ticks());
 
     if (b) {
         console_write("\n  memory_total: ");
@@ -141,6 +179,7 @@ void status_print(void) {
 }
 
 void status_init(void) {
-    tick_counter = 0;
+    last_draw_tick = 0;
+    draw_counter = 0;
     status_refresh();
 }

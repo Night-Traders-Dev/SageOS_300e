@@ -3,6 +3,7 @@
 #include "keyboard.h"
 #include "console.h"
 #include "timer.h"
+#include "status.h"
 
 static char keymap[128] = {
     0, 27, '1','2','3','4','5','6','7','8','9','0','-','=', 8,
@@ -29,6 +30,7 @@ static int wait_read(void) {
     for (uint32_t i = 0; i < 100000; i++) {
         if (inb(0x64) & 1) return 1;
         timer_idle_poll();
+        status_tick_poll();
     }
 
     return 0;
@@ -38,6 +40,7 @@ static int wait_write(void) {
     for (uint32_t i = 0; i < 100000; i++) {
         if ((inb(0x64) & 2) == 0) return 1;
         timer_idle_poll();
+        status_tick_poll();
     }
 
     return 0;
@@ -142,6 +145,7 @@ char keyboard_getchar(void) {
         }
 
         timer_idle_poll();
+        status_tick_poll();
     }
 }
 
@@ -155,6 +159,7 @@ void keyboard_keydebug(void) {
 
         if (!keyboard_poll_event(&ev)) {
             timer_idle_poll();
+        status_tick_poll();
             continue;
         }
 

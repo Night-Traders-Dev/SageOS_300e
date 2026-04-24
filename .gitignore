@@ -6,3 +6,5 @@
 *.obj
 *.o
 *.EFI
+sageos_build/PHASE2_V008_STATUSBAR_NOTES.md
+sageos_build/backups/fix_modular_build_v007_20260424_133935/kernel.c.removed_from_active_build

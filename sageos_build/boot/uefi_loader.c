@@ -381,6 +381,15 @@ typedef struct {
     UINT32 boot_services_active;
     UINT32 input_mode;
     UINT64 acpi_rsdp;
+
+    UINT64 memory_map;
+    UINT64 memory_map_size;
+    UINT64 memory_desc_size;
+    UINT64 memory_total;
+    UINT64 memory_usable;
+
+    UINT64 kernel_base;
+    UINT64 kernel_size;
 } SageOSBootInfo;
 
 #define SAGEOS_BOOT_MAGIC 0x534147454F534249ULL
@@ -439,6 +448,38 @@ static void print_hex64(UINT64 v) {
     out[18] = 0;
     print(out);
 }
+
+static void update_memory_summary(
+    EFI_MEMORY_DESCRIPTOR *map,
+    UINTN map_size,
+    UINTN desc_size
+) {
+    UINT64 total = 0;
+    UINT64 usable = 0;
+
+    if (!map || !desc_size) {
+        return;
+    }
+
+    for (UINTN off = 0; off + desc_size <= map_size; off += desc_size) {
+        EFI_MEMORY_DESCRIPTOR *d =
+            (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)map + off);
+
+        UINT64 bytes = d->NumberOfPages * 4096ULL;
+        total += bytes;
+
+        if (d->Type == EfiConventionalMemory) {
+            usable += bytes;
+        }
+    }
+
+    gBootInfo.memory_map = (UINT64)(uintptr_t)map;
+    gBootInfo.memory_map_size = (UINT64)map_size;
+    gBootInfo.memory_desc_size = (UINT64)desc_size;
+    gBootInfo.memory_total = total;
+    gBootInfo.memory_usable = usable;
+}
+
 
 static int guid_eq(EFI_GUID *a, EFI_GUID *b) {
     if (a->Data1 != b->Data1) return 0;
@@ -687,6 +728,8 @@ static EFI_STATUS exit_boot_services_retry(EFI_HANDLE image_handle) {
             return status;
         }
 
+        update_memory_summary(map, map_size, desc_size);
+
         status = gBS->ExitBootServices(image_handle, map_key);
 
         if (status == EFI_SUCCESS) {
@@ -736,6 +779,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
         print(L"Kernel load failed.\r\n");
         for (;;) {}
     }
+
+    gBootInfo.kernel_base = KERNEL_LOAD_ADDR;
+    gBootInfo.kernel_size = kernel_size;
 
     print(L"Exiting boot services...\r\n");
 

@@ -36,7 +36,62 @@ check_tools() {
 build_kernel() {
     mkdir -p "$OBJ"
 
-    echo "--- Building kernel: freestanding x86_64 C/ASM ---"
+    echo "--- Building kernel: modular freestanding x86_64 C/ASM ---"
+
+    rm -f "$OBJ"/*.o "$OBJ"/*.obj 2>/dev/null || true
+
+    local cfiles=()
+    local objs=()
+
+    for dir in \
+        "$KERNEL/core" \
+        "$KERNEL/drivers" \
+        "$KERNEL/fs" \
+        "$KERNEL/shell"
+    do
+        if [ -d "$dir" ]; then
+            while IFS= read -r f; do
+                cfiles+=("$f")
+            done < <(find "$dir" -type f -name '*.c' | sort)
+        fi
+    done
+
+    if [ "${#cfiles[@]}" -eq 0 ]; then
+        echo "ERROR: no modular kernel C sources found."
+        echo "Expected sources under:"
+        echo "  $KERNEL/core"
+        echo "  $KERNEL/drivers"
+        echo "  $KERNEL/fs"
+        echo "  $KERNEL/shell"
+        exit 1
+    fi
+
+    for src in "${cfiles[@]}"; do
+        local rel="${src#$KERNEL/}"
+        local safe="${rel//\//_}"
+        local obj="$OBJ/${safe%.c}.o"
+
+        echo "  CC $rel"
+
+        clang \
+          -target x86_64-unknown-elf \
+          -ffreestanding \
+          -fno-stack-protector \
+          -fno-pic \
+          -fno-pie \
+          -mno-red-zone \
+          -mno-sse \
+          -mno-sse2 \
+          -Wall \
+          -Wextra \
+          -I"$KERNEL/include" \
+          -c "$src" \
+          -o "$obj"
+
+        objs+=("$obj")
+    done
+
+    echo "  AS entry.S"
 
     clang \
       -target x86_64-unknown-elf \
@@ -45,20 +100,7 @@ build_kernel() {
       -fno-pic \
       -fno-pie \
       -mno-red-zone \
-      -mno-sse \
-      -mno-sse2 \
-      -Wall \
-      -Wextra \
-      -c "$KERNEL/kernel.c" \
-      -o "$OBJ/kernel.o"
-
-    clang \
-      -target x86_64-unknown-elf \
-      -ffreestanding \
-      -fno-stack-protector \
-      -fno-pic \
-      -fno-pie \
-      -mno-red-zone \
+      -I"$KERNEL/include" \
       -c "$KERNEL/entry.S" \
       -o "$OBJ/entry.o"
 
@@ -67,7 +109,7 @@ build_kernel() {
       -z max-page-size=0x1000 \
       -T "$KERNEL/linker.ld" \
       "$OBJ/entry.o" \
-      "$OBJ/kernel.o" \
+      "${objs[@]}" \
       -o "$BUILD/kernel.elf"
 
     llvm-objcopy -O binary "$BUILD/kernel.elf" "$BUILD/KERNEL.BIN"

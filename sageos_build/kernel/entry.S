@@ -91,16 +91,15 @@ ap_trampoline_64:
     /* Load stack pointer */
     movq ap_stack_ptr(%rip), %rsp
     
-    /* Call entry point */
+    /* Load AP entry point */
     movq ap_entry_ptr(%rip), %rax
     
-    /* Pass APIC ID or other info if needed, but for now just call */
-    /* We can read LAPIC ID to identify ourselves in C */
-    push %rax
-    mov $0x0020, %edi /* LAPIC_ID offset */
-    /* We need lapic_base, but we can't easily get it here without a global. 
-       Actually, the C code can handle identification via LAPIC_ID. */
-    pop %rax
+    /* Read LAPIC ID (at 0xFEE00020) and pass as first argument */
+    mov $0xFEE00020, %rbx
+    mov (%rbx), %edi
+    shr $24, %edi
+    
+    /* Call entry point */
     call *%rax
 
 .ap_hang:

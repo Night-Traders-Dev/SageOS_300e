@@ -211,6 +211,8 @@ qemu_run() {
       -bios "$ovmf" \
       -drive file="$IMG",format=raw,snapshot=on \
       -m 256M \
+      -nographic \
+      -monitor none \
       -serial stdio
 }
 

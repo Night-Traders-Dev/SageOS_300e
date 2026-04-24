@@ -5,7 +5,7 @@
 #include "timer.h"
 #include <stdint.h>
 
-volatile uint64_t scancode_buffer = 0;
+extern volatile uint64_t scancode_buffer;
 
 const char *keyboard_backend(void) { return "native-ps2-irq"; }
 

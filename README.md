@@ -7,7 +7,7 @@ The current build boots through UEFI, loads a freestanding kernel, initializes a
 ## Current Version
 
 ```text
-SageOS v0.0.10
+SageOS v0.1.0
 ```
 
 ## Target Hardware
@@ -16,8 +16,8 @@ SageOS v0.0.10
 Device: Lenovo 300e Chromebook 2nd Gen AST
 Boot:   x86_64 UEFI
 Display: UEFI GOP framebuffer
-Input:  native i8042/PS2 early keyboard path
-CPU:    AMD x86_64, ACPI MADT-discovered CPUs
+Input:  native i8042/PS2 native driver
+CPU:    AMD x86_64, Multi-core SMP enabled
 ```
 
 ## Current Feature Status
@@ -32,18 +32,17 @@ CPU:    AMD x86_64, ACPI MADT-discovered CPUs
 | Kernel shell | Working |
 | Unified build/flash tool | Working |
 | Modular kernel tree | Working |
-| IDT installation | Working — 256-entry IDT, PIC remapped to vectors 32–47 |
-| PIT timer (IRQ0) | Working — 100 Hz via hardware IRQ, not polling |
-| CPU% accounting | Working — IRQ-driven idle loop tracking, 100-tick sliding window |
-| Status bar | Working — dirty-cell shadow buffer, refreshes 10×/sec from keyboard idle path |
-| Keyboard diagnostics | Working via `keydebug` |
-| RAM status | Early UEFI memory-map summary |
-| SMP | ACPI MADT CPU discovery; AP startup not enabled yet |
-| ACPI | RSDP/XSDT/FADT/MADT inspection |
-| ACPI shutdown | S5 sleep package parsed from DSDT; `shutdown` command wired to ACPI S5 |
-| ACPI suspend | S3 sleep package parsed from DSDT; `suspend` command wired to ACPI S3 |
-| Battery | ACPI device hints detected; Chromebook EC LPC probe at 0x900; percentage not reliable yet |
-| Chromebook EC | ECMAP signature probe at 0x900, 0x800, 0x600, 0x100, 0x400 |
+| IDT installation | Working |
+| PIT timer (IRQ0) | Working |
+| CPU% accounting | Working — Real-time 1s sliding window |
+| Status bar | Working — Flicker-free 10Hz redraw |
+| Keyboard | Working — Native PS/2 driver |
+| RAM status | Working — Real-time Used RAM tracking |
+| SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
+| ACPI | Working — Minimal AML parser, Battery (_BST) & Lid detection |
+| Battery | Working — Chromebook EC (LPC 0x900..0x400) capacity polling |
+| VFS / FAT32 | Working — ATA PIO block driver, VFS layer, FAT32 mount |
+| SageLang Backend | Working — Bare-metal stabilized, runtime-free modules |
 
 ## Important Design Note
 

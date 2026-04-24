@@ -6,6 +6,35 @@
 #include "timer.h"
 #include <stdint.h>
 
+#if defined(__clang__) || defined(__GNUC__)
+#define EFIAPI __attribute__((ms_abi))
+#else
+#define EFIAPI
+#endif
+
+#define EFI_SUCCESS 0
+
+typedef uint16_t CHAR16;
+typedef uint64_t EFI_STATUS;
+
+typedef struct {
+    uint16_t ScanCode;
+    CHAR16 UnicodeChar;
+} EFI_INPUT_KEY;
+
+typedef struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
+
+typedef EFI_STATUS (EFIAPI *EFI_READ_KEY_STROKE)(
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *self,
+    EFI_INPUT_KEY *key
+);
+
+struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
+    void *Reset;
+    EFI_READ_KEY_STROKE ReadKeyStroke;
+    void *WaitForKey;
+};
+
 #define I8042_DATA 0x60
 #define I8042_STATUS 0x64
 #define I8042_COMMAND 0x64
@@ -40,7 +69,22 @@ static int shift_down;
 static int caps_lock;
 static int extended_prefix;
 
-const char *keyboard_backend(void) { return "i8042-irq+poll+serial"; }
+static int firmware_input_available(void) {
+    SageOSBootInfo *b = console_boot_info();
+
+    return
+        b &&
+        b->magic == SAGEOS_BOOT_MAGIC &&
+        b->boot_services_active &&
+        b->input_mode == 1 &&
+        b->con_in;
+}
+
+const char *keyboard_backend(void) {
+    return firmware_input_available()
+        ? "uefi-conin+i8042-poll+serial"
+        : "i8042-irq+poll+serial";
+}
 
 static int queue_next(int idx) {
     return (idx + 1) % SCANCODE_QUEUE_SIZE;
@@ -149,6 +193,10 @@ void keyboard_init(void) {
     caps_lock = 0;
     extended_prefix = 0;
 
+    if (firmware_input_available()) {
+        return;
+    }
+
     command(0xAD);
     command(0xA7);
     flush_output();
@@ -198,6 +246,36 @@ static char translate_ascii(uint8_t sc) {
     }
 
     return c;
+}
+
+static int firmware_poll_char(char *out) {
+    SageOSBootInfo *b = console_boot_info();
+
+    if (!firmware_input_available()) {
+        return 0;
+    }
+
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *con_in =
+        (EFI_SIMPLE_TEXT_INPUT_PROTOCOL *)(uintptr_t)b->con_in;
+
+    if (!con_in || !con_in->ReadKeyStroke) {
+        return 0;
+    }
+
+    EFI_INPUT_KEY key;
+    key.ScanCode = 0;
+    key.UnicodeChar = 0;
+
+    if (con_in->ReadKeyStroke(con_in, &key) != EFI_SUCCESS) {
+        return 0;
+    }
+
+    if (!key.UnicodeChar || key.UnicodeChar > 0x7F) {
+        return 0;
+    }
+
+    *out = (key.UnicodeChar == '\r') ? '\n' : (char)key.UnicodeChar;
+    return 1;
 }
 
 int keyboard_poll_event(KeyEvent *ev) {
@@ -291,7 +369,12 @@ void keyboard_keydebug(void) {
 char keyboard_getchar(void) {
     for (;;) {
         char serial_c;
+        char firmware_c;
         KeyEvent ev;
+
+        if (firmware_poll_char(&firmware_c)) {
+            return firmware_c;
+        }
 
         if (serial_poll_char(&serial_c)) {
             return serial_c == '\r' ? '\n' : serial_c;
@@ -304,6 +387,15 @@ char keyboard_getchar(void) {
         }
 
         status_tick_poll();
+
+        if (firmware_input_available()) {
+            cpu_pause();
+            continue;
+        }
+
+        if (firmware_poll_char(&firmware_c)) {
+            return firmware_c;
+        }
 
         if (serial_poll_char(&serial_c)) {
             return serial_c == '\r' ? '\n' : serial_c;

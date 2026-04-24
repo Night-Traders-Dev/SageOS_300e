@@ -145,6 +145,7 @@ build_image() {
       -fno-stack-protector \
       -fshort-wchar \
       -mno-red-zone \
+      -DSAGEOS_EXIT_BOOT_SERVICES="${SAGEOS_EXIT_BOOT_SERVICES:-0}" \
       -Wall \
       -Wextra \
       -c "$BOOT/uefi_loader.c" \

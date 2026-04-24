@@ -31,6 +31,10 @@ typedef uint64_t EFI_VIRTUAL_ADDRESS;
 #define EFI_FILE_MODE_READ 0x0000000000000001ULL
 #define KERNEL_LOAD_ADDR   0x100000ULL
 
+#ifndef SAGEOS_EXIT_BOOT_SERVICES
+#define SAGEOS_EXIT_BOOT_SERVICES 0
+#endif
+
 typedef struct {
     UINT32 Data1;
     UINT16 Data2;
@@ -691,7 +695,7 @@ static EFI_STATUS load_kernel(EFI_HANDLE image_handle, UINT64 *kernel_size_out) 
     return EFI_SUCCESS;
 }
 
-static EFI_STATUS exit_boot_services_retry(EFI_HANDLE image_handle) {
+static EFI_STATUS handoff_memory_map(EFI_HANDLE image_handle, int exit_boot_services) {
     EFI_STATUS status;
     UINTN map_size = 0;
     UINTN map_key = 0;
@@ -731,6 +735,11 @@ static EFI_STATUS exit_boot_services_retry(EFI_HANDLE image_handle) {
         }
 
         update_memory_summary(map, map_size, desc_size);
+
+        if (!exit_boot_services) {
+            (void)image_handle;
+            return EFI_SUCCESS;
+        }
 
         status = gBS->ExitBootServices(image_handle, map_key);
 
@@ -785,12 +794,13 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
     gBootInfo.kernel_base = KERNEL_LOAD_ADDR;
     gBootInfo.kernel_size = kernel_size;
 
+#if SAGEOS_EXIT_BOOT_SERVICES
     print(L"Exiting boot services...\r\n");
 
     gBootInfo.boot_services_active = 0;
     gBootInfo.input_mode = 2;
 
-    status = exit_boot_services_retry(image_handle);
+    status = handoff_memory_map(image_handle, 1);
 
     if (status != EFI_SUCCESS) {
         print(L"ExitBootServices failed: ");
@@ -798,6 +808,25 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
         print(L"\r\n");
         for (;;) {}
     }
+#else
+    print(L"Keeping boot services active for firmware keyboard input.\r\n");
+
+    gBootInfo.boot_services_active = 1;
+    gBootInfo.input_mode = 1;
+
+    status = handoff_memory_map(image_handle, 0);
+
+    if (status != EFI_SUCCESS) {
+        print(L"Memory map capture failed: ");
+        print_hex64(status);
+        print(L"\r\n");
+        gBootInfo.memory_map = 0;
+        gBootInfo.memory_map_size = 0;
+        gBootInfo.memory_desc_size = 0;
+        gBootInfo.memory_total = 0;
+        gBootInfo.memory_usable = 0;
+    }
+#endif
 
     typedef void (EFIAPI *kernel_entry_t)(SageOSBootInfo *);
     kernel_entry_t kernel_entry = (kernel_entry_t)(uintptr_t)KERNEL_LOAD_ADDR;

@@ -36,7 +36,7 @@ CPU:    AMD x86_64, Multi-core SMP enabled
 | PIT timer (IRQ0) | Working |
 | CPU% accounting | Working — Real-time 1s sliding window |
 | Status bar | Working — Flicker-free 10Hz redraw |
-| Keyboard | Working — Native PS/2 driver |
+| Keyboard | Working — UEFI firmware input fallback + native i8042/serial |
 | RAM status | Working — Real-time Used RAM tracking |
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
 | ACPI | Working — Minimal AML parser, Battery (_BST) & Lid detection |
@@ -327,6 +327,10 @@ S5 (shutdown) and S3 (suspend) sleep packages are parsed from the DSDT at boot a
 
 ### Keyboard
 
+Default builds keep UEFI boot services active so the kernel can read `ConIn`
+keyboard events on the Lenovo 300e Chromebook internal keyboard. Set
+`SAGEOS_EXIT_BOOT_SERVICES=1` when building to test the strict native i8042 path.
+
 ```text
 keydebug
 ```
@@ -487,4 +491,3 @@ battery
 keydebug
 shutdown
 ```
-

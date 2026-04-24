@@ -26,16 +26,29 @@ static void banner(void) {
     console_write("\n");
 }
 
+static int firmware_input_mode(SageOSBootInfo *info) {
+    return
+        info &&
+        info->magic == SAGEOS_BOOT_MAGIC &&
+        info->boot_services_active &&
+        info->input_mode == 1 &&
+        info->con_in;
+}
+
 void kmain(SageOSBootInfo *info) {
+    int firmware_input = firmware_input_mode(info);
+
     serial_init();
     console_init(info);
 
     acpi_init(info);
-    smp_init();
 
-    idt_init();
-    timer_init();
-    irq_enable();
+    if (!firmware_input) {
+        smp_init();
+        idt_init();
+        timer_init();
+        irq_enable();
+    }
 
     battery_init();
 

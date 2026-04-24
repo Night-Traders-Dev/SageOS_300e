@@ -458,6 +458,8 @@ static void update_memory_summary(
     UINT64 usable = 0;
 
     if (!map || !desc_size) {
+        gBootInfo.memory_total = 0;
+        gBootInfo.memory_usable = 0;
         return;
     }
 

@@ -64,6 +64,11 @@ The active kernel shell supports:
 Autosuggestions are sourced from recent history first, then built-in command,
 path, and color completions.
 
+On hardware, keyboard input starts in auto mode. The kernel resets firmware
+`ConIn` once, then accepts the first working source from UEFI firmware input or
+legacy PS/2 polling. This avoids getting stuck when firmware exposes `ConIn` but
+does not deliver keystrokes after handoff.
+
 ## Built-In Commands
 
 ```text

@@ -196,6 +196,9 @@ static const char *shell_colors[] = {
 static char shell_history[SHELL_HISTORY_MAX][SHELL_LINE_MAX];
 static size_t shell_history_count = 0;
 
+static int uefi_input_reset_done = 0;
+static int active_input_backend = 0;
+
 static inline void outb(uint16_t port, uint8_t val) {
     __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
 }
@@ -235,29 +238,63 @@ static void serial_putc(char c) {
     outb(COM1, (uint8_t)c);
 }
 
-static const char *input_backend_name(void) {
-    if (
+static int uefi_input_available(void) {
+    return
         boot_info &&
         boot_info->boot_services_active &&
-        boot_info->con_in != 0
+        boot_info->con_in != 0;
+}
+
+static const char *input_backend_name(void) {
+    if (active_input_backend == 1) {
+        return "uefi-firmware-conin";
+    }
+
+    if (active_input_backend == 2) {
+        return "legacy-ps2";
+    }
+
+    if (
+        uefi_input_available()
     ) {
-        return "uefi-firmware-conin-exclusive";
+        return "auto-uefi-conin-or-ps2";
     }
 
     return "legacy-ps2-fallback";
 }
 
-static int uefi_getkey_poll(void) {
-    if (
-        !boot_info ||
-        !boot_info->boot_services_active ||
-        boot_info->con_in == 0
-    ) {
+static EFI_SIMPLE_TEXT_INPUT_PROTOCOL *uefi_conin(void) {
+    if (!uefi_input_available()) {
         return 0;
     }
 
-    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *conin =
-        (EFI_SIMPLE_TEXT_INPUT_PROTOCOL *)(uintptr_t)boot_info->con_in;
+    return (EFI_SIMPLE_TEXT_INPUT_PROTOCOL *)(uintptr_t)boot_info->con_in;
+}
+
+static void uefi_input_reset_once(void) {
+    if (uefi_input_reset_done) {
+        return;
+    }
+
+    uefi_input_reset_done = 1;
+
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *conin = uefi_conin();
+
+    if (!conin || !conin->Reset) {
+        return;
+    }
+
+    conin->Reset(conin, 0);
+}
+
+static int uefi_getkey_poll(void) {
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *conin = uefi_conin();
+
+    if (!conin) {
+        return 0;
+    }
+
+    uefi_input_reset_once();
 
     if (!conin->ReadKeyStroke) {
         return 0;
@@ -1305,32 +1342,23 @@ static int ps2_poll_key(void) {
 }
 
 static int kbd_getkey(void) {
-    if (
-        boot_info &&
-        boot_info->boot_services_active &&
-        boot_info->con_in != 0
-    ) {
-        for (;;) {
+    for (;;) {
+        if (active_input_backend != 2) {
             int key = uefi_getkey_poll();
 
             if (key) {
+                active_input_backend = 1;
                 return key;
             }
-
-            __asm__ volatile ("pause");
         }
-    }
 
-    /*
-     * PS/2 is fallback only. Mixing firmware input and PS/2 polling caused
-     * duplicate modifier state and random upper/lowercase transitions on
-     * real hardware.
-     */
-    for (;;) {
-        int key = ps2_poll_key();
+        if (active_input_backend != 1) {
+            int key = ps2_poll_key();
 
-        if (key) {
-            return key;
+            if (key) {
+                active_input_backend = 2;
+                return key;
+            }
         }
 
         __asm__ volatile ("pause");
@@ -1734,13 +1762,20 @@ static void cmd_dmesg(void) {
     term_write("\n[    0.000004] kernel-resident shell started");
     term_write("\n[    0.000005] input backend: ");
     term_write(input_backend_name());
-    term_write("\n[    0.000006] firmware shutdown path: ");
+    term_write("\n[    0.000006] firmware ConIn: ");
+    if (uefi_input_available()) {
+        term_write("available");
+    } else {
+        term_write("unavailable");
+    }
+    term_write("\n[    0.000007] PS/2 fallback: enabled");
+    term_write("\n[    0.000008] firmware shutdown path: ");
     if (boot_info && boot_info->runtime_services) {
         term_write("available");
     } else {
         term_write("unavailable");
     }
-    term_write("\n[    0.000007] ACPI RSDP: ");
+    term_write("\n[    0.000009] ACPI RSDP: ");
     if (boot_info && boot_info->acpi_rsdp) {
         term_write_hex64(boot_info->acpi_rsdp);
     } else {
@@ -1895,12 +1930,18 @@ static void shell_exec(const char *cmd) {
         term_write("\nInput backend: ");
         term_write(input_backend_name());
         term_write("\nFirmware ConIn: ");
-        if (boot_info && boot_info->con_in) {
+        if (uefi_input_available()) {
             term_write("available");
         } else {
             term_write("unavailable");
         }
-        term_write("\nPS/2 fallback: available when firmware input is unavailable");
+        term_write("\nFirmware input reset: ");
+        if (uefi_input_reset_done) {
+            term_write("attempted");
+        } else {
+            term_write("pending first poll");
+        }
+        term_write("\nPS/2 fallback: enabled");
         return;
     }
 

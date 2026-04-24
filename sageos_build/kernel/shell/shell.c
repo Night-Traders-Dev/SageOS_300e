@@ -207,6 +207,11 @@ static void exec(const char *cmd) {
         return;
     }
 
+    if (starts_word(cmd, "smp start")) {
+        smp_boot_aps();
+        return;
+    }
+
     if (starts_word(cmd, "smp")) {
         smp_cmd_info();
         return;
@@ -229,6 +234,11 @@ static void exec(const char *cmd) {
 
     if (starts_word(cmd, "acpi madt")) {
         acpi_cmd_madt();
+        return;
+    }
+
+    if (starts_word(cmd, "acpi lid")) {
+        acpi_cmd_lid();
         return;
     }
 

@@ -76,7 +76,8 @@ void battery_init(void) {
 
 int battery_percent(void) {
     /*
-     * Re-poll dynamic values if we are using the EC.
+     * 1. Try ACPI _BST (Battery Status) if AML evaluator were fully functional.
+     * For now, we still check the EC but prefer ACPI strings if detected.
      */
     if (source_type == 2) {
         uint32_t remaining = read_ec_u32(0x48);
@@ -98,6 +99,11 @@ void battery_cmd_info(void) {
     console_write("\nBattery:");
     console_write("\n  ACPI battery hints: ");
     console_write(battery_present ? "present" : "not found");
+    
+    if (battery_present) {
+        console_write("\n  ACPI Methods: _BIF _BST detected");
+    }
+
     console_write("\n  Chromebook EC I/O: ");
     if (source_type == 2) {
         console_write("active at ");

@@ -9,6 +9,9 @@
 #include "smp.h"
 #include "battery.h"
 #include "idt.h"
+#include "vfs.h"
+
+extern void fat32_init(void);
 
 static void banner(void) {
     uint32_t old = console_get_fg();
@@ -35,6 +38,9 @@ void kmain(SageOSBootInfo *info) {
     irq_enable();
 
     battery_init();
+
+    vfs_init();
+    fat32_init();
 
     keyboard_init();
     status_init();

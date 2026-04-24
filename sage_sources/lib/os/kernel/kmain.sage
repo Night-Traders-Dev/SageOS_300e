@@ -91,7 +91,8 @@ proc init_memory(boot_info):
     if mem_map == nil:
         mem_map = []
     end
-    pmm.init(mem_map)
+    # Use 16MB as a safe base for the PMM bitmap
+    pmm.init(mem_map, 16 * 1024 * 1024)
     vmm.vmm_init(arch)
     let total_mb = pmm.total_memory() / 1048576
     console.print_line("  Memory: " + str(total_mb) + " MB total")

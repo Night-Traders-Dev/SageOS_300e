@@ -3,6 +3,8 @@ gc_disable()
 # console.sage — VGA text mode and framebuffer console driver
 # VGA text buffer at 0xB8000, 80x25 characters, 16 colors.
 
+import metal.core as core
+
 # ----- Color constants -----
 let BLACK = 0
 let BLUE = 1
@@ -22,7 +24,7 @@ let YELLOW = 14
 let WHITE = 15
 
 # ----- VGA state -----
-let VGA_BASE = 753664
+let VGA_BASE = 753664 # 0xB8000
 let VGA_WIDTH = 80
 let VGA_HEIGHT = 25
 
@@ -31,27 +33,11 @@ let cursor_y = 0
 let current_fg = LIGHT_GRAY
 let current_bg = BLACK
 
-# VGA text buffer (simulated as array of {char, color} entries)
-let vga_buffer = []
-let vga_ready = false
-
-# ----- Framebuffer state -----
-let fb_addr = 0
-let fb_width = 0
-let fb_height = 0
-let fb_pitch = 0
-let fb_bpp = 0
-let fb_buffer = []
-let fb_ready = false
+let hardware_mode = "hardware"
 
 # ----- Helper: make VGA color attribute byte -----
 proc make_color(fg, bg):
-    return (bg * 16) + fg
-end
-
-# ----- Helper: buffer index from x, y -----
-proc vga_index(x, y):
-    return y * VGA_WIDTH + x
+    return (bg << 4) | fg
 end
 
 # ----- Initialize VGA text mode -----
@@ -60,17 +46,10 @@ proc init_vga():
     cursor_y = 0
     current_fg = LIGHT_GRAY
     current_bg = BLACK
-    vga_buffer = []
-    let total = VGA_WIDTH * VGA_HEIGHT
-    let i = 0
-    while i < total:
-        let cell = {}
-        cell["char"] = " "
-        cell["color"] = make_color(current_fg, current_bg)
-        append(vga_buffer, cell)
-        i = i + 1
+    
+    if hardware_mode == "hardware":
+        clear_screen(BLACK)
     end
-    vga_ready = true
 end
 
 # ----- Set foreground and background color -----
@@ -79,67 +58,24 @@ proc set_color(fg, bg):
     current_bg = bg
 end
 
-# ----- Get cursor position -----
-proc get_cursor():
-    let pos = {}
-    pos["x"] = cursor_x
-    pos["y"] = cursor_y
-    return pos
-end
-
-# ----- Set cursor position -----
-proc set_cursor(x, y):
-    if x < 0:
-        x = 0
-    end
-    if x >= VGA_WIDTH:
-        x = VGA_WIDTH - 1
-    end
-    if y < 0:
-        y = 0
-    end
-    if y >= VGA_HEIGHT:
-        y = VGA_HEIGHT - 1
-    end
-    cursor_x = x
-    cursor_y = y
-end
-
 # ----- Scroll the screen up by one line -----
 proc scroll_up():
-    # Move every row up by one
-    let y = 1
-    while y < VGA_HEIGHT:
-        let x = 0
-        while x < VGA_WIDTH:
-            let src = vga_index(x, y)
-            let dst = vga_index(x, y - 1)
-            vga_buffer[dst]["char"] = vga_buffer[src]["char"]
-            vga_buffer[dst]["color"] = vga_buffer[src]["color"]
-            x = x + 1
+    if hardware_mode == "hardware":
+        # Move every row up by one in real VGA memory
+        for y in range(1, VGA_HEIGHT):
+            for x in range(VGA_WIDTH):
+                let src_off = (y * VGA_WIDTH + x) * 2
+                let dst_off = ((y - 1) * VGA_WIDTH + x) * 2
+                let val = core.mmio_read16(VGA_BASE + src_off)
+                core.mmio_write16(VGA_BASE + dst_off, val)
+            end
         end
-        y = y + 1
-    end
-    # Clear the last row
-    let x2 = 0
-    while x2 < VGA_WIDTH:
-        let idx = vga_index(x2, VGA_HEIGHT - 1)
-        vga_buffer[idx]["char"] = " "
-        vga_buffer[idx]["color"] = make_color(current_fg, current_bg)
-        x2 = x2 + 1
-    end
-end
-
-# ----- Advance cursor, scrolling if needed -----
-proc advance_cursor():
-    cursor_x = cursor_x + 1
-    if cursor_x >= VGA_WIDTH:
-        cursor_x = 0
-        cursor_y = cursor_y + 1
-    end
-    if cursor_y >= VGA_HEIGHT:
-        scroll_up()
-        cursor_y = VGA_HEIGHT - 1
+        # Clear the last row
+        let attr = make_color(current_fg, current_bg)
+        let space_val = (attr << 8) | ord(" ")
+        for x in range(VGA_WIDTH):
+            core.mmio_write16(VGA_BASE + ((VGA_HEIGHT - 1) * VGA_WIDTH + x) * 2, space_val)
+        end
     end
 end
 
@@ -155,35 +91,33 @@ end
 
 # ----- Put a single character at cursor position -----
 proc putchar(ch, color):
-    if ch == chr(10):
+    if ord(ch) == 10:
         newline()
         return
     end
-    if ch == chr(9):
-        # Tab: advance to next 8-column boundary
-        let spaces = 8 - (cursor_x % 8)
-        let s = 0
-        while s < spaces:
-            putchar(" ", color)
-            s = s + 1
-        end
-        return
+    
+    if hardware_mode == "hardware":
+        let val = (color << 8) | ord(ch)
+        let off = (cursor_y * VGA_WIDTH + cursor_x) * 2
+        core.mmio_write16(VGA_BASE + off, val)
     end
-    let idx = vga_index(cursor_x, cursor_y)
-    vga_buffer[idx]["char"] = ch
-    vga_buffer[idx]["color"] = color
-    advance_cursor()
+
+    cursor_x = cursor_x + 1
+    if cursor_x >= VGA_WIDTH:
+        cursor_x = 0
+        cursor_y = cursor_y + 1
+    end
+    if cursor_y >= VGA_HEIGHT:
+        scroll_up()
+        cursor_y = VGA_HEIGHT - 1
+    end
 end
 
 # ----- Print a string at current cursor with current colors -----
 proc print_str(text):
     let color = make_color(current_fg, current_bg)
-    let i = 0
-    let tlen = len(text)
-    while i < tlen:
-        let ch = text[i]
-        putchar(ch, color)
-        i = i + 1
+    for i in range(len(text)):
+        putchar(text[i], color)
     end
 end
 
@@ -196,12 +130,11 @@ end
 # ----- Clear the entire screen with a background color -----
 proc clear_screen(color):
     let attr = make_color(current_fg, color)
-    let total = VGA_WIDTH * VGA_HEIGHT
-    let i = 0
-    while i < total:
-        vga_buffer[i]["char"] = " "
-        vga_buffer[i]["color"] = attr
-        i = i + 1
+    let val = (attr << 8) | ord(" ")
+    if hardware_mode == "hardware":
+        for i in range(VGA_WIDTH * VGA_HEIGHT):
+            core.mmio_write16(VGA_BASE + i * 2, val)
+        end
     end
     cursor_x = 0
     cursor_y = 0

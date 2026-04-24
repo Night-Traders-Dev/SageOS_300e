@@ -11,6 +11,7 @@ void timer_irq(void);
 uint64_t timer_ticks(void);
 uint64_t timer_seconds(void);
 uint32_t timer_cpu_percent(void);
+void timer_delay_ms(uint32_t ms);
 
 void timer_cmd_info(void);
 

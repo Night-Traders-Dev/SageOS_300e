@@ -21,6 +21,10 @@ typedef struct {
 
     int has_battery_device;
     int has_ec_device;
+    int has_lid_device;
+    uint32_t gpe0_blk;
+    uint8_t gpe0_blk_len;
+    uint16_t sci_irq;
 } AcpiInfo;
 
 void acpi_init(SageOSBootInfo *boot);
@@ -32,11 +36,16 @@ void acpi_cmd_tables(void);
 void acpi_cmd_fadt(void);
 void acpi_cmd_madt(void);
 void acpi_cmd_battery(void);
+void acpi_cmd_lid(void);
 
 int acpi_poweroff(void);
 int acpi_suspend(void);
 
 int acpi_has_battery_device(void);
 int acpi_has_ec_device(void);
+int acpi_has_lid_device(void);
+
+void acpi_enable_sci(void);
+void acpi_check_events(void);
 
 #endif

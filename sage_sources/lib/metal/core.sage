@@ -1,80 +1,53 @@
-## metal.core — Bare-metal core primitives for SageMetal VM
+## metal.core — Bare-metal core primitives for Sage (Stabilized x86_64)
 ##
-## Provides the minimal runtime for bare-metal Sage programs:
-## serial I/O, port I/O, memory-mapped I/O, basic timing, and
-## interrupt control.
-##
-## These functions map directly to SageMetal VM host callbacks
-## (write_char, read_char, write_port, read_port, map_mmio).
+## Provides real hardware interop using asm_exec for port I/O,
+## MMIO, and CPU control instructions.
 
 ## ============================================================
-## Serial / Console I/O
-## ============================================================
-
-## Write a single character to the console/serial port
-proc putchar(c):
-    # Delegates to metal VM write_char callback
-    print chr(c)
-
-## Write a string to the console/serial port
-proc puts(s):
-    print s
-
-## Read a single character from serial (blocking)
-proc getchar():
-    return input()
-
-## ============================================================
-## Port I/O (x86)
+## Port I/O (x86_64)
 ## ============================================================
 
 ## Write a byte to an I/O port
 proc outb(port, val):
-    mem_write(mem_alloc(1), 0, "byte", val)
+    unsafe:
+        asm_exec("outb %al, %dx", "void", port, val)
+    end
+end
 
 ## Read a byte from an I/O port
 proc inb(port):
-    return 0
+    unsafe:
+        return asm_exec("inb %dx, %al", "byte", port)
+    end
+end
 
 ## Write a 16-bit word to an I/O port
 proc outw(port, val):
-    mem_write(mem_alloc(2), 0, "int", val)
+    unsafe:
+        asm_exec("outw %ax, %dx", "void", port, val)
+    end
+end
 
 ## Read a 16-bit word from an I/O port
 proc inw(port):
-    return 0
+    unsafe:
+        return asm_exec("inw %dx, %ax", "int", port)
+    end
+end
 
 ## Write a 32-bit dword to an I/O port
 proc outl(port, val):
-    mem_write(mem_alloc(4), 0, "int", val)
+    unsafe:
+        asm_exec("outl %eax, %dx", "void", port, val)
+    end
+end
 
 ## Read a 32-bit dword from an I/O port
 proc inl(port):
-    return 0
-
-## ============================================================
-## Memory-Mapped I/O (MMIO)
-## ============================================================
-
-## Read a 32-bit value from a physical address
-proc mmio_read32(addr):
-    let ptr = mem_alloc(4)
-    return mem_read(ptr, 0, "int")
-
-## Write a 32-bit value to a physical address
-proc mmio_write32(addr, val):
-    let ptr = mem_alloc(4)
-    mem_write(ptr, 0, "int", val)
-
-## Read a byte from a physical address
-proc mmio_read8(addr):
-    let ptr = mem_alloc(1)
-    return mem_read(ptr, 0, "byte")
-
-## Write a byte to a physical address
-proc mmio_write8(addr, val):
-    let ptr = mem_alloc(1)
-    mem_write(ptr, 0, "byte", val)
+    unsafe:
+        return asm_exec("inl %dx, %eax", "int", port)
+    end
+end
 
 ## ============================================================
 ## CPU Control
@@ -82,74 +55,104 @@ proc mmio_write8(addr, val):
 
 ## Disable interrupts
 proc cli():
-    pass
+    unsafe:
+        asm_exec("cli", "void")
+    end
+end
 
 ## Enable interrupts
 proc sti():
-    pass
+    unsafe:
+        asm_exec("sti", "void")
+    end
+end
 
 ## Halt CPU (wait for interrupt)
 proc hlt():
-    pass
+    unsafe:
+        asm_exec("hlt", "void")
+    end
+end
 
 ## I/O wait (delay one I/O cycle)
 proc io_wait():
-    pass
+    outb(0x80, 0)
+end
+
+## ============================================================
+## Memory-Mapped I/O (MMIO)
+## ============================================================
+
+## Read a 16-bit value from a physical address
+proc mmio_read16(addr):
+    unsafe:
+        return mem_read(addr, 0, "short")
+    end
+end
+
+## Write a 16-bit value to a physical address
+proc mmio_write16(addr, val):
+    unsafe:
+        mem_write(addr, 0, "short", val)
+    end
+end
+
+## Read a 32-bit dword from a physical address
+proc mmio_read32(addr):
+
+    unsafe:
+        return mem_read(addr, 0, "int")
+    end
+end
+
+## Write a 32-bit value to a physical address
+proc mmio_write32(addr, val):
+    unsafe:
+        mem_write(addr, 0, "int", val)
+    end
+end
+
+## Read a byte from a physical address
+proc mmio_read8(addr):
+    unsafe:
+        return mem_read(addr, 0, "byte")
+    end
+end
+
+## Write a byte to a physical address
+proc mmio_write8(addr, val):
+    unsafe:
+        mem_write(addr, 0, "byte", val)
+    end
+end
 
 ## ============================================================
 ## Timing
 ## ============================================================
 
-## Busy-wait delay (approximate microseconds)
 proc delay_us(us):
-    let i = 0
-    let cycles = us * 100
-    while i < cycles:
-        i = i + 1
+    # For now, approximate busy-loop
+    # A real implementation would use TSC or PIT
+    let cycles = us * 10
+    for i in range(cycles):
+        unsafe: asm_exec("pause", "void") end
+    end
+end
 
-## Busy-wait delay (approximate milliseconds)
 proc delay_ms(ms):
-    delay_us(ms * 1000)
-
-## ============================================================
-## Memory Management (bump allocator)
-## ============================================================
-
-let _heap_base = 0
-let _heap_used = 0
-let _heap_size = 65536
-
-## Initialize the bump allocator with a base address and size
-proc heap_init(base, size):
-    _heap_base = base
-    _heap_used = 0
-    _heap_size = size
-
-## Allocate N bytes from the bump allocator
-proc heap_alloc(size):
-    if _heap_used + size > _heap_size:
-        return nil
-    let ptr = _heap_base + _heap_used
-    _heap_used = _heap_used + size
-    return ptr
-
-## Get heap usage stats
-proc heap_stats():
-    return {
-        "base": _heap_base,
-        "used": _heap_used,
-        "total": _heap_size,
-        "free": _heap_size - _heap_used
-    }
+    for i in range(ms):
+        delay_us(1000)
+    end
+end
 
 ## ============================================================
 ## Panic / Halt
 ## ============================================================
 
 proc panic(msg):
-    puts("PANIC: " + msg)
-    hlt()
-
-proc assert_metal(condition, msg):
-    if not condition:
-        panic("Assertion failed: " + msg)
+    print "PANIC: " + msg
+    cli()
+    while true:
+        hlt()
+    end
+end

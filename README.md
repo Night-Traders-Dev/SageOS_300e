@@ -32,18 +32,22 @@ CPU:    AMD x86_64, ACPI MADT-discovered CPUs
 | Kernel shell | Working |
 | Unified build/flash tool | Working |
 | Modular kernel tree | Working |
+| IDT installation | Working — 256-entry IDT, PIC remapped to vectors 32–47 |
+| PIT timer (IRQ0) | Working — 100 Hz via hardware IRQ, not polling |
+| CPU% accounting | Working — IRQ-driven idle loop tracking, 100-tick sliding window |
+| Status bar | Working — dirty-cell shadow buffer, refreshes 10×/sec from keyboard idle path |
 | Keyboard diagnostics | Working via `keydebug` |
 | RAM status | Early UEFI memory-map summary |
-| CPU status | PIT IRQ + idle-loop estimate |
 | SMP | ACPI MADT CPU discovery; AP startup not enabled yet |
 | ACPI | RSDP/XSDT/FADT/MADT inspection |
-| Battery | ACPI battery and Chromebook/EC hints detected; percentage not implemented yet |
-| Shutdown | ACPI S5 attempt |
-| Suspend | ACPI S3 attempt; lid close/wake not implemented yet |
+| ACPI shutdown | S5 sleep package parsed from DSDT; `shutdown` command wired to ACPI S5 |
+| ACPI suspend | S3 sleep package parsed from DSDT; `suspend` command wired to ACPI S3 |
+| Battery | ACPI device hints detected; Chromebook EC LPC probe at 0x900; percentage not reliable yet |
+| Chromebook EC | ECMAP signature probe at 0x900, 0x800, 0x600, 0x100, 0x400 |
 
 ## Important Design Note
 
-The current hardware bring-up path intentionally uses a freestanding C/ASM kernel instead of the Sage AOT kernel path. The older Sage AOT path hit backend/runtime issues such as unsupported codegen statements and missing Sage runtime symbols during kernel linking. See the saved build log for that failure context. :contentReference[oaicite:0]{index=0}
+The current hardware bring-up path intentionally uses a freestanding C/ASM kernel instead of the Sage AOT kernel path. The older Sage AOT path hit backend/runtime issues such as unsupported codegen statements and missing Sage runtime symbols during kernel linking.
 
 Once the Sage compiler backend can reliably emit freestanding procedures/imports/runtime-free code, parts of the kernel can migrate back into Sage modules.
 
@@ -195,7 +199,7 @@ Kernel entry.S bridges ABI and stack
   ↓
 kmain()
   ↓
-serial + framebuffer console + ACPI + SMP discovery + timer + keyboard + shell
+serial → console → ACPI → SMP → IDT → PIT/IRQ → battery → keyboard → shell
 ```
 
 ## Boot Info Handoff
@@ -278,7 +282,11 @@ The top-right status bar currently shows:
 BAT --%  CPU NN%  RAM NN%
 ```
 
-Battery remains `--%` until an ACPI battery AML evaluator or Chromebook EC battery query path is implemented.
+The status bar uses a dirty-cell shadow buffer — only cells that change are redrawn. It refreshes at 10 Hz from the keyboard idle path without touching the framebuffer from interrupt context.
+
+CPU% is computed from IRQ0-driven idle accounting using a 100-tick sliding window (1-second average at 100 Hz).
+
+Battery remains `--%` until a verified ACPI battery AML evaluator or Chromebook EC battery query is implemented. The Chromebook EC LPC ECMAP signature is probed at boot but not yet confirmed reliable on all 300e firmware variants.
 
 ### SMP / CPU Discovery
 
@@ -316,6 +324,8 @@ Battery hints present
 Chromebook/ACPI EC hints present
 ```
 
+S5 (shutdown) and S3 (suspend) sleep packages are parsed from the DSDT at boot and wired to the `shutdown` and `suspend` commands.
+
 ### Keyboard
 
 ```text
@@ -343,34 +353,33 @@ EC:         Chromebook/ACPI EC hints present
 
 ### Battery Percentage
 
-Battery device hints are detected, but real percentage is not implemented yet.
+Battery device hints are detected and the Chromebook EC LPC ECMAP signature is probed at `0x900` (and several fallback ports), but the raw capacity registers have not been verified against actual hardware responses on this firmware build. The percentage reads as `--` until one path is confirmed.
 
 Next required work:
 
 ```text
 Option A: AML interpreter enough for _BST / _BIF / _BIX
-Option B: Verified Chromebook EC host-command battery query
+Option B: Verified Chromebook EC host-command battery query (MKBP / host command 0x10)
 ```
 
 ### SMP
 
-SMP currently discovers CPUs but does not start application processors.
+SMP currently discovers CPUs through ACPI MADT but does not start application processors.
 
 Next required work:
 
 ```text
-IDT stability
-LAPIC MMIO helpers
+LAPIC MMIO helpers (base confirmed at 0xFEE00000)
 AP trampoline below 1 MiB
-INIT/SIPI/SIPI sequence
 per-CPU stacks
+INIT/SIPI/SIPI sequence
 AP idle loop
 smp start command
 ```
 
 ### Suspend / Lid Close Wake
 
-The `suspend` command attempts ACPI S3, but automatic lid-close/lid-open behavior is not implemented.
+The `suspend` command attempts ACPI S3. The S3 sleep package is parsed and the PM1a_CNT write is issued, but automatic lid-close/lid-open behavior is not implemented.
 
 Next required work:
 
@@ -401,9 +410,10 @@ file-backed shell commands
 ### v0.0.11 — AP Startup Foundation
 
 ```text
-- LAPIC MMIO helpers
-- local APIC enable
-- trampoline allocation below 1 MiB
+- Map/confirm LAPIC at 0xFEE00000
+- LAPIC read/write MMIO helpers
+- local APIC enable on BSP
+- AP trampoline allocation below 1 MiB
 - per-CPU stacks
 - INIT/SIPI/SIPI sequence
 - AP enters idle loop
@@ -416,6 +426,7 @@ file-backed shell commands
 - ACPI namespace scan improvements
 - minimal AML Name/Package/Method support
 - _BIF / _BIX / _BST support
+- confirmed Chromebook EC host-command battery path
 - status bar battery percentage
 ```
 
@@ -475,18 +486,6 @@ acpi fadt
 acpi madt
 battery
 keydebug
+shutdown
 ```
 
-## Current Best Next Step
-
-Implement **v0.0.11 AP startup foundation**:
-
-```text
-1. Map/confirm LAPIC at 0xFEE00000
-2. Add LAPIC read/write helpers
-3. Add AP trampoline below 1 MiB
-4. Add per-CPU stacks
-5. Send INIT/SIPI/SIPI to discovered APIC IDs
-6. Confirm AP enters idle loop
-7. Add smp start command
-```

@@ -102,6 +102,15 @@ uint32_t timer_cpu_percent(void) {
     return cached_cpu_percent;
 }
 
+void timer_delay_ms(uint32_t ms) {
+    uint64_t start = ticks;
+    uint64_t end = start + (ms * PIT_HZ) / 1000;
+    if (end == start && ms > 0) end++;
+    while (ticks < end) {
+        cpu_pause();
+    }
+}
+
 void timer_cmd_info(void) {
     console_write("\nTimer:");
     console_write("\n  backend: PIT IRQ0 through PIC");

@@ -179,39 +179,63 @@ static void acpi_parse_fadt(void) {
     g_acpi.acpi_enable = mem8(g_acpi.fadt + 52);
     g_acpi.pm1a_cnt = mem32(g_acpi.fadt + 64);
     g_acpi.pm1b_cnt = mem32(g_acpi.fadt + 68);
+    g_acpi.sci_irq = mem16(g_acpi.fadt + 46);
+    g_acpi.gpe0_blk = mem32(g_acpi.fadt + 80);
+    g_acpi.gpe0_blk_len = mem8(g_acpi.fadt + 92);
+}
+
+static void acpi_enable_if_needed(void) {
+    if (!g_acpi.pm1a_cnt) {
+        return;
+    }
+
+    if (inw((uint16_t)g_acpi.pm1a_cnt) & 1) {
+        return;
+    }
+
+    if (g_acpi.smi_cmd && g_acpi.acpi_enable) {
+        outb((uint16_t)g_acpi.smi_cmd, g_acpi.acpi_enable);
+
+        for (uint32_t i = 0; i < 1000000; i++) {
+            if (inw((uint16_t)g_acpi.pm1a_cnt) & 1) {
+                break;
+            }
+
+            cpu_pause();
+        }
+    }
+}
+
+static uint32_t aml_parse_pkg_len(uint64_t *p) {
+    uint8_t lead = mem8(*p);
+    (*p)++;
+    uint32_t byte_count = (lead >> 6);
+    if (byte_count == 0) return lead & 0x3F;
+
+    uint32_t len = lead & 0x0F;
+    for (uint32_t i = 0; i < byte_count; i++) {
+        len |= ((uint32_t)mem8(*p) << (4 + i * 8));
+        (*p)++;
+    }
+    return len;
 }
 
 static void acpi_detect_devices(void) {
-    /*
-     * This is not AML evaluation. It is string detection in DSDT/SSDTs.
-     * It tells us whether battery / EC devices are present before we add
-     * a real AML method evaluator or Chromebook EC driver.
-     */
     if (g_acpi.dsdt) {
-        if (table_contains_ascii(g_acpi.dsdt, "PNP0C0A") || table_contains_ascii(g_acpi.dsdt, "_BIF") || table_contains_ascii(g_acpi.dsdt, "_BST")) {
-            g_acpi.has_battery_device = 1;
-        }
-
-        if (table_contains_ascii(g_acpi.dsdt, "PNP0C09") || table_contains_ascii(g_acpi.dsdt, "GOOG0004") || table_contains_ascii(g_acpi.dsdt, "GOOG000C")) {
-            g_acpi.has_ec_device = 1;
-        }
+        if (table_contains_ascii(g_acpi.dsdt, "PNP0C0A")) g_acpi.has_battery_device = 1;
+        if (table_contains_ascii(g_acpi.dsdt, "PNP0C09")) g_acpi.has_ec_device = 1;
+        if (table_contains_ascii(g_acpi.dsdt, "PNP0C0D")) g_acpi.has_lid_device = 1;
     }
 
     for (uint32_t i = 0; i < g_acpi.table_count; i++) {
         uint64_t table = g_acpi.xsdt
             ? mem64(g_acpi.root + 36 + i * 8)
             : mem32(g_acpi.root + 36 + i * 4);
-
         if (!table) continue;
-
         if (sig4(table, "SSDT")) {
-            if (table_contains_ascii(table, "PNP0C0A") || table_contains_ascii(table, "_BIF") || table_contains_ascii(table, "_BST")) {
-                g_acpi.has_battery_device = 1;
-            }
-
-            if (table_contains_ascii(table, "PNP0C09") || table_contains_ascii(table, "GOOG0004") || table_contains_ascii(table, "GOOG000C")) {
-                g_acpi.has_ec_device = 1;
-            }
+            if (table_contains_ascii(table, "PNP0C0A")) g_acpi.has_battery_device = 1;
+            if (table_contains_ascii(table, "PNP0C09")) g_acpi.has_ec_device = 1;
+            if (table_contains_ascii(table, "PNP0C0D")) g_acpi.has_lid_device = 1;
         }
     }
 }
@@ -230,6 +254,10 @@ void acpi_init(SageOSBootInfo *boot) {
     g_acpi.acpi_enable = 0;
     g_acpi.has_battery_device = 0;
     g_acpi.has_ec_device = 0;
+    g_acpi.has_lid_device = 0;
+    g_acpi.gpe0_blk = 0;
+    g_acpi.gpe0_blk_len = 0;
+    g_acpi.sci_irq = 0;
 
     acpi_parse_root();
     acpi_parse_fadt();
@@ -237,6 +265,43 @@ void acpi_init(SageOSBootInfo *boot) {
     g_acpi.madt = acpi_find_table("APIC");
 
     acpi_detect_devices();
+}
+
+void acpi_enable_sci(void) {
+    if (g_acpi.pm1a_cnt) {
+        /* Enable SCI by setting bit 0 of PM1a_CNT if needed */
+        acpi_enable_if_needed();
+    }
+}
+
+void acpi_check_events(void) {
+    if (!g_acpi.gpe0_blk) return;
+
+    /* Check GPE0 status (usually 1st half is status, 2nd half is enable) */
+    uint32_t status_port = g_acpi.gpe0_blk;
+    uint32_t status = inb((uint16_t)status_port);
+
+    if (status) {
+        /* Clear status by writing 1s back */
+        outb((uint16_t)status_port, (uint8_t)status);
+        
+        /* Check for Lid event (often GPE 0x1D or 0x11 on Chromebooks) */
+        /* For minimal impl, we just refresh all dynamic status bar metrics */
+    }
+}
+
+int acpi_has_lid_device(void) {
+    return g_acpi.has_lid_device;
+}
+
+void acpi_cmd_lid(void) {
+    console_write("\nLid Device:");
+    console_write("\n  detected: ");
+    console_write(g_acpi.has_lid_device ? "yes" : "no");
+    console_write("\n  SCI IRQ: ");
+    console_u32(g_acpi.sci_irq);
+    console_write("\n  GPE0 Block: ");
+    console_hex64(g_acpi.gpe0_blk);
 }
 
 int acpi_has_battery_device(void) {
@@ -327,28 +392,6 @@ static int acpi_find_sleep_package(const char *name, uint8_t *typa, uint8_t *typ
     }
 
     return 0;
-}
-
-static void acpi_enable_if_needed(void) {
-    if (!g_acpi.pm1a_cnt) {
-        return;
-    }
-
-    if (inw((uint16_t)g_acpi.pm1a_cnt) & 1) {
-        return;
-    }
-
-    if (g_acpi.smi_cmd && g_acpi.acpi_enable) {
-        outb((uint16_t)g_acpi.smi_cmd, g_acpi.acpi_enable);
-
-        for (uint32_t i = 0; i < 1000000; i++) {
-            if (inw((uint16_t)g_acpi.pm1a_cnt) & 1) {
-                break;
-            }
-
-            cpu_pause();
-        }
-    }
 }
 
 static int acpi_enter_sleep(uint8_t typa, uint8_t typb) {

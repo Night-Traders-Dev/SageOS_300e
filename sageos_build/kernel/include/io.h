@@ -23,6 +23,12 @@ static inline uint16_t inw(uint16_t port) {
     return ret;
 }
 
+static inline uint64_t read_cr3(void) {
+    uint64_t val;
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(val));
+    return val;
+}
+
 static inline void cpu_pause(void) {
     __asm__ volatile ("pause");
 }

@@ -7,10 +7,6 @@
 #include "bootinfo.h"
 #include "shell.h"
 #include "status.h"
-#include "timer.h"
-#include "acpi.h"
-#include "smp.h"
-#include "battery.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) {
@@ -65,13 +61,6 @@ static void help(void) {
     console_write("\n  fb                framebuffer info");
     console_write("\n  input             input backend info");
     console_write("\n  status            show top-bar metrics");
-    console_write("\n  timer             show PIT timer info");
-    console_write("\n  smp               show CPU/APIC discovery");
-    console_write("\n  acpi              show ACPI summary");
-    console_write("\n  acpi tables       list ACPI tables");
-    console_write("\n  acpi fadt         show FADT power fields");
-    console_write("\n  acpi madt         show MADT/APIC fields");
-    console_write("\n  battery           show battery/EC detector");
     console_write("\n  keydebug          raw keyboard scancode monitor");
     console_write("\n  ls                list RAMFS");
     console_write("\n  cat <path>        print RAMFS file");
@@ -170,12 +159,12 @@ static void exec(const char *cmd) {
     }
 
     if (starts_word(cmd, "version")) {
-        console_write("\nSageOS kernel 0.0.9 modular x86_64");
+        console_write("\nSageOS kernel 0.0.8 modular x86_64");
         return;
     }
 
     if (starts_word(cmd, "uname")) {
-        console_write("\nSageOS sageos 0.0.9 x86_64 lenovo_300e");
+        console_write("\nSageOS sageos 0.0.8 x86_64 lenovo_300e");
         return;
     }
 
@@ -199,46 +188,6 @@ static void exec(const char *cmd) {
 
     if (starts_word(cmd, "status")) {
         status_print();
-        return;
-    }
-
-    if (starts_word(cmd, "timer")) {
-        timer_cmd_info();
-        return;
-    }
-
-    if (starts_word(cmd, "smp")) {
-        smp_cmd_info();
-        return;
-    }
-
-    if (starts_word(cmd, "battery")) {
-        battery_cmd_info();
-        return;
-    }
-
-    if (starts_word(cmd, "acpi tables")) {
-        acpi_cmd_tables();
-        return;
-    }
-
-    if (starts_word(cmd, "acpi fadt")) {
-        acpi_cmd_fadt();
-        return;
-    }
-
-    if (starts_word(cmd, "acpi madt")) {
-        acpi_cmd_madt();
-        return;
-    }
-
-    if (starts_word(cmd, "acpi battery")) {
-        acpi_cmd_battery();
-        return;
-    }
-
-    if (starts_word(cmd, "acpi")) {
-        acpi_cmd_summary();
         return;
     }
 

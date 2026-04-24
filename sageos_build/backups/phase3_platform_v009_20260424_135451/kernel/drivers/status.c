@@ -3,8 +3,6 @@
 #include "bootinfo.h"
 #include "console.h"
 #include "status.h"
-#include "timer.h"
-#include "battery.h"
 
 static uint32_t tick_counter;
 
@@ -58,17 +56,18 @@ static uint32_t ram_percent(void) {
 }
 
 static uint32_t cpu_percent(void) {
-    return timer_cpu_percent();
+    /*
+     * Placeholder until PIT/APIC timer + idle accounting exists.
+     * We still expose the field now so the status UI is stable.
+     */
+    return 0xFFFFFFFFU;
 }
 
-static uint32_t battery_percent_status(void) {
-    int pct = battery_percent();
-
-    if (pct < 0) {
-        return 0xFFFFFFFFU;
-    }
-
-    return (uint32_t)pct;
+static uint32_t battery_percent(void) {
+    /*
+     * Placeholder until ACPI battery/EC support exists.
+     */
+    return 0xFFFFFFFFU;
 }
 
 void status_refresh(void) {
@@ -80,7 +79,7 @@ void status_refresh(void) {
     tick_counter++;
 
     append_str(text, sizeof(text), &pos, "BAT ");
-    uint32_t bat = battery_percent_status();
+    uint32_t bat = battery_percent();
 
     if (bat == 0xFFFFFFFFU) {
         append_str(text, sizeof(text), &pos, "--");
@@ -115,8 +114,8 @@ void status_print(void) {
     SageOSBootInfo *b = console_boot_info();
 
     console_write("\nStatus:");
-    console_write("\n  battery: ACPI/EC detector active; percentage pending AML/EC query");
-    console_write("\n  cpu: PIT polling + idle-loop accounting");
+    console_write("\n  battery: unavailable until ACPI battery/EC driver");
+    console_write("\n  cpu: unavailable until timer + idle accounting");
     console_write("\n  ram: ");
 
     uint32_t ram = ram_percent();

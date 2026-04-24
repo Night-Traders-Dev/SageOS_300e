@@ -1,0 +1,8 @@
+*.img
+*.BIN
+*.elf
+*.ESI
+*.bak
+*.obj
+*.o
+*.EFI

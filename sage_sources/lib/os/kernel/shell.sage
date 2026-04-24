@@ -139,13 +139,13 @@ proc append_history(line):
         let next_history = []
         let i = 1
         while i < len(shell_history):
-            append(next_history, shell_history[i])
+            push(next_history, shell_history[i])
             i = i + 1
         end
         shell_history = next_history
     end
 
-    append(shell_history, line)
+    push(shell_history, line)
 end
 
 proc suggestion_from_list(prefix, items, allow_empty):
@@ -509,7 +509,13 @@ proc handle_command(raw_cmd):
         return
     end
 
-    if starts_word(cmd, "shutdown") or starts_word(cmd, "poweroff") or starts_word(cmd, "halt") or starts_word(cmd, "exit"):
+    if starts_word(cmd, "shutdown") or starts_word(cmd, "poweroff"):
+        console.print_line("Shutting down...")
+        syscall.sys_exit(0)
+        return
+    end
+
+    if starts_word(cmd, "halt") or starts_word(cmd, "exit"):
         console.print_line("Shutting down...")
         syscall.sys_exit(0)
         return
@@ -529,8 +535,8 @@ proc sh_main():
     console.print_line("")
 
     while true:
-        let cmd = read_command_line()
-        append_history(cmd)
-        handle_command(cmd)
+        let input_cmd = read_command_line()
+        append_history(input_cmd)
+        handle_command(input_cmd)
     end
 end

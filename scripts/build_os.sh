@@ -4,7 +4,7 @@ set -e
 # build_os.sh — SageOS Build Script
 # Compiles the kernel and bootloader, then constructs a bootable disk image.
 
-SAGE=./sage
+SAGE=${SAGE:-sage}
 ARCH=x86_64
 OUTPUT_DIR=build_os
 KERNEL_BIN=$OUTPUT_DIR/kernel.elf

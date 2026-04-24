@@ -14,6 +14,8 @@ a freestanding x86_64 framebuffer kernel.
 
 ## Build
 
+SageLang is expected to be available as `sage` on `PATH`.
+
 Build the active kernel only:
 
 ```sh

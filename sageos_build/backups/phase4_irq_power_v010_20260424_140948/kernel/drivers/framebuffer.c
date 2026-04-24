@@ -388,7 +388,7 @@ void console_draw_status_bar(const char *right_text) {
         draw_cell(i, 0, ' ');
     }
 
-    const char *left = " SageOS v0.0.10 ";
+    const char *left = " SageOS v0.0.8 ";
 
     for (uint32_t i = 0; left[i] && i < cols; i++) {
         draw_cell(i, 0, left[i]);

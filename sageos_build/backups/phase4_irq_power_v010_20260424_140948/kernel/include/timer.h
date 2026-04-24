@@ -6,7 +6,6 @@
 void timer_init(void);
 void timer_poll(void);
 void timer_idle_poll(void);
-void timer_irq(void);
 
 uint64_t timer_ticks(void);
 uint64_t timer_seconds(void);

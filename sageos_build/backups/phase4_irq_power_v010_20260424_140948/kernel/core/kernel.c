@@ -8,7 +8,6 @@
 #include "acpi.h"
 #include "smp.h"
 #include "battery.h"
-#include "idt.h"
 
 static void banner(void) {
     uint32_t old = console_get_fg();
@@ -29,11 +28,7 @@ void kmain(SageOSBootInfo *info) {
 
     acpi_init(info);
     smp_init();
-
-    idt_init();
     timer_init();
-    irq_enable();
-
     battery_init();
 
     keyboard_init();
@@ -41,7 +36,7 @@ void kmain(SageOSBootInfo *info) {
 
     banner();
 
-    console_write("SageOS modular kernel v0.0.10 entered.\n");
+    console_write("SageOS modular kernel v0.0.9 entered.\n");
     console_write("Framebuffer console online.\n");
     console_write("Keyboard backend: ");
     console_write(keyboard_backend());

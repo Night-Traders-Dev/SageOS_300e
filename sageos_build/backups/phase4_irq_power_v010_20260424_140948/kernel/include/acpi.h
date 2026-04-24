@@ -33,9 +33,6 @@ void acpi_cmd_fadt(void);
 void acpi_cmd_madt(void);
 void acpi_cmd_battery(void);
 
-int acpi_poweroff(void);
-int acpi_suspend(void);
-
 int acpi_has_battery_device(void);
 int acpi_has_ec_device(void);
 

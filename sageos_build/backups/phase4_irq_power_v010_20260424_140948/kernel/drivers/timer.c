@@ -9,13 +9,21 @@
 #define PIT_CMD 0x43
 
 static uint16_t pit_reload;
-static volatile uint64_t ticks;
+static uint16_t last_count;
+static uint64_t ticks;
 
-static volatile uint64_t idle_loops;
-static volatile uint64_t total_loops;
+static uint64_t idle_loops;
+static uint64_t total_loops;
 static uint64_t last_idle_loops;
 static uint64_t last_total_loops;
-static volatile uint32_t cached_cpu_percent;
+static uint32_t cached_cpu_percent;
+
+static uint16_t pit_read_count(void) {
+    outb(PIT_CMD, 0x00);
+    uint8_t lo = inb(PIT_CH0);
+    uint8_t hi = inb(PIT_CH0);
+    return (uint16_t)((hi << 8) | lo);
+}
 
 void timer_init(void) {
     pit_reload = (uint16_t)(PIT_BASE_HZ / PIT_HZ);
@@ -25,13 +33,15 @@ void timer_init(void) {
     }
 
     /*
-     * Channel 0, lo/hi byte, mode 2 rate generator.
+     * Channel 0, lobyte/hibyte, mode 2 rate generator.
      */
     outb(PIT_CMD, 0x34);
     outb(PIT_CH0, (uint8_t)(pit_reload & 0xFF));
     outb(PIT_CH0, (uint8_t)(pit_reload >> 8));
 
+    last_count = pit_read_count();
     ticks = 0;
+
     idle_loops = 0;
     total_loops = 0;
     last_idle_loops = 0;
@@ -39,34 +49,38 @@ void timer_init(void) {
     cached_cpu_percent = 0;
 }
 
-void timer_irq(void) {
-    ticks++;
-
-    uint64_t idle_delta = idle_loops - last_idle_loops;
-    uint64_t total_delta = total_loops - last_total_loops;
-
-    if (total_delta > 0) {
-        uint64_t idle_pct = (idle_delta * 100ULL) / total_delta;
-
-        if (idle_pct > 100) {
-            idle_pct = 100;
-        }
-
-        cached_cpu_percent = (uint32_t)(100 - idle_pct);
-    }
-
-    last_idle_loops = idle_loops;
-    last_total_loops = total_loops;
-}
-
 void timer_poll(void) {
     total_loops++;
+
+    uint16_t now = pit_read_count();
+
+    /*
+     * PIT counts downward and wraps to reload.
+     */
+    if (now > last_count) {
+        ticks++;
+
+        uint64_t idle_delta = idle_loops - last_idle_loops;
+        uint64_t total_delta = total_loops - last_total_loops;
+
+        if (total_delta > 0) {
+            uint64_t idle_pct = (idle_delta * 100ULL) / total_delta;
+
+            if (idle_pct > 100) idle_pct = 100;
+
+            cached_cpu_percent = (uint32_t)(100 - idle_pct);
+        }
+
+        last_idle_loops = idle_loops;
+        last_total_loops = total_loops;
+    }
+
+    last_count = now;
 }
 
 void timer_idle_poll(void) {
     idle_loops++;
-    total_loops++;
-    cpu_pause();
+    timer_poll();
 }
 
 uint64_t timer_ticks(void) {
@@ -83,7 +97,7 @@ uint32_t timer_cpu_percent(void) {
 
 void timer_cmd_info(void) {
     console_write("\nTimer:");
-    console_write("\n  backend: PIT IRQ0 through PIC");
+    console_write("\n  backend: PIT polling");
     console_write("\n  hz: ");
     console_u32(PIT_HZ);
     console_write("\n  reload: ");
@@ -95,4 +109,5 @@ void timer_cmd_info(void) {
     console_write("\n  cpu: ");
     console_u32(cached_cpu_percent);
     console_write("%");
+    console_write("\n  note: this is approximate until IRQ/APIC timer scheduling exists");
 }

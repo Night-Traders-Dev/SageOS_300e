@@ -5,7 +5,7 @@
 #include "timer.h"
 #include <stdint.h>
 
-extern volatile uint64_t scancode_buffer;
+volatile uint64_t scancode_buffer = 0;
 
 const char *keyboard_backend(void) { return "native-ps2-irq"; }
 
@@ -13,10 +13,14 @@ void keyboard_init(void) {
     /* Assembly implementation initializes IRQ1 */
 }
 
+void keyboard_keydebug(void) {
+    /* TODO: Implement keydebug */
+}
+
 int keyboard_poll_event(KeyEvent *ev) {
     uint64_t sc = scancode_buffer;
     if (sc == 0) return 0;
-    
+
     /* Clear buffer after reading */
     scancode_buffer = 0;
 

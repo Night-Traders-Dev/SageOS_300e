@@ -344,12 +344,14 @@ void console_u32(uint32_t v) {
         return;
     }
 
-    while (v && i < 15) {
+    while (v > 0 && i < 15) {
         buf[i++] = (char)('0' + (v % 10));
         v /= 10;
     }
 
-    while (i > 0) console_putc(buf[--i]);
+    while (i > 0) {
+        console_putc(buf[--i]);
+    }
 }
 
 

@@ -29,7 +29,6 @@ static int wait_read(void) {
     if (inb(0x64) & 1)
       return 1;
     timer_poll();
-    timer_idle_poll();
     status_tick_poll();
   }
 
@@ -41,7 +40,6 @@ static int wait_write(void) {
     if ((inb(0x64) & 2) == 0)
       return 1;
     timer_poll();
-    timer_idle_poll();
     status_tick_poll();
   }
 
@@ -153,8 +151,6 @@ char keyboard_getchar(void) {
         return ev.ascii;
     }
 
-    timer_poll();
-    timer_idle_poll();
     status_tick_poll();
   }
 }
@@ -168,8 +164,6 @@ void keyboard_keydebug(void) {
     KeyEvent ev;
 
     if (!keyboard_poll_event(&ev)) {
-      timer_poll();
-      timer_idle_poll();
       status_tick_poll();
       continue;
     }

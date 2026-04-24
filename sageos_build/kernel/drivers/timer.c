@@ -52,7 +52,14 @@ void timer_irq(void) {
             idle_pct = 100;
         }
 
-        cached_cpu_percent = (uint32_t)(100 - idle_pct);
+        cached_cpu_percent = (uint32_t)(100 - (uint32_t)idle_pct);
+    } else {
+        /*
+         * If total_delta is 0, it means no poll/idle loops were performed
+         * since the last tick, meaning the CPU was fully occupied by
+         * kernel or command execution.
+         */
+        cached_cpu_percent = 100;
     }
 
     last_idle_loops = idle_loops;

@@ -49,19 +49,16 @@ static uint32_t ram_percent(void) {
         return 0xFFFFFFFFU;
     }
 
-    uint64_t reserved = 0;
-
-    if (b->memory_total > b->memory_usable) {
-        reserved = b->memory_total - b->memory_usable;
-    }
-
-    (void)reserved;
-
     /*
-     * Show percentage of usable conventional memory relative to total.
-     * Reserved = ACPI NVS, device MMIO, runtime services data, etc.
+     * Memory Usable is what the firmware reported as EfiConventionalMemory.
+     * Everything else (Total - Usable) is already taken by the firmware,
+     * kernel, or reserved for MMIO.
      */
-    return (uint32_t)((b->memory_usable * 100ULL) / b->memory_total);
+    uint64_t used = b->memory_total - b->memory_usable;
+    uint32_t pct = (uint32_t)((used * 100ULL) / b->memory_total);
+
+    if (pct > 100) pct = 100;
+    return pct;
 }
 
 static uint32_t cpu_percent(void) {

@@ -54,14 +54,19 @@ static int table_contains_ascii(uint64_t table, const char *needle) {
     uint32_t len = mem32(table + 4);
     if (len < 36) return 0;
 
-    for (uint32_t i = 36; i + 8 < len; i++) {
+    size_t needle_len = 0;
+    while (needle[needle_len]) needle_len++;
+
+    if (needle_len == 0) return 1;
+
+    for (uint32_t i = 36; i + needle_len <= len; i++) {
         uint32_t j = 0;
 
-        while (needle[j] && i + j < len && mem8(table + i + j) == (uint8_t)needle[j]) {
+        while (j < needle_len && mem8(table + i + j) == (uint8_t)needle[j]) {
             j++;
         }
 
-        if (!needle[j]) {
+        if (j == needle_len) {
             return 1;
         }
     }

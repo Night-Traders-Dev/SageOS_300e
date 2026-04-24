@@ -15,5 +15,6 @@ char keyboard_getchar(void);
 int keyboard_poll_event(KeyEvent *ev);
 const char *keyboard_backend(void);
 void keyboard_keydebug(void);
+void keyboard_irq(void);
 
 #endif

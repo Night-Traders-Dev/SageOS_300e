@@ -3,6 +3,7 @@
 #include "io.h"
 #include "timer.h"
 #include "console.h"
+#include "keyboard.h"
 
 typedef struct __attribute__((packed)) {
     uint16_t offset_low;
@@ -80,6 +81,7 @@ static void pic_remap(void) {
 }
 
 void irq0_handler_c(void);
+void irq1_handler_c(void);
 
 __attribute__((naked)) void irq0_stub(void) {
     __asm__ volatile (
@@ -118,6 +120,43 @@ __attribute__((naked)) void irq0_stub(void) {
     );
 }
 
+__attribute__((naked)) void irq1_stub(void) {
+    __asm__ volatile (
+        "pushq %rax\n"
+        "pushq %rbx\n"
+        "pushq %rcx\n"
+        "pushq %rdx\n"
+        "pushq %rsi\n"
+        "pushq %rdi\n"
+        "pushq %rbp\n"
+        "pushq %r8\n"
+        "pushq %r9\n"
+        "pushq %r10\n"
+        "pushq %r11\n"
+        "pushq %r12\n"
+        "pushq %r13\n"
+        "pushq %r14\n"
+        "pushq %r15\n"
+        "call irq1_handler_c\n"
+        "popq %r15\n"
+        "popq %r14\n"
+        "popq %r13\n"
+        "popq %r12\n"
+        "popq %r11\n"
+        "popq %r10\n"
+        "popq %r9\n"
+        "popq %r8\n"
+        "popq %rbp\n"
+        "popq %rdi\n"
+        "popq %rsi\n"
+        "popq %rdx\n"
+        "popq %rcx\n"
+        "popq %rbx\n"
+        "popq %rax\n"
+        "iretq\n"
+    );
+}
+
 __attribute__((naked)) void default_irq_stub(void) {
     __asm__ volatile ("iretq\n");
 }
@@ -125,6 +164,11 @@ __attribute__((naked)) void default_irq_stub(void) {
 void irq0_handler_c(void) {
     timer_irq();
     pic_send_eoi(0);
+}
+
+void irq1_handler_c(void) {
+    keyboard_irq();
+    pic_send_eoi(1);
 }
 
 void idt_init(void) {
@@ -135,6 +179,7 @@ void idt_init(void) {
     }
 
     idt_set_gate(32, irq0_stub);
+    idt_set_gate(33, irq1_stub);
 
     IdtPtr ptr;
     ptr.limit = sizeof(idt) - 1;

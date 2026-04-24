@@ -13,6 +13,14 @@ IMG_SIZE_MIB="${IMG_SIZE_MIB:-96}"
 ESP_SIZE_MIB="${ESP_SIZE_MIB:-64}"
 ESP_START_LBA="${ESP_START_LBA:-2048}"
 
+restore_tty() {
+    if [ -t 0 ]; then
+        stty sane >/dev/null 2>&1 || true
+    else
+        (stty sane </dev/tty) >/dev/null 2>&1 || true
+    fi
+}
+
 need() {
     if ! command -v "$1" >/dev/null 2>&1; then
         echo "ERROR: missing required tool: $1"
@@ -206,14 +214,20 @@ qemu_run() {
     fi
 
     pkill -9 -f qemu-system-x86_64 >/dev/null 2>&1 || true
+    restore_tty
 
-    qemu-system-x86_64 \
+    if ! qemu-system-x86_64 \
       -bios "$ovmf" \
       -drive file="$IMG",format=raw,snapshot=on \
       -m 256M \
       -nographic \
       -monitor none \
-      -serial stdio
+      -serial stdio; then
+        restore_tty
+        return 1
+    fi
+
+    restore_tty
 }
 
 flash_usb() {
@@ -243,8 +257,16 @@ flash_usb() {
     lsblk "$dev"
     echo
     echo "This will DESTROY all data on $dev."
-    echo "Type exactly YES to continue:"
-    read -r confirm
+    restore_tty
+
+    if ! (: </dev/tty) 2>/dev/null; then
+        echo "ERROR: flash confirmation requires an interactive terminal."
+        exit 1
+    fi
+
+    printf "Type exactly YES to continue: " >/dev/tty
+    IFS= read -r confirm </dev/tty || confirm=""
+    echo
 
     if [ "$confirm" != "YES" ]; then
         echo "Aborted."

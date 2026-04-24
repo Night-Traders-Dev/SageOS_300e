@@ -49,13 +49,19 @@ static uint32_t ram_percent(void) {
         return 0xFFFFFFFFU;
     }
 
-    uint64_t used = 0;
+    uint64_t reserved = 0;
 
     if (b->memory_total > b->memory_usable) {
-        used = b->memory_total - b->memory_usable;
+        reserved = b->memory_total - b->memory_usable;
     }
 
-    return (uint32_t)((used * 100ULL) / b->memory_total);
+    (void)reserved;
+
+    /*
+     * Show percentage of usable conventional memory relative to total.
+     * Reserved = ACPI NVS, device MMIO, runtime services data, etc.
+     */
+    return (uint32_t)((b->memory_usable * 100ULL) / b->memory_total);
 }
 
 static uint32_t cpu_percent(void) {
@@ -118,6 +124,8 @@ void status_tick_poll(void) {
      * this while waiting for input, so the bar updates without interrupt-time
      * framebuffer drawing.
      */
+    timer_idle_poll();
+
     uint64_t now = timer_ticks();
 
     if (now == last_draw_tick) {

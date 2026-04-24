@@ -138,7 +138,7 @@ static const RamFile ramfs[] = {
     },
     {
         "/etc/version",
-        "SageOS 0.0.5\n"
+        "SageOS 0.0.6\n"
         "x86_64 UEFI GOP framebuffer kernel\n"
     },
     {
@@ -246,21 +246,7 @@ static int uefi_input_available(void) {
 }
 
 static const char *input_backend_name(void) {
-    if (active_input_backend == 1) {
-        return "uefi-firmware-conin";
-    }
-
-    if (active_input_backend == 2) {
-        return "legacy-ps2";
-    }
-
-    if (
-        uefi_input_available()
-    ) {
-        return "auto-uefi-conin-or-ps2";
-    }
-
-    return "legacy-ps2-fallback";
+    return "native-i8042-ps2";
 }
 
 static EFI_SIMPLE_TEXT_INPUT_PROTOCOL *uefi_conin(void) {
@@ -780,11 +766,15 @@ static int acpi_enter_sleep(uint8_t typa, uint8_t typb) {
         outw((uint16_t)acpi_state.pm1b_cnt, val_b);
     }
 
-    for (uint32_t i = 0; i < 1000000; i++) {
-        __asm__ volatile ("hlt");
+    /*
+     * If S3/S5 succeeds, the machine will stop or sleep.
+     * If it does not, return instead of hanging the shell forever.
+     */
+    for (uint32_t i = 0; i < 5000000; i++) {
+        __asm__ volatile ("pause");
     }
 
-    return 1;
+    return 0;
 }
 
 static int acpi_poweroff(void) {
@@ -1101,6 +1091,12 @@ static void term_write(const char *s) {
     }
 }
 
+static void term_write_n(const char *s, size_t n) {
+    for (size_t i = 0; i < n && s[i]; i++) {
+        term_putc(s[i]);
+    }
+}
+
 static void draw_status_bar(void) {
     if (!have_fb || !boot_info) {
         return;
@@ -1122,7 +1118,7 @@ static void draw_status_bar(void) {
         fb_draw_char_cell(i, 0, ' ');
     }
 
-    term_write(" SAGEOS 0.0.5  LENOVO 300E  X86_64 UEFI GOP ");
+    term_write(" SAGEOS 0.0.6  LENOVO 300E  X86_64 UEFI GOP ");
 
     term_row = old_row;
     term_col = old_col;
@@ -1225,94 +1221,167 @@ static void firmware_shutdown_try(void) {
 }
 
 static char keymap[128] = {
-    0,  27, '1','2','3','4','5','6','7','8','9','0','-','=', '\b',
-    '\t','q','w','e','r','t','y','u','i','o','p','[',']','\n', 0,
-    'a','s','d','f','g','h','j','k','l',';','\'','`', 0, '\\',
+    0, 27, '1','2','3','4','5','6','7','8','9','0','-','=', 8,
+    9, 'q','w','e','r','t','y','u','i','o','p','[',']', 10, 0,
+    'a','s','d','f','g','h','j','k','l',';',39,'`', 0, 92,
     'z','x','c','v','b','n','m',',','.','/', 0, '*', 0, ' ',
 };
 
+static char shiftmap[128] = {
+    0, 27, '!','@','#','$','%','^','&','*','(',')','_','+', 8,
+    9, 'Q','W','E','R','T','Y','U','I','O','P','{','}', 10, 0,
+    'A','S','D','F','G','H','J','K','L',':',34,'~', 0, 124,
+    'Z','X','C','V','B','N','M','<','>','?', 0, '*', 0, ' ',
+};
+
 static int ps2_shift_down = 0;
-static int ps2_caps_lock = 0;
 static int ps2_extended = 0;
 
-static char ps2_shift_char(char c) {
-    if (c >= 'a' && c <= 'z') {
-        return (char)(c - 'a' + 'A');
+static int i8042_wait_read(void) {
+    for (uint32_t i = 0; i < 100000; i++) {
+        if (inb(0x64) & 1) {
+            return 1;
+        }
+
+        __asm__ volatile ("pause");
     }
 
-    switch (c) {
-        case '1': return '!';
-        case '2': return '@';
-        case '3': return '#';
-        case '4': return '$';
-        case '5': return '%';
-        case '6': return '^';
-        case '7': return '&';
-        case '8': return '*';
-        case '9': return '(';
-        case '0': return ')';
-        case '-': return '_';
-        case '=': return '+';
-        case '[': return '{';
-        case ']': return '}';
-        case '\\': return '|';
-        case ';': return ':';
-        case '\'': return '"';
-        case ',': return '<';
-        case '.': return '>';
-        case '/': return '?';
-        case '`': return '~';
-        default: return c;
+    return 0;
+}
+
+static int i8042_wait_write(void) {
+    for (uint32_t i = 0; i < 100000; i++) {
+        if ((inb(0x64) & 2) == 0) {
+            return 1;
+        }
+
+        __asm__ volatile ("pause");
+    }
+
+    return 0;
+}
+
+static void i8042_flush(void) {
+    for (int i = 0; i < 32; i++) {
+        if (!(inb(0x64) & 1)) {
+            break;
+        }
+
+        (void)inb(0x60);
     }
 }
 
-static int ps2_poll_key(void) {
+static void i8042_cmd(uint8_t cmd) {
+    if (i8042_wait_write()) {
+        outb(0x64, cmd);
+    }
+}
+
+static void i8042_data(uint8_t data) {
+    if (i8042_wait_write()) {
+        outb(0x60, data);
+    }
+}
+
+static uint8_t i8042_read_data_timeout(uint8_t fallback) {
+    if (i8042_wait_read()) {
+        return inb(0x60);
+    }
+
+    return fallback;
+}
+
+static void ps2_keyboard_init(void) {
+    i8042_flush();
+
+    /*
+     * Disable ports while configuring.
+     */
+    i8042_cmd(0xAD);
+    i8042_cmd(0xA7);
+    i8042_flush();
+
+    /*
+     * Read controller config byte.
+     */
+    uint8_t cfg = 0;
+    i8042_cmd(0x20);
+    cfg = i8042_read_data_timeout(0);
+
+    /*
+     * Enable first-port IRQ and translation.
+     * Translation gives Set-1-ish scancodes for this early parser.
+     */
+    cfg |= 0x01;
+    cfg |= 0x40;
+
+    /*
+     * Keep second-port IRQ disabled for now.
+     */
+    cfg &= (uint8_t)~0x02;
+
+    i8042_cmd(0x60);
+    i8042_data(cfg);
+
+    /*
+     * Enable first port and keyboard scanning.
+     */
+    i8042_cmd(0xAE);
+    i8042_flush();
+
+    i8042_data(0xF4);
+    (void)i8042_read_data_timeout(0);
+
+    ps2_shift_down = 0;
+    ps2_extended = 0;
+}
+
+static char ps2_poll_char(void) {
     if (!(inb(0x64) & 1)) {
         return 0;
     }
 
     uint8_t sc = inb(0x60);
 
-    if (sc == 0xE0) {
+    if (sc == 0xE0 || sc == 0xE1) {
         ps2_extended = 1;
         return 0;
     }
 
     if (ps2_extended) {
+        /*
+         * Ignore extended keys for now.
+         */
         ps2_extended = 0;
-
-        if (sc & 0x80) {
-            return 0;
-        }
-
-        switch (sc) {
-            case 0x48: return KEY_UP;
-            case 0x50: return KEY_DOWN;
-            case 0x4D: return KEY_RIGHT;
-            case 0x4B: return KEY_LEFT;
-            case 0x47: return KEY_HOME;
-            case 0x4F: return KEY_END;
-            case 0x53: return KEY_DELETE;
-            default: return 0;
-        }
+        return 0;
     }
 
+    /*
+     * Release events.
+     */
+    if (sc & 0x80) {
+        uint8_t base = (uint8_t)(sc & 0x7F);
+
+        if (base == 0x2A || base == 0x36) {
+            ps2_shift_down = 0;
+        }
+
+        return 0;
+    }
+
+    /*
+     * Shift press.
+     */
     if (sc == 0x2A || sc == 0x36) {
         ps2_shift_down = 1;
         return 0;
     }
 
-    if (sc == 0xAA || sc == 0xB6) {
-        ps2_shift_down = 0;
-        return 0;
-    }
-
+    /*
+     * Ignore Caps Lock entirely for now. This prevents random-looking
+     * upper/lowercase toggling on the Lenovo keyboard path.
+     */
     if (sc == 0x3A) {
-        ps2_caps_lock = !ps2_caps_lock;
-        return 0;
-    }
-
-    if (sc & 0x80) {
         return 0;
     }
 
@@ -1320,348 +1389,39 @@ static int ps2_poll_key(void) {
         return 0;
     }
 
-    char c = keymap[sc];
-
-    if (!c) {
-        return 0;
-    }
-
-    if (c >= 'a' && c <= 'z') {
-        if (ps2_shift_down ^ ps2_caps_lock) {
-            c = (char)(c - 'a' + 'A');
-        }
-
-        return c;
-    }
-
-    if (ps2_shift_down) {
-        return ps2_shift_char(c);
-    }
-
-    return c;
+    return ps2_shift_down ? shiftmap[sc] : keymap[sc];
 }
 
-static int kbd_getkey(void) {
+static char kbd_getchar(void) {
     for (;;) {
-        if (active_input_backend != 2) {
-            int key = uefi_getkey_poll();
+        char c = ps2_poll_char();
 
-            if (key) {
-                active_input_backend = 1;
-                return key;
-            }
-        }
-
-        if (active_input_backend != 1) {
-            int key = ps2_poll_key();
-
-            if (key) {
-                active_input_backend = 2;
-                return key;
-            }
+        if (c) {
+            return c;
         }
 
         __asm__ volatile ("pause");
     }
 }
 
-static void term_write_n(const char *s, size_t n) {
-    size_t i = 0;
-
-    while (s[i] && i < n) {
-        term_putc(s[i]);
-        i++;
-    }
+/*
+ * Compatibility wrapper for the newer shell editor path.
+ * Special keys can be added here later as high-bit keycodes.
+ */
+static int kbd_getkey(void) {
+    return (int)(unsigned char)kbd_getchar();
 }
 
 static void shell_write_prompt(void) {
     uint32_t old = fg_rgb;
     fg_rgb = 0x80C8FF;
-    term_write(SHELL_PROMPT);
+    term_write("root@sageos:/# ");
     fg_rgb = old;
 }
 
 static void shell_prompt(void) {
-    term_putc('\n');
+    term_putc(10);
     shell_write_prompt();
-}
-
-static int shell_line_blank(const char *line) {
-    while (*line) {
-        if (*line != ' ' && *line != '\t') {
-            return 0;
-        }
-
-        line++;
-    }
-
-    return 1;
-}
-
-static int shell_line_has_space(const char *line) {
-    while (*line) {
-        if (*line == ' ' || *line == '\t') {
-            return 1;
-        }
-
-        line++;
-    }
-
-    return 0;
-}
-
-static void shell_history_add(const char *line) {
-    if (shell_line_blank(line)) {
-        return;
-    }
-
-    if (
-        shell_history_count > 0 &&
-        str_eq(shell_history[shell_history_count - 1], line)
-    ) {
-        return;
-    }
-
-    if (shell_history_count == SHELL_HISTORY_MAX) {
-        for (size_t i = 1; i < SHELL_HISTORY_MAX; i++) {
-            str_copy(shell_history[i - 1], SHELL_LINE_MAX, shell_history[i]);
-        }
-
-        shell_history_count--;
-    }
-
-    str_copy(shell_history[shell_history_count], SHELL_LINE_MAX, line);
-    shell_history_count++;
-}
-
-static int shell_suggest_from_list(
-    const char *prefix,
-    const char *const *items,
-    size_t count,
-    char *out,
-    size_t out_cap,
-    int allow_empty
-) {
-    size_t prefix_len = str_len(prefix);
-
-    if (prefix_len == 0 && !allow_empty) {
-        return 0;
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        const char *item = items[i];
-
-        if (str_starts_with(item, prefix) && !str_eq(item, prefix)) {
-            str_copy(out, out_cap, item + prefix_len);
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-static int shell_suggest_argument(
-    const char *line,
-    const char *cmd,
-    const char *const *items,
-    size_t count,
-    char *out,
-    size_t out_cap
-) {
-    size_t cmd_len = str_len(cmd);
-
-    if (!starts_word(line, cmd)) {
-        return 0;
-    }
-
-    if (line[cmd_len] != ' ' && line[cmd_len] != '\t') {
-        return 0;
-    }
-
-    return shell_suggest_from_list(
-        arg_after(line, cmd),
-        items,
-        count,
-        out,
-        out_cap,
-        1
-    );
-}
-
-static void shell_find_suggestion(const char *line, char *out, size_t out_cap) {
-    size_t line_len = str_len(line);
-    out[0] = 0;
-
-    if (line_len == 0) {
-        return;
-    }
-
-    for (size_t i = shell_history_count; i > 0; i--) {
-        const char *candidate = shell_history[i - 1];
-
-        if (str_starts_with(candidate, line) && !str_eq(candidate, line)) {
-            str_copy(out, out_cap, candidate + line_len);
-            return;
-        }
-    }
-
-    if (
-        shell_suggest_argument(
-            line,
-            "cat",
-            shell_paths,
-            sizeof(shell_paths) / sizeof(shell_paths[0]),
-            out,
-            out_cap
-        )
-    ) {
-        return;
-    }
-
-    if (
-        shell_suggest_argument(
-            line,
-            "color",
-            shell_colors,
-            sizeof(shell_colors) / sizeof(shell_colors[0]),
-            out,
-            out_cap
-        )
-    ) {
-        return;
-    }
-
-    if (!shell_line_has_space(line)) {
-        shell_suggest_from_list(
-            line,
-            shell_commands,
-            sizeof(shell_commands) / sizeof(shell_commands[0]),
-            out,
-            out_cap,
-            0
-        );
-    }
-}
-
-static void shell_accept_suggestion(
-    char *line,
-    size_t line_cap,
-    size_t *line_len,
-    const char *suggestion
-) {
-    if (!suggestion[0]) {
-        return;
-    }
-
-    size_t prompt_len = str_len(SHELL_PROMPT);
-    size_t max_visible =
-        term_cols > prompt_len + 1 ?
-        term_cols - prompt_len - 1 :
-        line_cap - 1;
-    size_t suggestion_len = str_len(suggestion);
-
-    if (max_visible >= line_cap) {
-        max_visible = line_cap - 1;
-    }
-
-    if (*line_len + suggestion_len <= max_visible) {
-        str_append(line, line_cap, suggestion);
-    } else {
-        size_t i = 0;
-
-        while (
-            suggestion[i] &&
-            *line_len < max_visible &&
-            *line_len + 1 < line_cap
-        ) {
-            line[*line_len] = suggestion[i++];
-            *line_len = *line_len + 1;
-        }
-
-        line[*line_len] = 0;
-    }
-
-    *line_len = str_len(line);
-}
-
-static size_t shell_visible_suggestion_len(const char *line, const char *suggestion) {
-    size_t prompt_len = str_len(SHELL_PROMPT);
-    size_t line_len = str_len(line);
-    size_t suggestion_len = str_len(suggestion);
-
-    if (suggestion_len == 0) {
-        return 0;
-    }
-
-    if (term_cols <= prompt_len + line_len + 1) {
-        return 0;
-    }
-
-    size_t room = term_cols - prompt_len - line_len - 1;
-
-    if (suggestion_len > room) {
-        return room;
-    }
-
-    return suggestion_len;
-}
-
-static void shell_draw_suggestion(const char *suggestion, size_t n) {
-    if (n == 0) {
-        return;
-    }
-
-    uint32_t old = fg_rgb;
-    fg_rgb = 0x66707A;
-    term_write_n(suggestion, n);
-    fg_rgb = old;
-}
-
-static void shell_redraw_line(
-    const char *line,
-    const char *suggestion,
-    size_t *last_visible
-) {
-    size_t suggestion_len = shell_visible_suggestion_len(line, suggestion);
-    size_t visible = str_len(SHELL_PROMPT) + str_len(line) + suggestion_len;
-
-    term_putc('\r');
-    shell_write_prompt();
-    term_write(line);
-    shell_draw_suggestion(suggestion, suggestion_len);
-
-    if (*last_visible > visible) {
-        for (size_t i = visible; i < *last_visible; i++) {
-            term_putc(' ');
-        }
-
-        term_putc('\r');
-        shell_write_prompt();
-        term_write(line);
-        shell_draw_suggestion(suggestion, suggestion_len);
-    }
-
-    *last_visible = visible;
-}
-
-static void shell_finish_input_line(const char *line, size_t *last_visible) {
-    size_t visible = str_len(SHELL_PROMPT) + str_len(line);
-
-    term_putc('\r');
-    shell_write_prompt();
-    term_write(line);
-
-    if (*last_visible > visible) {
-        for (size_t i = visible; i < *last_visible; i++) {
-            term_putc(' ');
-        }
-
-        term_putc('\r');
-        shell_write_prompt();
-        term_write(line);
-    }
-
-    *last_visible = visible;
 }
 
 static const char *ramfs_find(const char *path) {
@@ -1878,13 +1638,13 @@ static void shell_exec(const char *cmd) {
     }
 
     if (starts_word(cmd, "version")) {
-        term_write("\nSageOS kernel 0.0.5 x86_64");
+        term_write("\nSageOS kernel 0.0.6 x86_64");
         term_write("\nUEFI GOP framebuffer console");
         return;
     }
 
     if (starts_word(cmd, "uname")) {
-        term_write("\nSageOS sageos 0.0.5 x86_64 lenovo_300e");
+        term_write("\nSageOS sageos 0.0.6 x86_64 lenovo_300e");
         return;
     }
 
@@ -1998,112 +1758,34 @@ static void shell_exec(const char *cmd) {
 }
 
 static void shell_run(void) {
-    char line[SHELL_LINE_MAX];
-    char draft[SHELL_LINE_MAX];
-    char suggestion[SHELL_LINE_MAX];
+    char line[160];
     size_t len = 0;
-    size_t last_visible = 0;
-    int history_view = -1;
 
-    line[0] = 0;
-    draft[0] = 0;
-    suggestion[0] = 0;
     shell_prompt();
-    last_visible = str_len(SHELL_PROMPT);
 
     for (;;) {
-        int key = kbd_getkey();
-        shell_find_suggestion(line, suggestion, sizeof(suggestion));
+        char c = kbd_getchar();
 
-        if (key == '\n') {
-            shell_finish_input_line(line, &last_visible);
+        if (c == 10 || c == 13) {
             line[len] = 0;
-            shell_history_add(line);
             shell_exec(line);
             len = 0;
-            line[0] = 0;
-            draft[0] = 0;
-            suggestion[0] = 0;
-            history_view = -1;
             shell_prompt();
-            last_visible = str_len(SHELL_PROMPT);
             continue;
         }
 
-        if (key == '\b') {
+        if (c == 8 || c == 127) {
             if (len > 0) {
                 len--;
-                line[len] = 0;
-                history_view = -1;
-                shell_find_suggestion(line, suggestion, sizeof(suggestion));
-                shell_redraw_line(line, suggestion, &last_visible);
+                term_putc(8);
             }
 
             continue;
         }
 
-        if (key == KEY_UP) {
-            if (shell_history_count > 0) {
-                if (history_view < 0) {
-                    str_copy(draft, sizeof(draft), line);
-                    history_view = (int)shell_history_count - 1;
-                } else if (history_view > 0) {
-                    history_view--;
-                }
-
-                str_copy(line, sizeof(line), shell_history[history_view]);
-                len = str_len(line);
-                shell_find_suggestion(line, suggestion, sizeof(suggestion));
-                shell_redraw_line(line, suggestion, &last_visible);
-            }
-
-            continue;
-        }
-
-        if (key == KEY_DOWN) {
-            if (history_view >= 0) {
-                if ((size_t)(history_view + 1) < shell_history_count) {
-                    history_view++;
-                    str_copy(line, sizeof(line), shell_history[history_view]);
-                } else {
-                    history_view = -1;
-                    str_copy(line, sizeof(line), draft);
-                }
-
-                len = str_len(line);
-                shell_find_suggestion(line, suggestion, sizeof(suggestion));
-                shell_redraw_line(line, suggestion, &last_visible);
-            }
-
-            continue;
-        }
-
-        if (key == '\t' || key == KEY_RIGHT) {
-            shell_accept_suggestion(line, sizeof(line), &len, suggestion);
-            history_view = -1;
-            shell_find_suggestion(line, suggestion, sizeof(suggestion));
-            shell_redraw_line(line, suggestion, &last_visible);
-            continue;
-        }
-
-        if (key >= 32 && key <= 126) {
-            size_t prompt_len = str_len(SHELL_PROMPT);
-            size_t max_visible =
-                term_cols > prompt_len + 1 ?
-                term_cols - prompt_len - 1 :
-                sizeof(line) - 1;
-
-            if (max_visible >= sizeof(line)) {
-                max_visible = sizeof(line) - 1;
-            }
-
-            if (len < max_visible && len + 1 < sizeof(line)) {
-                line[len++] = (char)key;
-                line[len] = 0;
-                history_view = -1;
-                shell_find_suggestion(line, suggestion, sizeof(suggestion));
-                shell_redraw_line(line, suggestion, &last_visible);
-            }
+        if (c >= 32 && c <= 126 && len + 1 < sizeof(line)) {
+            line[len++] = c;
+            term_putc(c);
         }
     }
 }
@@ -2111,6 +1793,7 @@ static void shell_run(void) {
 void kmain(SageOSBootInfo *info) {
     serial_init();
     term_init(info);
+    ps2_keyboard_init();
 
     banner();
 

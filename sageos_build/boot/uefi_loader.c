@@ -737,17 +737,19 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
         for (;;) {}
     }
 
-    /*
-     * v0.0.4: Intentionally do not call ExitBootServices yet.
-     *
-     * The kernel now uses UEFI SimpleTextInput as a firmware-backed input
-     * bridge. This lets USB HID keyboards and Chromebook EC/internal
-     * keyboards work immediately if the firmware exposes them through ConIn.
-     *
-     * Native xHCI/HID and Chromebook EC drivers will replace this later.
-     */
-    print(L"Keeping UEFI boot services active for input.\r\n");
-    print(L"Jumping to kernel...\r\n");
+    print(L"Exiting boot services...\r\n");
+
+    gBootInfo.boot_services_active = 0;
+    gBootInfo.input_mode = 2;
+
+    status = exit_boot_services_retry(image_handle);
+
+    if (status != EFI_SUCCESS) {
+        print(L"ExitBootServices failed: ");
+        print_hex64(status);
+        print(L"\r\n");
+        for (;;) {}
+    }
 
     typedef void (EFIAPI *kernel_entry_t)(SageOSBootInfo *);
     kernel_entry_t kernel_entry = (kernel_entry_t)(uintptr_t)KERNEL_LOAD_ADDR;

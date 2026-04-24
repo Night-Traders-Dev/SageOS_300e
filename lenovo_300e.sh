@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD="$ROOT/sageos_build"
+BOOT="$BUILD/boot"
+KERNEL="$BUILD/kernel"
+OBJ="$BUILD/obj"
+IMG="$ROOT/sageos.img"
+ESP="$BUILD/esp.img"
+
+IMG_SIZE_MIB="${IMG_SIZE_MIB:-96}"
+ESP_SIZE_MIB="${ESP_SIZE_MIB:-64}"
+ESP_START_LBA="${ESP_START_LBA:-2048}"
+
+need() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo "ERROR: missing required tool: $1"
+        exit 1
+    fi
+}
+
+check_tools() {
+    need clang
+    need lld-link
+    need ld.lld
+    need llvm-objcopy
+    need mkfs.fat
+    need mcopy
+    need mmd
+    need sgdisk
+    need truncate
+    need dd
+}
+
+build_kernel() {
+    mkdir -p "$OBJ"
+
+    echo "--- Building kernel: freestanding x86_64 C/ASM ---"
+
+    clang \
+      -target x86_64-unknown-elf \
+      -ffreestanding \
+      -fno-stack-protector \
+      -fno-pic \
+      -fno-pie \
+      -mno-red-zone \
+      -mno-sse \
+      -mno-sse2 \
+      -Wall \
+      -Wextra \
+      -c "$KERNEL/kernel.c" \
+      -o "$OBJ/kernel.o"
+
+    clang \
+      -target x86_64-unknown-elf \
+      -ffreestanding \
+      -fno-stack-protector \
+      -fno-pic \
+      -fno-pie \
+      -mno-red-zone \
+      -c "$KERNEL/entry.S" \
+      -o "$OBJ/entry.o"
+
+    ld.lld \
+      -nostdlib \
+      -z max-page-size=0x1000 \
+      -T "$KERNEL/linker.ld" \
+      "$OBJ/entry.o" \
+      "$OBJ/kernel.o" \
+      -o "$BUILD/kernel.elf"
+
+    llvm-objcopy -O binary "$BUILD/kernel.elf" "$BUILD/KERNEL.BIN"
+
+    echo "[OK] $BUILD/kernel.elf"
+    echo "[OK] $BUILD/KERNEL.BIN"
+}
+
+build_image() {
+    check_tools
+
+    mkdir -p "$BUILD" "$OBJ" "$BUILD/logs"
+
+    echo "--- Cleaning stale objects/images ---"
+    rm -f "$BUILD/BOOTX64.EFI"
+    rm -f "$BUILD/kernel.elf" "$BUILD/KERNEL.BIN"
+    rm -f "$OBJ/uefi_loader.obj" "$OBJ/kernel.o" "$OBJ/entry.o"
+    rm -f "$ESP" "$IMG"
+
+    echo "--- Building UEFI loader: MS ABI PE/COFF + GOP handoff ---"
+
+    clang \
+      -target x86_64-windows-msvc \
+      -ffreestanding \
+      -fno-stack-protector \
+      -fshort-wchar \
+      -mno-red-zone \
+      -Wall \
+      -Wextra \
+      -c "$BOOT/uefi_loader.c" \
+      -o "$OBJ/uefi_loader.obj"
+
+    lld-link \
+      /subsystem:efi_application \
+      /entry:EfiMain \
+      /nodefaultlib \
+      /out:"$BUILD/BOOTX64.EFI" \
+      "$OBJ/uefi_loader.obj"
+
+    build_kernel
+
+    echo "--- Creating ESP FAT32 image ---"
+    dd if=/dev/zero of="$ESP" bs=1M count="$ESP_SIZE_MIB" status=none
+    mkfs.fat -F 32 -n SAGEOS "$ESP" >/dev/null
+
+    mmd -i "$ESP" ::/EFI
+    mmd -i "$ESP" ::/EFI/BOOT
+    mcopy -i "$ESP" "$BUILD/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+    mcopy -i "$ESP" "$BUILD/KERNEL.BIN" ::/KERNEL.BIN
+
+    echo "--- Creating GPT disk image ---"
+    truncate -s "${IMG_SIZE_MIB}M" "$IMG"
+
+    sgdisk --clear "$IMG" >/dev/null
+    sgdisk \
+      --new=1:${ESP_START_LBA}:+${ESP_SIZE_MIB}M \
+      --typecode=1:EF00 \
+      --change-name=1:"EFI System" \
+      "$IMG" >/dev/null
+
+    dd if="$ESP" of="$IMG" bs=512 seek="$ESP_START_LBA" conv=notrunc status=none
+
+    echo "--- Verifying GPT ---"
+    sgdisk -v "$IMG"
+
+    echo "--- Build complete ---"
+    echo "Image:  $IMG"
+    echo "UEFI:   $BUILD/BOOTX64.EFI"
+    echo "Kernel: $BUILD/KERNEL.BIN"
+}
+
+qemu_run() {
+    local ovmf=""
+
+    for f in \
+        /usr/share/ovmf/OVMF.fd \
+        /usr/share/OVMF/OVMF_CODE.fd \
+        /usr/share/qemu/OVMF.fd
+    do
+        if [ -f "$f" ]; then
+            ovmf="$f"
+            break
+        fi
+    done
+
+    if [ -z "$ovmf" ]; then
+        echo "ERROR: could not find OVMF firmware."
+        exit 1
+    fi
+
+    if [ ! -f "$IMG" ]; then
+        echo "Image not found. Building first..."
+        build_image
+    fi
+
+    pkill -9 -f qemu-system-x86_64 >/dev/null 2>&1 || true
+
+    qemu-system-x86_64 \
+      -bios "$ovmf" \
+      -drive file="$IMG",format=raw,snapshot=on \
+      -m 256M \
+      -serial stdio
+}
+
+flash_usb() {
+    local dev="${1:-/dev/sdb}"
+
+    if [ ! -f "$IMG" ]; then
+        echo "Image not found. Building first..."
+        build_image
+    fi
+
+    if [ ! -b "$dev" ]; then
+        echo "ERROR: block device not found: $dev"
+        exit 1
+    fi
+
+    case "$dev" in
+        /dev/sda|/dev/nvme0n1|/dev/mmcblk0)
+            echo "ERROR: refusing to flash likely system disk: $dev"
+            exit 1
+            ;;
+    esac
+
+    echo "=== SageOS Lenovo 300e Flasher ==="
+    echo "Image:  $IMG"
+    echo "Device: $dev"
+    echo
+    lsblk "$dev"
+    echo
+    echo "This will DESTROY all data on $dev."
+    echo "Type exactly YES to continue:"
+    read -r confirm
+
+    if [ "$confirm" != "YES" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+
+    echo "Unmounting mounted partitions..."
+    while read -r part mountpoint; do
+        if [ -n "${mountpoint:-}" ]; then
+            sudo umount "/dev/$part" 2>/dev/null || true
+        fi
+    done < <(lsblk -ln -o NAME,MOUNTPOINT "$dev" | tail -n +2)
+
+    echo "Flashing..."
+    sudo dd if="$IMG" of="$dev" bs=4M status=progress conv=fsync
+
+    sync
+    sudo partprobe "$dev" 2>/dev/null || true
+
+    echo
+    echo "Done."
+    lsblk "$dev"
+}
+
+clean_all() {
+    rm -f "$IMG" "$ESP"
+    rm -f "$BUILD/BOOTX64.EFI" "$BUILD/KERNEL.BIN" "$BUILD/kernel.elf"
+    rm -f "$OBJ"/*.o "$OBJ"/*.obj 2>/dev/null || true
+    echo "Cleaned Lenovo 300e build outputs."
+}
+
+status() {
+    echo "Root:   $ROOT"
+    echo "Image:  $IMG"
+    echo "UEFI:   $BUILD/BOOTX64.EFI"
+    echo "Kernel: $BUILD/KERNEL.BIN"
+    echo
+    ls -lh "$IMG" "$BUILD/BOOTX64.EFI" "$BUILD/KERNEL.BIN" "$BUILD/kernel.elf" 2>/dev/null || true
+}
+
+usage() {
+    cat <<USAGE
+SageOS Lenovo 300e unified build tool
+
+Usage:
+  ./lenovo_300e.sh build
+  ./lenovo_300e.sh build-kernel
+  ./lenovo_300e.sh qemu
+  ./lenovo_300e.sh flash [/dev/sdX]
+  ./lenovo_300e.sh all [/dev/sdX]
+  ./lenovo_300e.sh clean
+  ./lenovo_300e.sh status
+
+Defaults:
+  flash device: /dev/sdb
+USAGE
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+    build)
+        build_image
+        ;;
+    build-kernel)
+        check_tools
+        build_kernel
+        ;;
+    qemu)
+        qemu_run
+        ;;
+    flash)
+        flash_usb "${1:-/dev/sdb}"
+        ;;
+    all)
+        build_image
+        flash_usb "${1:-/dev/sdb}"
+        ;;
+    clean)
+        clean_all
+        ;;
+    status)
+        status
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac

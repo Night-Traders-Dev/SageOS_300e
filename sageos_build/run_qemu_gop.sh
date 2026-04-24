@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-exec "$ROOT/lenovo_300e.sh" build-kernel "$@"
+exec "$ROOT/lenovo_300e.sh" qemu "$@"

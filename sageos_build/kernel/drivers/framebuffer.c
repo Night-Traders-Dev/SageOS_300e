@@ -28,12 +28,52 @@ static uint32_t fg = 0xE8E8E8;
 static uint32_t bg = 0x05070A;
 
 /*
- * Serial mirroring is useful for boot logs and command output,
- * but framebuffer line editing uses absolute cursor movement.
- * Serial terminals are append-only unless we emit terminal control
- * sequences, so shell redraws temporarily disable this echo.
+ * serial_echo: mirrors console output to serial.
+ * Shell redraws disable this to avoid confusing the terminal when
+ * doing absolute cursor movement on the framebuffer; instead they
+ * emit explicit VT100 sequences directly.
  */
 static int serial_echo = 1;
+
+/* ------------------------------------------------------------------ */
+/* Low-level serial helpers for VT100 sequences                       */
+/* ------------------------------------------------------------------ */
+
+/* Write a raw string to serial unconditionally (bypasses echo flag). */
+static void serial_raw(const char *s) {
+    while (*s) serial_putc(*s++);
+}
+
+/*
+ * serial_erase_in_line(n)
+ *   n=0  Erase from cursor to end of line   ESC[0K
+ *   n=1  Erase from start of line to cursor  ESC[1K
+ *   n=2  Erase entire current line           ESC[2K
+ */
+static void serial_erase_in_line(int n) {
+    char seq[8];
+    seq[0] = '\033'; seq[1] = '['; seq[2] = (char)('0' + n); seq[3] = 'K'; seq[4] = 0;
+    serial_raw(seq);
+}
+
+/*
+ * serial_move_col(c)  Move cursor to column c (1-based) on serial.
+ */
+static void serial_move_col(uint32_t c) {
+    /* ESC[{c}G */
+    char seq[16];
+    uint32_t c1 = c + 1; /* 1-based */
+    int i = 0;
+    seq[i++] = '\033'; seq[i++] = '[';
+    /* print c1 in decimal */
+    char tmp[8]; int ti = 0;
+    uint32_t v = c1;
+    if (v == 0) { tmp[ti++] = '0'; } else { while (v) { tmp[ti++] = (char)('0' + v % 10); v /= 10; } }
+    /* reverse */
+    for (int j = ti - 1; j >= 0; j--) seq[i++] = tmp[j];
+    seq[i++] = 'G'; seq[i] = 0;
+    serial_raw(seq);
+}
 
 SageOSBootInfo *console_boot_info(void) {
     return g_info;
@@ -49,61 +89,38 @@ void console_get_cursor(uint32_t *out_row, uint32_t *out_col) {
 }
 
 void console_set_cursor(uint32_t new_row, uint32_t new_col) {
-    if (new_row >= rows) {
-        new_row = rows - 1;
-    }
-
-    if (new_col >= cols) {
-        new_col = cols - 1;
-    }
-
+    if (new_row >= rows) new_row = rows - 1;
+    if (new_col >= cols) new_col = cols - 1;
     row = new_row;
     col = new_col;
 }
 
-uint32_t console_get_fg(void) {
-    return fg;
-}
-
-void console_set_fg(uint32_t rgb) {
-    fg = rgb;
-}
-
-int console_get_serial_echo(void) {
-    return serial_echo;
-}
-
-void console_set_serial_echo(int enabled) {
-    serial_echo = enabled ? 1 : 0;
-}
+uint32_t console_get_fg(void) { return fg; }
+void console_set_fg(uint32_t rgb) { fg = rgb; }
+int console_get_serial_echo(void) { return serial_echo; }
+void console_set_serial_echo(int enabled) { serial_echo = enabled ? 1 : 0; }
 
 static uint32_t pack_rgb(uint32_t rgb) {
     uint8_t r = (rgb >> 16) & 0xFF;
-    uint8_t g = (rgb >> 8) & 0xFF;
+    uint8_t g_c = (rgb >> 8) & 0xFF;
     uint8_t b = rgb & 0xFF;
-
-    if (g_info && g_info->pixel_format == 0) {
-        return ((uint32_t)r) | ((uint32_t)g << 8) | ((uint32_t)b << 16);
-    }
-
-    return ((uint32_t)b) | ((uint32_t)g << 8) | ((uint32_t)r << 16);
+    if (g_info && g_info->pixel_format == 0)
+        return ((uint32_t)r) | ((uint32_t)g_c << 8) | ((uint32_t)b << 16);
+    return ((uint32_t)b) | ((uint32_t)g_c << 8) | ((uint32_t)r << 16);
 }
 
 static void fb_putpixel(uint32_t x, uint32_t y, uint32_t rgb) {
     if (!g_have_fb || !g_info) return;
     if (x >= g_info->width || y >= g_info->height) return;
-
     volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
     fb[(uint64_t)y * g_info->pixels_per_scanline + x] = pack_rgb(rgb);
 }
 
 static void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t rgb) {
     timer_poll();
-    for (uint32_t yy = 0; yy < h; yy++) {
-        for (uint32_t xx = 0; xx < w; xx++) {
+    for (uint32_t yy = 0; yy < h; yy++)
+        for (uint32_t xx = 0; xx < w; xx++)
             fb_putpixel(x + xx, y + yy, rgb);
-        }
-    }
 }
 
 static const uint8_t *glyph(char ch) {
@@ -112,7 +129,6 @@ static const uint8_t *glyph(char ch) {
 
     switch (ch) {
         case ' ': return SPACE;
-
         case 'A': { static const uint8_t g[7]={14,17,17,31,17,17,17}; return g; }
         case 'B': { static const uint8_t g[7]={30,17,17,30,17,17,30}; return g; }
         case 'C': { static const uint8_t g[7]={14,17,16,16,16,17,14}; return g; }
@@ -139,7 +155,6 @@ static const uint8_t *glyph(char ch) {
         case 'X': { static const uint8_t g[7]={17,17,10,4,10,17,17}; return g; }
         case 'Y': { static const uint8_t g[7]={17,17,10,4,4,4,4}; return g; }
         case 'Z': { static const uint8_t g[7]={31,1,2,4,8,16,31}; return g; }
-
         case 'a': { static const uint8_t g[7]={0,0,14,1,15,17,15}; return g; }
         case 'b': { static const uint8_t g[7]={16,16,22,25,17,17,30}; return g; }
         case 'c': { static const uint8_t g[7]={0,0,14,16,16,17,14}; return g; }
@@ -166,7 +181,6 @@ static const uint8_t *glyph(char ch) {
         case 'x': { static const uint8_t g[7]={0,0,17,10,4,10,17}; return g; }
         case 'y': { static const uint8_t g[7]={0,0,17,17,15,1,14}; return g; }
         case 'z': { static const uint8_t g[7]={0,0,31,2,4,8,31}; return g; }
-
         case '0': { static const uint8_t g[7]={14,17,19,21,25,17,14}; return g; }
         case '1': { static const uint8_t g[7]={4,12,4,4,4,4,14}; return g; }
         case '2': { static const uint8_t g[7]={14,17,1,2,4,8,31}; return g; }
@@ -177,7 +191,6 @@ static const uint8_t *glyph(char ch) {
         case '7': { static const uint8_t g[7]={31,1,2,4,8,8,8}; return g; }
         case '8': { static const uint8_t g[7]={14,17,17,14,17,17,14}; return g; }
         case '9': { static const uint8_t g[7]={14,17,17,15,1,1,14}; return g; }
-
         case '.': { static const uint8_t g[7]={0,0,0,0,0,12,12}; return g; }
         case ',': { static const uint8_t g[7]={0,0,0,0,0,12,8}; return g; }
         case ':': { static const uint8_t g[7]={0,12,12,0,12,12,0}; return g; }
@@ -208,50 +221,28 @@ static const uint8_t *glyph(char ch) {
 static void draw_cell(uint32_t cx, uint32_t cy, char ch) {
     uint32_t px = cx * char_w;
     uint32_t py = cy * char_h;
-
     fill_rect(px, py, char_w, char_h, bg);
-
     const uint8_t *g = glyph(ch);
-
-    for (uint32_t gy = 0; gy < 7; gy++) {
-        for (uint32_t gx = 0; gx < 5; gx++) {
-            if (g[gy] & (1U << (4 - gx))) {
-                fill_rect(
-                    px + gx * scale + scale,
-                    py + gy * scale + scale,
-                    scale,
-                    scale,
-                    fg
-                );
-            }
-        }
-    }
+    for (uint32_t gy = 0; gy < 7; gy++)
+        for (uint32_t gx = 0; gx < 5; gx++)
+            if (g[gy] & (1U << (4 - gx)))
+                fill_rect(px + gx * scale + scale, py + gy * scale + scale, scale, scale, fg);
 }
 
 static void scroll(void) {
     if (!g_have_fb || !g_info) return;
-
     volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
     uint32_t pitch = g_info->pixels_per_scanline;
     uint32_t h = g_info->height;
     uint32_t w = g_info->width;
-
     timer_poll();
-
-    for (uint32_t y = status_rows * char_h; y < h; y++) {
-        for (uint32_t x = 0; x < w; x++) {
+    for (uint32_t y = status_rows * char_h; y < h; y++)
+        for (uint32_t x = 0; x < w; x++)
             fb[(uint64_t)(y - char_h) * pitch + x] = fb[(uint64_t)y * pitch + x];
-        }
-    }
-
     timer_poll();
-
-    for (uint32_t y = h - char_h; y < h; y++) {
-        for (uint32_t x = 0; x < w; x++) {
+    for (uint32_t y = h - char_h; y < h; y++)
+        for (uint32_t x = 0; x < w; x++)
             fb[(uint64_t)y * pitch + x] = pack_rgb(bg);
-        }
-    }
-
     if (row > status_rows) row--;
 }
 
@@ -262,11 +253,9 @@ void console_clear(void) {
     if (g_have_fb && g_info) {
         fill_rect(0, 0, g_info->width, g_info->height, bg);
     } else {
-        for (size_t y = 0; y < VGA_H; y++) {
-            for (size_t x = 0; x < VGA_W; x++) {
+        for (size_t y = 0; y < VGA_H; y++)
+            for (size_t x = 0; x < VGA_W; x++)
                 VGA_MEM[y * VGA_W + x] = ((uint16_t)0x0F << 8) | ' ';
-            }
-        }
     }
 
     if (g_have_fb) {
@@ -274,7 +263,13 @@ void console_clear(void) {
         col = 0;
     }
 
-    /* reserve the top status rows */
+    /*
+     * On serial (QEMU -nographic), the serial port IS the display.
+     * Emit ANSI erase-screen + cursor-home so the terminal clears.
+     * This is unconditional: harmless on real hardware (serial
+     * console logs it), and essential in QEMU.
+     */
+    serial_raw("\033[2J\033[H");
 }
 
 void console_init(SageOSBootInfo *info) {
@@ -304,62 +299,93 @@ void console_init(SageOSBootInfo *info) {
 }
 
 void console_putc(char c) {
-    if (g_have_fb) {
-        status_tick_poll();
-    }
-
-    if (serial_echo) {
-        serial_putc(c);
-    }
+    if (g_have_fb) status_tick_poll();
 
     if (c == '\r') {
+        if (serial_echo) serial_putc('\r');
         col = 0;
         return;
     }
 
     if (c == '\n' || c == 10) {
+        if (serial_echo) { serial_putc('\r'); serial_putc('\n'); }
         col = 0;
         row++;
-
         if (row >= rows) {
             if (g_have_fb) scroll();
             else row = rows - 1;
         }
-
         return;
     }
 
+    /*
+     * Backspace handling.
+     *
+     * Framebuffer: move col left, erase the cell by drawing a space.
+     * Serial:      emit "\b \b" (backspace, space, backspace) which
+     *              is the standard VT100 destructive backspace sequence.
+     *              This erases the character visually on any terminal.
+     *
+     * Note: shell_redraw_line disables serial_echo while doing
+     * full-line redraws, so this path is only hit for single
+     * character backspaces typed directly (not mid-line edits).
+     */
     if (c == 8 || c == 127) {
         if (col > 0) {
             col--;
-
-            if (g_have_fb) {
+            if (g_have_fb)
                 draw_cell(col, row, ' ');
-            } else {
-                VGA_MEM[row * VGA_W + col] = ((uint16_t)0x0F << 8) | ' ';
-            }
+            if (serial_echo)
+                serial_raw("\b \b");
         }
-
         return;
     }
 
-    if (g_have_fb) {
+    if (serial_echo) serial_putc(c);
+
+    if (g_have_fb)
         draw_cell(col, row, c);
-    } else {
+    else
         VGA_MEM[row * VGA_W + col] = ((uint16_t)0x0F << 8) | (uint8_t)c;
-    }
 
     col++;
-
     if (col >= cols) {
         col = 0;
         row++;
-
         if (row >= rows) {
             if (g_have_fb) scroll();
             else row = rows - 1;
         }
     }
+}
+
+/*
+ * console_serial_redraw_line
+ *
+ * Called by shell_redraw_line when the framebuffer is active and
+ * serial_echo has been suppressed during the FB redraw.  This
+ * function emits the equivalent VT100 sequence to keep the serial
+ * terminal in sync:
+ *
+ *   ESC[G        move to column 1 (start of line)
+ *   ESC[0K       erase from cursor to end of line
+ *   <line text>  re-print the current line content
+ *   ESC[{c+1}G   move cursor to the correct position
+ *
+ * Only called when g_have_fb is true (serial mirrors the FB).
+ * When running serial-only (no FB), serial_echo stays on and the
+ * normal putc path handles everything.
+ */
+void console_serial_redraw_line(const char *line, uint32_t pos) {
+    serial_putc('\r');
+    serial_erase_in_line(0);   /* erase to end of line */
+    /* reprint the prompt prefix: shell already printed it, we just
+       reprint from column 0 which on serial means re-emit the full
+       visible line (prompt is gone after \r, so we only have 'line'). */
+    const char *p = line;
+    while (*p) serial_putc(*p++);
+    /* position the cursor */
+    serial_move_col(pos);
 }
 
 void console_write(const char *s) {
@@ -373,13 +399,9 @@ void console_write_n(const char *s, size_t n) {
 void console_hex64(uint64_t v) {
     static const char *hex = "0123456789ABCDEF";
     char out[19];
-    out[0] = '0';
-    out[1] = 'x';
-
-    for (int i = 0; i < 16; i++) {
+    out[0] = '0'; out[1] = 'x';
+    for (int i = 0; i < 16; i++)
         out[2 + i] = hex[(v >> ((15 - i) * 4)) & 0xF];
-    }
-
     out[18] = 0;
     console_write(out);
 }
@@ -387,47 +409,24 @@ void console_hex64(uint64_t v) {
 void console_u32(uint32_t v) {
     char buf[16];
     int i = 0;
-
-    if (v == 0) {
-        console_putc('0');
-        return;
-    }
-
-    while (v > 0 && i < 15) {
-        buf[i++] = (char)('0' + (v % 10));
-        v /= 10;
-    }
-
-    while (i > 0) {
-        console_putc(buf[--i]);
-    }
+    if (v == 0) { console_putc('0'); return; }
+    while (v > 0 && i < 15) { buf[i++] = (char)('0' + (v % 10)); v /= 10; }
+    while (i > 0) console_putc(buf[--i]);
 }
 
-
-uint32_t console_cols(void) {
-    return cols;
-}
-
-uint32_t console_rows(void) {
-    return rows;
-}
+uint32_t console_cols(void) { return cols; }
+uint32_t console_rows(void) { return rows; }
 
 static uint32_t str_len32(const char *s) {
     uint32_t n = 0;
-
-    while (s && s[n]) {
-        n++;
-    }
-
+    while (s && s[n]) n++;
     return n;
 }
 
 static char status_shadow[256];
 
 void console_draw_status_bar(const char *right_text) {
-    if (!g_have_fb || !g_info || cols == 0) {
-        return;
-    }
+    if (!g_have_fb || !g_info || cols == 0) return;
 
     uint32_t saved_row = row;
     uint32_t saved_col = col;
@@ -440,24 +439,20 @@ void console_draw_status_bar(const char *right_text) {
     char current[256];
     for (uint32_t i = 0; i < 255; i++) current[i] = ' ';
     current[255] = 0;
-
     if (cols < 255) current[cols] = 0;
 
     const char *left = " SageOS v0.1.1 ";
-    for (uint32_t i = 0; left[i] && i < 255 && i < cols; i++) {
+    for (uint32_t i = 0; left[i] && i < 255 && i < cols; i++)
         current[i] = left[i];
-    }
 
     uint32_t len = str_len32(right_text);
     uint32_t start = 0;
     if (len + 1 < cols && len < 255) {
         start = cols - len - 1;
-        for (uint32_t i = 0; right_text[i] && start + i < 255 && start + i < cols; i++) {
+        for (uint32_t i = 0; right_text[i] && start + i < 255 && start + i < cols; i++)
             current[start + i] = right_text[i];
-        }
     }
 
-    /* Only draw characters that changed */
     for (uint32_t i = 0; i < cols && i < 255; i++) {
         if (current[i] != status_shadow[i]) {
             draw_cell(i, 0, current[i]);
@@ -469,8 +464,5 @@ void console_draw_status_bar(const char *right_text) {
     bg = saved_bg;
     row = saved_row;
     col = saved_col;
-
-    if (row < status_rows) {
-        row = status_rows;
-    }
+    if (row < status_rows) row = status_rows;
 }

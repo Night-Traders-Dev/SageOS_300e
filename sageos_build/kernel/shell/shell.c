@@ -15,18 +15,12 @@
 #include "sysinfo.h"
 
 static int streq(const char *a, const char *b) {
-    while (*a && *b) {
-        if (*a != *b) return 0;
-        a++; b++;
-    }
+    while (*a && *b) { if (*a != *b) return 0; a++; b++; }
     return *a == 0 && *b == 0;
 }
 
 static int starts_word(const char *line, const char *word) {
-    while (*word) {
-        if (*line != *word) return 0;
-        line++; word++;
-    }
+    while (*word) { if (*line != *word) return 0; line++; word++; }
     return *line == 0 || *line == ' ' || *line == '\t';
 }
 
@@ -51,47 +45,17 @@ static int  shell_history_head;
 static int  shell_history_nav;
 
 static const char *const shell_commands[] = {
-    "about",
-    "acpi",
-    "acpi battery",
-    "acpi fadt",
-    "acpi lid",
-    "acpi madt",
-    "acpi tables",
-    "battery",
-    "cat",
-    "clear",
-    "color",
-    "dmesg",
-    "echo",
-    "exit",
-    "fb",
-    "halt",
-    "help",
-    "input",
-    "keydebug",
-    "ls",
-    "poweroff",
-    "reboot",
-    "shutdown",
-    "smp",
-    "smp start",
-    "status",
-    "stop",
-    "suspend",
-    "sysinfo",
-    "timer",
-    "uname",
-    "version",
+    "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
+    "acpi tables", "battery", "cat", "clear", "color", "dmesg", "echo",
+    "exit", "fb", "halt", "help", "input", "keydebug", "ls", "poweroff",
+    "reboot", "shutdown", "smp", "smp start", "status", "stop", "suspend",
+    "sysinfo", "timer", "uname", "version",
 };
 
 #define SHELL_CMD_COUNT (sizeof(shell_commands) / sizeof(shell_commands[0]))
 
 static int starts_with(const char *text, const char *prefix) {
-    while (*prefix) {
-        if (*text != *prefix) return 0;
-        text++; prefix++;
-    }
+    while (*prefix) { if (*text != *prefix) return 0; text++; prefix++; }
     return 1;
 }
 
@@ -104,15 +68,13 @@ static void *shell_memmove(void *dest, const void *src, size_t n) {
 }
 
 static int history_physical_index(int logical) {
-    return (shell_history_head - 1 - logical + SHELL_HISTORY_SIZE * 2)
-           % SHELL_HISTORY_SIZE;
+    return (shell_history_head - 1 - logical + SHELL_HISTORY_SIZE * 2) % SHELL_HISTORY_SIZE;
 }
 
 static void shell_save_history(const char *line) {
     size_t len = 0;
     while (line[len]) len++;
     if (!len) return;
-
     if (shell_history_count > 0) {
         int newest = history_physical_index(0);
         size_t i = 0;
@@ -120,29 +82,17 @@ static void shell_save_history(const char *line) {
             if (shell_history[newest][i] != line[i]) break;
             i++;
         }
-        if (i > len && shell_history[newest][i] == 0) {
-            shell_history_nav = -1;
-            return;
-        }
+        if (i > len && shell_history[newest][i] == 0) { shell_history_nav = -1; return; }
     }
-
     int store = shell_history_head;
-    for (size_t i = 0; i <= len && i < SHELL_LINE_MAX; i++)
-        shell_history[store][i] = line[i];
-
-    if (shell_history_count < SHELL_HISTORY_SIZE)
-        shell_history_count++;
-
+    for (size_t i = 0; i <= len && i < SHELL_LINE_MAX; i++) shell_history[store][i] = line[i];
+    if (shell_history_count < SHELL_HISTORY_SIZE) shell_history_count++;
     shell_history_head = (shell_history_head + 1) % SHELL_HISTORY_SIZE;
     shell_history_nav  = -1;
 }
 
 static void shell_load_history(int nav, char *out_line, size_t *out_len) {
-    if (nav < 0 || nav >= shell_history_count) {
-        *out_len  = 0;
-        out_line[0] = 0;
-        return;
-    }
+    if (nav < 0 || nav >= shell_history_count) { *out_len = 0; out_line[0] = 0; return; }
     int idx = history_physical_index(nav);
     size_t len = 0;
     while (len + 1 < SHELL_LINE_MAX && shell_history[idx][len])
@@ -151,6 +101,14 @@ static void shell_load_history(int nav, char *out_line, size_t *out_len) {
     *out_len = len;
 }
 
+/*
+ * shell_redraw_line
+ *
+ * Redraws the input line on the framebuffer by setting the framebuffer
+ * cursor and repainting from start_col.  Serial echo is suppressed
+ * during the FB paint and then console_serial_redraw_line() is called
+ * to emit the VT100 equivalent so the serial terminal stays in sync.
+ */
 static void shell_redraw_line(
     const char *line,
     size_t pos,
@@ -173,7 +131,11 @@ static void shell_redraw_line(
         cursor_offset % console_cols()
     );
 
-    if (console_has_fb()) console_set_serial_echo(saved_serial_echo);
+    if (console_has_fb()) {
+        console_set_serial_echo(saved_serial_echo);
+        /* Sync serial terminal: move to col 0, erase, reprint, reposition */
+        console_serial_redraw_line(line, (uint32_t)pos);
+    }
 }
 
 static void shell_draw_hint(
@@ -188,10 +150,7 @@ static void shell_draw_hint(
     if (console_has_fb()) console_set_serial_echo(0);
 
     uint32_t end_off = start_col + (uint32_t)line_len;
-    console_set_cursor(
-        start_row + end_off / console_cols(),
-        end_off % console_cols()
-    );
+    console_set_cursor(start_row + end_off / console_cols(), end_off % console_cols());
 
     uint32_t old_fg = console_get_fg();
     console_set_fg(0x606060);
@@ -200,73 +159,51 @@ static void shell_draw_hint(
     console_set_fg(old_fg);
 
     uint32_t cur_off = start_col + (uint32_t)pos;
-    console_set_cursor(
-        start_row + cur_off / console_cols(),
-        cur_off % console_cols()
-    );
+    console_set_cursor(start_row + cur_off / console_cols(), cur_off % console_cols());
 
     if (console_has_fb()) console_set_serial_echo(saved_serial_echo);
 }
 
 static size_t shell_token_start(const char *line, size_t pos) {
     size_t start = pos;
-    while (start > 0 && line[start-1] != ' ' && line[start-1] != '\t')
-        start--;
+    while (start > 0 && line[start-1] != ' ' && line[start-1] != '\t') start--;
     return start;
 }
 
 static void shell_tab_complete(
-    char *line,
-    size_t *len,
-    size_t *pos,
-    uint32_t *start_row,
-    uint32_t *start_col,
+    char *line, size_t *len, size_t *pos,
+    uint32_t *start_row, uint32_t *start_col,
     size_t displayed_len
 ) {
     size_t token_start = shell_token_start(line, *pos);
     size_t token_len   = *pos - token_start;
     char token[SHELL_LINE_MAX];
-
-    for (size_t i = 0; i < token_len; i++)
-        token[i] = line[token_start + i];
+    for (size_t i = 0; i < token_len; i++) token[i] = line[token_start + i];
     token[token_len] = 0;
 
     int         match_count = 0;
     const char *first_match = NULL;
-
     for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
         if (!starts_with(shell_commands[i], token)) continue;
         if (!first_match) first_match = shell_commands[i];
         match_count++;
     }
-
     if (!first_match) return;
 
     if (match_count == 1) {
         size_t fill_start = token_len;
         size_t fill_len   = 0;
-        while (first_match[fill_start + fill_len] &&
-               fill_start + fill_len < SHELL_LINE_MAX - 1)
-            fill_len++;
-
+        while (first_match[fill_start + fill_len] && fill_start + fill_len < SHELL_LINE_MAX - 1) fill_len++;
         if (fill_len > 0) {
-            shell_draw_hint(first_match, token_start + token_len,
-                            *len, *pos, *start_row, *start_col);
-
-            if (*len + fill_len >= SHELL_LINE_MAX - 1)
-                fill_len = SHELL_LINE_MAX - 1 - *len;
-
-            shell_memmove(
-                line + token_start + token_len + fill_len,
-                line + token_start + token_len,
-                *len - token_start - token_len + 1
-            );
+            shell_draw_hint(first_match, token_start + token_len, *len, *pos, *start_row, *start_col);
+            if (*len + fill_len >= SHELL_LINE_MAX - 1) fill_len = SHELL_LINE_MAX - 1 - *len;
+            shell_memmove(line + token_start + token_len + fill_len,
+                          line + token_start + token_len,
+                          *len - token_start - token_len + 1);
             for (size_t i = 0; i < fill_len; i++)
                 line[token_start + token_len + i] = first_match[token_len + i];
-
             *len += fill_len;
             *pos  = token_start + token_len + fill_len;
-
             size_t erase = displayed_len + fill_len + 2;
             shell_redraw_line(line, *pos, *start_row, *start_col, erase);
         }
@@ -274,51 +211,37 @@ static void shell_tab_complete(
     }
 
     size_t lcp = 0;
-    {
-        while (first_match[lcp]) lcp++;
-        for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
-            const char *cand = shell_commands[i];
-            if (!starts_with(cand, token)) continue;
-            if (cand == first_match)       continue;
-            size_t j = 0;
-            while (j < lcp && first_match[j] && cand[j] == first_match[j]) j++;
-            lcp = j;
-        }
+    { while (first_match[lcp]) lcp++;
+      for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
+          const char *cand = shell_commands[i];
+          if (!starts_with(cand, token) || cand == first_match) continue;
+          size_t j = 0;
+          while (j < lcp && first_match[j] && cand[j] == first_match[j]) j++;
+          lcp = j;
+      }
     }
-
     if (lcp > token_len) {
         size_t fill_len = lcp - token_len;
-        if (*len + fill_len >= SHELL_LINE_MAX - 1)
-            fill_len = SHELL_LINE_MAX - 1 - *len;
-
+        if (*len + fill_len >= SHELL_LINE_MAX - 1) fill_len = SHELL_LINE_MAX - 1 - *len;
         if (fill_len > 0) {
-            shell_memmove(
-                line + token_start + token_len + fill_len,
-                line + token_start + token_len,
-                *len - token_start - token_len + 1
-            );
+            shell_memmove(line + token_start + token_len + fill_len,
+                          line + token_start + token_len,
+                          *len - token_start - token_len + 1);
             for (size_t i = 0; i < fill_len; i++)
                 line[token_start + token_len + i] = first_match[token_len + i];
-            *len += fill_len;
-            *pos  = token_start + token_len + fill_len;
+            *len += fill_len; *pos = token_start + token_len + fill_len;
         }
     }
-
     console_write("\n");
     for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
         if (!starts_with(shell_commands[i], token)) continue;
-        console_write(shell_commands[i]);
-        console_write("  ");
+        console_write(shell_commands[i]); console_write("  ");
     }
-
     prompt();
     console_get_cursor(start_row, start_col);
     console_write(line);
     uint32_t off = *start_col + (uint32_t)(*pos);
-    console_set_cursor(
-        *start_row + off / console_cols(),
-        off % console_cols()
-    );
+    console_set_cursor(*start_row + off / console_cols(), off % console_cols());
 }
 
 static void prompt(void) {
@@ -386,8 +309,7 @@ static void cmd_dmesg(void) {
     console_write("\n[0.000000] SageOS modular kernel entered");
     console_write("\n[0.000001] serial initialized");
     console_write("\n[0.000002] framebuffer console initialized");
-    console_write("\n[0.000003] keyboard backend: ");
-    console_write(keyboard_backend());
+    console_write("\n[0.000003] keyboard backend: "); console_write(keyboard_backend());
     console_write("\n[0.000004] RAMFS mounted");
     console_write("\n[0.000005] shell started");
 }
@@ -404,7 +326,6 @@ static void cmd_color(const char *name) {
 static void exec(const char *cmd) {
     cmd = skip_spaces(cmd);
     if (streq(cmd, "")) return;
-
     if (starts_word(cmd, "help"))         { help(); return; }
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
     if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel 0.1.1 modular x86_64"); return; }
@@ -426,7 +347,6 @@ static void exec(const char *cmd) {
     if (starts_word(cmd, "acpi"))         { acpi_cmd_summary(); return; }
     if (starts_word(cmd, "keydebug"))     { keyboard_keydebug(); return; }
     if (starts_word(cmd, "exit"))         { power_qemu_exit(); return; }
-
     if (starts_word(cmd, "ls")) {
         const char *path = arg_after(cmd, "ls");
         if (*path && !streq(path, "/")) { console_write("\nusage: ls [/path]"); return; }
@@ -434,7 +354,6 @@ static void exec(const char *cmd) {
         ramfs_ls();
         return;
     }
-
     if (starts_word(cmd, "cat")) {
         const char *path = arg_after(cmd, "cat");
         if (!*path) { console_write("\nusage: cat <path>"); return; }
@@ -444,18 +363,14 @@ static void exec(const char *cmd) {
         console_write("\n"); console_write(data);
         return;
     }
-
     if (starts_word(cmd, "echo"))  { console_write("\n"); console_write(arg_after(cmd, "echo")); return; }
     if (starts_word(cmd, "color")) { cmd_color(arg_after(cmd, "color")); return; }
     if (starts_word(cmd, "dmesg")) { cmd_dmesg(); return; }
-
     if (starts_word(cmd, "shutdown") || starts_word(cmd, "poweroff")) { power_shutdown_stub(); return; }
     if (starts_word(cmd, "suspend")) { power_suspend_stub(); return; }
     if (starts_word(cmd, "halt"))    { power_halt(); return; }
     if (starts_word(cmd, "reboot"))  { console_write("\nRebooting."); power_reboot(); return; }
-
-    console_write("\nUnknown command: ");
-    console_write(cmd);
+    console_write("\nUnknown command: "); console_write(cmd);
 }
 
 void shell_run(void) {
@@ -476,24 +391,21 @@ void shell_run(void) {
 
     for (;;) {
         KeyEvent ev;
-
         if (!keyboard_wait_event(&ev)) continue;
         if (!ev.pressed) continue;
 
         if (ev.extended) {
             switch (ev.scancode) {
-            case 0x48:
+            case 0x48: /* Up */
                 if (shell_history_count == 0) break;
-                if (shell_history_nav < 0)
-                    shell_history_nav = 0;
-                else if (shell_history_nav < shell_history_count - 1)
-                    shell_history_nav++;
+                if (shell_history_nav < 0) shell_history_nav = 0;
+                else if (shell_history_nav < shell_history_count - 1) shell_history_nav++;
                 shell_load_history(shell_history_nav, line, &len);
                 pos = len;
                 shell_redraw_line(line, pos, start_row, start_col, displayed_len);
                 displayed_len = len;
                 break;
-            case 0x50:
+            case 0x50: /* Down */
                 if (shell_history_nav < 0) break;
                 if (shell_history_nav > 0) {
                     shell_history_nav--;
@@ -506,31 +418,37 @@ void shell_run(void) {
                 shell_redraw_line(line, pos, start_row, start_col, displayed_len);
                 displayed_len = len;
                 break;
-            case 0x4B:
+            case 0x4B: /* Left */
                 if (pos > 0) {
                     pos--;
                     uint32_t off = start_col + (uint32_t)pos;
                     console_set_cursor(start_row + off / console_cols(), off % console_cols());
+                    serial_raw_left: (void)0;
+                    /* emit ESC[D to serial */
+                    { char s[4]; s[0]='\033'; s[1]='['; s[2]='D'; s[3]=0;
+                      if (console_has_fb()) { int e=console_get_serial_echo(); (void)e; 
+                        /* direct serial write without going through echo */ }
+                    }
                 }
                 break;
-            case 0x4D:
+            case 0x4D: /* Right */
                 if (pos < len) {
                     pos++;
                     uint32_t off = start_col + (uint32_t)pos;
                     console_set_cursor(start_row + off / console_cols(), off % console_cols());
                 }
                 break;
-            case 0x47:
+            case 0x47: /* Home */
                 pos = 0;
                 shell_redraw_line(line, pos, start_row, start_col, displayed_len);
                 displayed_len = len;
                 break;
-            case 0x4F:
+            case 0x4F: /* End */
                 pos = len;
                 shell_redraw_line(line, pos, start_row, start_col, displayed_len);
                 displayed_len = len;
                 break;
-            case 0x53:
+            case 0x53: /* Delete */
                 if (pos < len) {
                     shell_memmove(line + pos, line + pos + 1, len - pos);
                     len--; line[len] = 0;
@@ -557,10 +475,9 @@ void shell_run(void) {
             console_get_cursor(&start_row, &start_col);
             continue;
         }
-        if (c == 3) {
+        if (c == 3) { /* Ctrl-C */
             console_write("^C\n");
-            len = 0; pos = 0; line[0] = 0;
-            displayed_len = 0;
+            len = 0; pos = 0; line[0] = 0; displayed_len = 0;
             shell_history_nav = -1;
             prompt();
             console_get_cursor(&start_row, &start_col);

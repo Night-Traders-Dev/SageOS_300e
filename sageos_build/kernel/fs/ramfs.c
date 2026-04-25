@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include "console.h"
 #include "ramfs.h"
+#include "version.h"
 #include "bin_hello.h"
 #include "bin_hello_json.h"
 #include "bin_hello_kernel.h"
@@ -36,8 +37,8 @@ typedef struct {
 } RamFile;
 
 static const RamFile files[] = {
-    {"/etc/motd",    "Welcome to SageOS v0.1.2.\nType help for commands.\n", 0},
-    {"/etc/version", "SageOS 0.1.2 modular kernel\n", 0},
+    {"/etc/motd",    "Welcome to SageOS v" SAGEOS_VERSION ".\nType help for commands.\n", 0},
+    {"/etc/version", "SageOS " SAGEOS_VERSION " modular kernel\n", 0},
     {"/bin/sh",      "Kernel-resident shell\n", 0},
     {"/dev/fb0",     "UEFI GOP framebuffer\n", 0},
     {"/bin/hello",   (const char *)bin_hello, sizeof(bin_hello)},

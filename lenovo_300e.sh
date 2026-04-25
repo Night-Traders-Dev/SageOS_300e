@@ -45,6 +45,11 @@ check_tools() {
 build_kernel() {
     mkdir -p "$OBJ"
 
+    echo "--- Syncing version header ---"
+    local version
+    version=$(cat "$ROOT/VERSION" | tr -d '\r\n')
+    echo "#define SAGEOS_VERSION \"$version\"" > "$KERNEL/include/version.h"
+
     echo "--- Building kernel: modular freestanding x86_64 C/ASM ---"
 
     rm -f "$OBJ"/*.o "$OBJ"/*.obj 2>/dev/null || true

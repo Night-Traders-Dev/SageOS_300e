@@ -5,8 +5,9 @@ SageOS is a small x86_64 UEFI operating system bring-up project targeting the **
 The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console, runs a kernel-resident shell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
 Recent updates:
+- **Centralized Versioning**: Versioning is now managed through a single `VERSION` file in the root directory, with automatic header generation during the build process.
+- **Status Bar**: Fixed missing `%` glyph in the framebuffer console; battery, CPU, and RAM metrics now display correctly.
 - **ELF & SageLang**: Added foundational ELF loading/execution support and integrated SageLang as a git submodule for future modular development.
-- **Build System**: Updated to support both GCC and Clang toolchains (defaults to GCC), improving compatibility and diagnostic capabilities.
 - **Battery:** Correct CrOS EC identity check (`'E','C'` at `EC_MEMMAP_ID + 0x20`), `BATT_FLAG` validity gate before reading capacity, removed false 50% fallback.
 - **Shell line editing (QEMU):** Fixed backspace ghost character, history Up/Down screen update, and fish-style dim-grey tab completion hint. Multi-match Tab now correctly updates the prompt anchor row so subsequent edits land in the right place.
 - **Keyboard (UEFI path):** Arrow/special keys no longer silently dropped — UEFI scan codes are now mapped to PS/2-style extended scancodes unified across both input backends.
@@ -67,6 +68,7 @@ SageOS_300e/
 ├── lenovo_300e.sh
 ├── sageos.img
 ├── README.md
+├── VERSION
 └── sageos_build/
     ├── BOOTX64.EFI
     ├── KERNEL.BIN
@@ -91,7 +93,8 @@ SageOS_300e/
         │   ├── shell.h
         │   ├── smp.h
         │   ├── status.h
-        │   └── timer.h
+        │   ├── timer.h
+        │   └── version.h
         ├── core/
         │   └── kernel.c
         ├── drivers/
@@ -136,7 +139,7 @@ Use `lenovo_300e.sh` for all normal operations.
 > **QEMU notes:**
 > - Battery reads `--` — QEMU exposes no real ACPI battery by default.
 > - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
-> - All shell line editing features (backspace, history, tab hint) are fully functional in QEMU as of v0.1.1.
+> - All shell line editing features (backspace, history, tab hint) are fully functional in QEMU as of v0.1.2.
 
 ### Flash to USB
 

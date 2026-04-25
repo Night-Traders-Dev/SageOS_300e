@@ -5,6 +5,7 @@
 #include "serial.h"
 #include "status.h"
 #include "timer.h"
+#include "version.h"
 
 #define VGA_W 80
 #define VGA_H 25
@@ -207,6 +208,7 @@ static const uint8_t *glyph(char ch) {
         case '\'': { static const uint8_t g[7]={4,4,8,0,0,0,0}; return g; }
         case '"': { static const uint8_t g[7]={10,10,0,0,0,0,0}; return g; }
         case '!': { static const uint8_t g[7]={4,4,4,4,4,0,4}; return g; }
+        case '%': { static const uint8_t g[7]={24,25,2,4,8,19,3}; return g; }
         case '?': return UNKNOWN;
         case '[': { static const uint8_t g[7]={14,8,8,8,8,8,14}; return g; }
         case ']': { static const uint8_t g[7]={14,2,2,2,2,2,14}; return g; }
@@ -444,7 +446,7 @@ void console_draw_status_bar(const char *right_text) {
     current[255] = 0;
     if (cols < 255) current[cols] = 0;
 
-    const char *left = " SageOS v0.1.1 ";
+    const char *left = " SageOS v" SAGEOS_VERSION " ";
     for (uint32_t i = 0; left[i] && i < 255 && i < cols; i++)
         current[i] = left[i];
 

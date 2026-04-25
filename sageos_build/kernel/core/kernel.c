@@ -13,6 +13,7 @@
 #include "fat32.h"
 #include "pci.h"
 #include "sdhci.h"
+#include "version.h"
 
 extern int fat32_init(void);
 
@@ -72,7 +73,7 @@ void kmain(SageOSBootInfo *info) {
 
     banner();
 
-    console_write("SageOS modular kernel v0.1.2 entered.\n");
+    console_write("SageOS modular kernel v" SAGEOS_VERSION " entered.\n");
     console_write("Framebuffer console online.\n");
     console_write("Keyboard backend: ");
     console_write(keyboard_backend());

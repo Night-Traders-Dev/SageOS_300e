@@ -17,6 +17,7 @@
 #include "pci.h"
 #include "sdhci.h"
 #include "elf.h"
+#include "version.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) { if (*a != *b) return 0; a++; b++; }
@@ -349,8 +350,8 @@ static void exec(const char *cmd) {
     if (streq(cmd, "")) return;
     if (starts_word(cmd, "help"))         { help(); return; }
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
-    if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel 0.1.2 modular x86_64"); return; }
-    if (starts_word(cmd, "uname"))        { console_write("\nSageOS sageos 0.1.2 x86_64 lenovo_300e"); return; }
+    if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel " SAGEOS_VERSION " modular x86_64"); return; }
+    if (starts_word(cmd, "uname"))        { console_write("\nSageOS sageos " SAGEOS_VERSION " x86_64 lenovo_300e"); return; }
     if (starts_word(cmd, "about"))        { console_write("\nSageOS is a small POSIX-inspired OS target."); console_write("\nCurrent phase: modular kernel and hardware diagnostics."); return; }
     if (starts_word(cmd, "fb"))           { cmd_fb(); return; }
     if (starts_word(cmd, "input"))        { console_write("\nInput backend: "); console_write(keyboard_backend()); console_write("\nUse keydebug to inspect raw scancodes."); return; }

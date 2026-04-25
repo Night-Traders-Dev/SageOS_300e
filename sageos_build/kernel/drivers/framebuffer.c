@@ -3,6 +3,7 @@
 #include "bootinfo.h"
 #include "console.h"
 #include "serial.h"
+#include "status.h"
 #include "timer.h"
 
 #define VGA_W 80
@@ -20,6 +21,8 @@ static uint32_t rows = VGA_H;
 static uint32_t char_w = 12;
 static uint32_t char_h = 16;
 static uint32_t scale = 2;
+
+static const uint32_t status_rows = 2;
 
 static uint32_t fg = 0xE8E8E8;
 static uint32_t bg = 0x05070A;
@@ -201,7 +204,7 @@ static void scroll(void) {
 
     timer_poll();
 
-    for (uint32_t y = char_h; y < h; y++) {
+    for (uint32_t y = status_rows * char_h; y < h; y++) {
         for (uint32_t x = 0; x < w; x++) {
             fb[(uint64_t)(y - char_h) * pitch + x] = fb[(uint64_t)y * pitch + x];
         }
@@ -215,7 +218,7 @@ static void scroll(void) {
         }
     }
 
-    if (row > 0) row--;
+    if (row > status_rows) row--;
 }
 
 void console_clear(void) {
@@ -233,11 +236,11 @@ void console_clear(void) {
     }
 
     if (g_have_fb) {
-        row = 2;
+        row = status_rows;
         col = 0;
     }
 
-    /* status-bar reserve */
+    /* reserve the top status rows */
 }
 
 void console_init(SageOSBootInfo *info) {
@@ -267,6 +270,10 @@ void console_init(SageOSBootInfo *info) {
 }
 
 void console_putc(char c) {
+    if (g_have_fb) {
+        status_tick_poll();
+    }
+
     serial_putc(c);
 
     if (c == '\r') {
@@ -427,7 +434,7 @@ void console_draw_status_bar(const char *right_text) {
     row = saved_row;
     col = saved_col;
 
-    if (row == 0) {
-        row = 2;
+    if (row < status_rows) {
+        row = status_rows;
     }
 }

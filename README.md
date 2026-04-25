@@ -4,10 +4,12 @@ SageOS is a small x86_64 UEFI operating system bring-up project targeting the **
 
 The current build boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console, runs a kernel-resident shell, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
+This update adds a persistent top status bar with non-blocking refresh logic across the bootloader, kernel, and shell, and improves battery/CPU/RAM reporting in the status display.
+
 ## Current Version
 
 ```text
-SageOS v0.1.0
+SageOS v0.1.1
 ```
 
 ## Target Hardware
@@ -35,7 +37,7 @@ CPU:    AMD x86_64, Multi-core SMP enabled
 | IDT installation | Working |
 | PIT timer (IRQ0) | Working |
 | CPU% accounting | Working — Real-time 1s sliding window |
-| Status bar | Working — Flicker-free 10Hz redraw |
+| Status bar | Working — persistent top-bar, non-blocking refresh, preserved during scroll |
 | Keyboard | Working — UEFI firmware input fallback + native i8042/serial |
 | RAM status | Working — Real-time Used RAM tracking |
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
@@ -122,6 +124,8 @@ Use `lenovo_300e.sh` for all normal operations.
 ```bash
 ./lenovo_300e.sh qemu
 ```
+
+This build and the statusbar fix have been validated using QEMU with the provided disk image.
 
 ### Flash to USB
 

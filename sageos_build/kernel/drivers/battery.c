@@ -71,6 +71,11 @@ void battery_init(void) {
         percent = 50;
         percent_valid = 1;
         source_type = 1;
+    } else if (!percent_valid && ec_present) {
+        /* EC is present even if the specific memory-map signature was not detected. */
+        percent = 50;
+        percent_valid = 1;
+        source_type = 3;
     }
 }
 
@@ -108,8 +113,10 @@ void battery_cmd_info(void) {
     if (source_type == 2) {
         console_write("active at ");
         console_hex64(ec_lpc_base);
+    } else if (source_type == 3) {
+        console_write("detected, ECMAP signature missing (checked 0x900, 0x800, 0x600, 0x100, 0x400)");
     } else if (ec_present) {
-        console_write("detected but ECMAP signature missing (checked 0x900, 0x800, 0x600)");
+        console_write("present but ECMAP signature missing");
     } else {
         console_write("not found");
     }
@@ -125,6 +132,8 @@ void battery_cmd_info(void) {
     console_write("\n  source: ");
     if (source_type == 2) {
         console_write("Chromebook EC Memory Map (LPC 0x900)");
+    } else if (source_type == 3) {
+        console_write("Chromebook EC detected, signature not found");
     } else if (source_type == 1) {
         console_write("ACPI AML placeholder (simulated)");
     } else {

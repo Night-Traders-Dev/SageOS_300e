@@ -2,9 +2,12 @@
 
 SageOS is a small x86_64 UEFI operating system bring-up project targeting the **Lenovo 300e Chromebook 2nd Gen AST**.
 
-The current build boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console, runs a kernel-resident shell, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
+The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console, runs a kernel-resident shell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
-This update adds a persistent top status bar with non-blocking refresh logic across the bootloader, kernel, and shell, and improves battery/CPU/RAM reporting in the status display.
+Recent updates:
+- **Battery:** Correct CrOS EC identity check (`'E','C'` at `EC_MEMMAP_ID + 0x20`), `BATT_FLAG` validity gate before reading capacity, removed false 50% fallback.
+- **Shell line editing (QEMU):** Fixed backspace ghost character, history Up/Down screen update, and fish-style dim-grey tab completion hint. Multi-match Tab now correctly updates the prompt anchor row so subsequent edits land in the right place.
+- **Keyboard (UEFI path):** Arrow/special keys no longer silently dropped — UEFI scan codes are now mapped to PS/2-style extended scancodes unified across both input backends.
 
 ## Current Version
 
@@ -18,8 +21,8 @@ SageOS v0.1.1
 Device: Lenovo 300e Chromebook 2nd Gen AST
 Boot:   x86_64 UEFI
 Display: UEFI GOP framebuffer
-Input:  native i8042/PS2 native driver
-CPU:    AMD x86_64, Multi-core SMP enabled
+Input:  UEFI ConIn firmware fallback + native i8042/PS2 driver
+CPU:    AMD x86_64, multi-core SMP enabled
 ```
 
 ## Current Feature Status
@@ -32,19 +35,20 @@ CPU:    AMD x86_64, Multi-core SMP enabled
 | Kernel loading | Working |
 | GOP framebuffer console | Working |
 | Kernel shell | Working |
+| Shell line editing | Working — insert, delete, cursor move, history, tab complete with hint |
 | Unified build/flash tool | Working |
 | Modular kernel tree | Working |
 | IDT installation | Working |
 | PIT timer (IRQ0) | Working |
-| CPU% accounting | Working — Real-time 1s sliding window |
+| CPU% accounting | Working — real-time 1 s sliding window |
 | Status bar | Working — persistent top-bar, non-blocking refresh, preserved during scroll |
-| Keyboard | Working — UEFI firmware input fallback + native i8042/serial |
-| RAM status | Working — Real-time used RAM tracking; may report high reservation when firmware boot services remain active |
+| Keyboard | Working — UEFI ConIn + native i8042; arrow/special keys unified across both paths |
+| RAM status | Working — real-time used RAM tracking; may read high while firmware boot services are active |
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
-| ACPI | Working — Minimal AML parser, Battery (_BST) & Lid detection |
-| Battery | Working — Chromebook EC (LPC 0x900..0x400) capacity polling |
+| ACPI | Working — minimal AML parser, Battery (_BST) & Lid detection |
+| Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate; `--` shown when EC or data not confirmed |
 | VFS / FAT32 | Working — ATA PIO block driver, VFS layer, FAT32 mount |
-| SageLang Backend | Working — Bare-metal stabilized, runtime-free modules |
+| SageLang Backend | Working — bare-metal stabilized, runtime-free modules |
 
 ## Important Design Note
 
@@ -125,9 +129,10 @@ Use `lenovo_300e.sh` for all normal operations.
 ./lenovo_300e.sh qemu
 ```
 
-This build and the statusbar fix have been validated using QEMU with the provided disk image.
-
-> Note: QEMU does not expose a real ACPI battery by default, so `battery` may report unavailable in the emulator. `CPU` may also read as `0%` while the VM is idle, which is expected for an otherwise idle shell session.
+> **QEMU notes:**
+> - Battery reads `--` — QEMU exposes no real ACPI battery by default.
+> - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
+> - All shell line editing features (backspace, history, tab hint) are fully functional in QEMU as of v0.1.1.
 
 ### Flash to USB
 
@@ -198,7 +203,7 @@ UEFI firmware
   ↓
 UEFI loader initializes GOP and reads KERNEL.BIN
   ↓
-Boot info is passed to kernel
+Boot info passed to kernel
   ↓
 Kernel entry.S bridges ABI and stack
   ↓
@@ -240,10 +245,6 @@ kernel_size
 
 ## Shell Commands
 
-Current shell commands include:
-
-Shell editing now supports history navigation (Up/Down), tab completion, and common key sequences like Ctrl-A, Ctrl-E, Ctrl-U, and Ctrl-C.
-
 ```text
 help
 clear
@@ -256,10 +257,12 @@ keydebug
 status
 timer
 smp
+smp start
 acpi
 acpi tables
 acpi fadt
 acpi madt
+acpi lid
 acpi battery
 battery
 ls
@@ -274,6 +277,21 @@ halt
 reboot
 ```
 
+### Shell Line Editing
+
+| Key | Action |
+|---|---|
+| `Up` / `Down` | History navigation — newest entry first |
+| `Left` / `Right` | Move cursor within line |
+| `Home` / `End` | Jump to start / end of line |
+| `Tab` | Autocomplete — dim grey hint on unique match; candidate list + LCP fill on multiple matches |
+| `Backspace` / `Delete` | Delete character before / at cursor |
+| `Ctrl-A` / `Ctrl-E` | Jump to beginning / end of line |
+| `Ctrl-U` | Clear entire line |
+| `Ctrl-C` | Cancel current line |
+
+History stores up to 16 entries in a ring buffer. Duplicate consecutive commands are suppressed.
+
 ## Diagnostic Commands
 
 ### Status Bar / Metrics
@@ -283,7 +301,7 @@ status
 timer
 ```
 
-The top-right status bar currently shows:
+The top-right status bar shows:
 
 ```text
 BAT --%  CPU NN%  RAM NN%
@@ -293,7 +311,23 @@ The status bar uses a dirty-cell shadow buffer — only cells that change are re
 
 CPU% is computed from IRQ0-driven idle accounting using a 100-tick sliding window (1-second average at 100 Hz).
 
-Battery remains `--%` until a verified ACPI battery AML evaluator or Chromebook EC battery query is implemented. The Chromebook EC LPC ECMAP signature is probed at boot but not yet confirmed reliable on all 300e firmware variants.
+### Battery
+
+```text
+battery
+```
+
+The `battery` command probes the CrOS EC LPC memory-mapped region at candidate bases `0x900`, `0x880`, and `0x800`. It confirms the two-byte EC identity (`'E','C'` at `EC_MEMMAP_ID` offset `0x20`), checks `BATT_FLAG` for `BATT_PRESENT` and `INVALID_DATA` bits, then reads the raw `BATT_CAP` and `BATT_CAP_FULL` registers to compute percentage.
+
+Sample output on hardware with a confirmed EC:
+
+```text
+EC ID bytes: 'E','C' confirmed
+BATT_FLAG: 0xNN  [PRESENT] [VALID] [DISCHARGING]
+percentage: 73%
+```
+
+If the EC is not found at any candidate base, `battery` prints `ID not confirmed` and the status bar shows `--`.
 
 ### SMP / CPU Discovery
 
@@ -305,8 +339,8 @@ Current Lenovo output shows two discovered CPUs through ACPI MADT:
 
 ```text
 discovered CPUs: 2
-AP startup: not enabled yet
-next: IDT + LAPIC + INIT/SIPI trampoline
+AP startup: INIT/SIPI sequence enabled
+per-CPU stacks: allocated
 ```
 
 ### ACPI
@@ -317,6 +351,7 @@ acpi tables
 acpi fadt
 acpi madt
 acpi battery
+acpi lid
 ```
 
 The Lenovo 300e has working ACPI discovery with:
@@ -335,9 +370,9 @@ S5 (shutdown) and S3 (suspend) sleep packages are parsed from the DSDT at boot a
 
 ### Keyboard
 
-Default builds keep UEFI boot services active so the kernel can read `ConIn`
-keyboard events on the Lenovo 300e Chromebook internal keyboard. Set
-`SAGEOS_EXIT_BOOT_SERVICES=1` when building to test the strict native i8042 path.
+Default builds keep UEFI boot services active so the kernel can read `ConIn` events on the internal keyboard. Set `SAGEOS_EXIT_BOOT_SERVICES=1` when building to test the strict native i8042 path.
+
+Both input backends now correctly deliver arrow keys and other special keys (Home, End, Delete, Page Up/Down) by mapping UEFI scan codes to PS/2-style extended scancodes in a unified dispatch path.
 
 ```text
 keydebug
@@ -364,28 +399,13 @@ EC:         Chromebook/ACPI EC hints present
 
 ### Battery Percentage
 
-Battery device hints are detected and the Chromebook EC LPC ECMAP signature is probed at `0x900` (and several fallback ports), but the raw capacity registers have not been verified against actual hardware responses on this firmware build. The percentage reads as `--` until one path is confirmed.
+The CrOS EC LPC identity check and `BATT_FLAG` validity gate are implemented. Whether the EC base address is `0x900`, `0x880`, or `0x800` on a given 300e firmware build depends on the BIOS variant. If `battery` prints `ID not confirmed` on hardware, the next step is to verify the EC base via `keydebug` or a targeted port scan.
 
-Next required work:
-
-```text
-Option A: AML interpreter enough for _BST / _BIF / _BIX
-Option B: Verified Chromebook EC host-command battery query (MKBP / host command 0x10)
-```
-
-### SMP
-
-SMP currently discovers CPUs through ACPI MADT but does not start application processors.
-
-Next required work:
+If the EC is confirmed but data still reads invalid, the fallback path is:
 
 ```text
-LAPIC MMIO helpers (base confirmed at 0xFEE00000)
-AP trampoline below 1 MiB
-per-CPU stacks
-INIT/SIPI/SIPI sequence
-AP idle loop
-smp start command
+Option A: AML interpreter for _BST / _BIF / _BIX
+Option B: CrOS EC host command 0x10 (EC_CMD_CHARGE_STATE) via LPC host command port
 ```
 
 ### Suspend / Lid Close Wake
@@ -405,7 +425,7 @@ resume path cleanup
 
 ### Filesystem
 
-The current filesystem is a tiny built-in RAMFS. A read-only FAT32 root filesystem is now mounted from the EFI System Partition and accessible from the shell.
+A read-only FAT32 root filesystem is mounted from the EFI System Partition and accessible from the shell alongside the built-in RAMFS.
 
 Next required work:
 
@@ -417,52 +437,37 @@ file-backed shell commands
 
 ## Roadmap
 
-### v0.0.11 — AP Startup Foundation
+### v0.1.2 — Battery Confirmation
 
 ```text
-- Map/confirm LAPIC at 0xFEE00000
-- LAPIC read/write MMIO helpers
-- local APIC enable on BSP
-- AP trampoline allocation below 1 MiB
-- per-CPU stacks
-- INIT/SIPI/SIPI sequence
-- AP enters idle loop
-- smp start command
+- Verify EC base address on all 300e firmware variants
+- Confirm BATT_CAP / BATT_CAP_FULL register reads against hardware
+- Fall back to CrOS EC host command path if ECMAP not confirmed
+- Live battery percentage in status bar
 ```
 
-### v0.0.12 — ACPI Battery
+### v0.1.3 — Lid Suspend/Wake
 
 ```text
-- ACPI namespace scan improvements
-- minimal AML Name/Package/Method support
-- _BIF / _BIX / _BST support
-- confirmed Chromebook EC host-command battery path
-- status bar battery percentage
-```
-
-### v0.0.13 — Lid Suspend/Wake
-
-```text
-- ACPI SCI
-- GPE status/enable
+- ACPI SCI routing
+- GPE status/enable registers
 - lid device detection
 - lid close suspend trigger
 - lid open wake/resume handling
 ```
 
-### v0.0.14 — Persistent Storage
+### v0.1.4 — Persistent Storage Expansion
 
 ```text
-- FAT32 reader
-- load files from ESP
 - initrd support
-- RAMFS to VFS bridge
+- VFS expansion
+- file-backed shell commands
 ```
 
-### v0.0.15 — Sage Integration
+### v0.1.5 — Sage Integration
 
 ```text
-- stabilize Sage bare-metal backend
+- Stabilize Sage bare-metal backend
 - procedure/import support
 - runtime-free Sage kernel modules
 - start migrating shell/ramfs/console logic to Sage

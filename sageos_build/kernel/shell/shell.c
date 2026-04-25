@@ -13,6 +13,7 @@
 #include "smp.h"
 #include "battery.h"
 #include "sysinfo.h"
+#include "serial.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) { if (*a != *b) return 0; a++; b++; }
@@ -95,8 +96,10 @@ static void shell_load_history(int nav, char *out_line, size_t *out_len) {
     if (nav < 0 || nav >= shell_history_count) { *out_len = 0; out_line[0] = 0; return; }
     int idx = history_physical_index(nav);
     size_t len = 0;
-    while (len + 1 < SHELL_LINE_MAX && shell_history[idx][len])
-        out_line[len] = shell_history[idx][len++];
+    while (len + 1 < SHELL_LINE_MAX && shell_history[idx][len]) {
+        out_line[len] = shell_history[idx][len];
+        len++;
+    }
     out_line[len] = 0;
     *out_len = len;
 }
@@ -423,11 +426,8 @@ void shell_run(void) {
                     pos--;
                     uint32_t off = start_col + (uint32_t)pos;
                     console_set_cursor(start_row + off / console_cols(), off % console_cols());
-                    serial_raw_left: (void)0;
-                    /* emit ESC[D to serial */
-                    { char s[4]; s[0]='\033'; s[1]='['; s[2]='D'; s[3]=0;
-                      if (console_has_fb()) { int e=console_get_serial_echo(); (void)e; 
-                        /* direct serial write without going through echo */ }
+                    if (console_has_fb()) {
+                        serial_putc('\033'); serial_putc('['); serial_putc('D');
                     }
                 }
                 break;
@@ -436,6 +436,9 @@ void shell_run(void) {
                     pos++;
                     uint32_t off = start_col + (uint32_t)pos;
                     console_set_cursor(start_row + off / console_cols(), off % console_cols());
+                    if (console_has_fb()) {
+                        serial_putc('\033'); serial_putc('['); serial_putc('C');
+                    }
                 }
                 break;
             case 0x47: /* Home */

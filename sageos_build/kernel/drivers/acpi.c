@@ -205,21 +205,6 @@ static void acpi_enable_if_needed(void) {
         }
     }
 }
-
-static uint32_t aml_parse_pkg_len(uint64_t *p) {
-    uint8_t lead = mem8(*p);
-    (*p)++;
-    uint32_t byte_count = (lead >> 6);
-    if (byte_count == 0) return lead & 0x3F;
-
-    uint32_t len = lead & 0x0F;
-    for (uint32_t i = 0; i < byte_count; i++) {
-        len |= ((uint32_t)mem8(*p) << (4 + i * 8));
-        (*p)++;
-    }
-    return len;
-}
-
 static void acpi_detect_devices(void) {
     if (g_acpi.dsdt) {
         if (table_contains_ascii(g_acpi.dsdt, "PNP0C0A")) g_acpi.has_battery_device = 1;

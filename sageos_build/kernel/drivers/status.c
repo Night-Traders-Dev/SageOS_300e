@@ -194,6 +194,18 @@ void status_print(void) {
     }
 }
 
+uint64_t ram_total_bytes(void) {
+    SageOSBootInfo *b = console_boot_info();
+    if (!b) return 0;
+    return b->memory_total;
+}
+
+uint64_t ram_used_bytes(void) {
+    SageOSBootInfo *b = console_boot_info();
+    if (!b) return 0;
+    return b->memory_total - b->memory_usable;
+}
+
 void status_init(void) {
     last_draw_tick = 0;
     draw_counter = 0;

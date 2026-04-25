@@ -1,5 +1,7 @@
 help: help()
 clear: console_clear()
+neofetch: cmd_neofetch()
+btop: cmd_btop()
 version: console_write("\nSageOS kernel " SAGEOS_VERSION " modular x86_64")
 uname: console_write("\nSageOS sageos " SAGEOS_VERSION " x86_64 lenovo_300e")
 about: console_write("\nSageOS is a small POSIX-inspired OS target.")

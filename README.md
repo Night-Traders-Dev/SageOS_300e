@@ -111,6 +111,7 @@ SageOS_300e/
         ├── fs/
         │   └── ramfs.c
         └── shell/
+            ├── extra_cmds.c
             └── shell.c
 ```
 
@@ -313,6 +314,8 @@ kernel_size
 ```text
 help
 clear
+neofetch
+btop
 version
 uname
 about

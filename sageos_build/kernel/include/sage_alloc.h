@@ -21,7 +21,7 @@
 /* Bump allocator */
 void *sage_malloc(size_t size);
 void *sage_calloc(size_t count, size_t size);
-void *sage_realloc(void *ptr, size_t old_size, size_t new_size);
+void *sage_realloc(void *ptr, size_t new_size);
 void  sage_free(void *ptr);
 char *sage_strdup(const char *s);
 

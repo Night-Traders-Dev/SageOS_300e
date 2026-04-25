@@ -14,10 +14,16 @@
 
 #include "sage_alloc.h"
 
+void *sage_malloc(size_t s);
+void *sage_realloc(void *p, size_t s);
+void *sage_calloc(size_t n, size_t s);
+void  sage_free(void *p);
+char *sage_strdup(const char *s);
+
 /* Memory allocation */
 #define malloc(s)        sage_malloc(s)
 #define free(p)          sage_free(p)
-#define realloc(p,s)     sage_realloc(p, 0, s)
+#define realloc(p,s)     sage_realloc(p, s)
 #define calloc(n,s)      sage_calloc(n, s)
 #define strdup(s)        sage_strdup(s)
 
@@ -67,13 +73,14 @@ void sage_exit(int code);
 #define abort()          sage_exit(1)
 
 /* Math */
-double sage_fmod(double x, double y);
-double sage_fabs(double x);
-double sage_floor(double x);
-double sage_ceil(double x);
-double sage_pow(double b, double e);
-double sage_sqrt(double x);
-double sage_strtod(const char *s, char **end);
+uint64_t sage_fmod(uint64_t x, uint64_t y);
+uint64_t sage_fabs(uint64_t x);
+uint64_t sage_floor(uint64_t x);
+uint64_t sage_ceil(uint64_t x);
+uint64_t sage_pow(uint64_t b, uint64_t e);
+uint64_t sage_sqrt(uint64_t x);
+uint64_t sage_strtod(const char *s, char **end);
+long     sage_strtol(const char *s, char **end, int base);
 int    sage_atoi(const char *s);
 int    sage_isdigit(int c);
 int    sage_isalpha(int c);
@@ -87,6 +94,7 @@ int    sage_isspace(int c);
 #define pow(b,e)         sage_pow(b,e)
 #define sqrt(x)          sage_sqrt(x)
 #define strtod(s,e)      sage_strtod(s,e)
+#define strtol(s,e,b)    sage_strtol(s,e,b)
 #define atoi(s)          sage_atoi(s)
 #define isdigit(c)       sage_isdigit(c)
 #define isalpha(c)       sage_isalpha(c)
@@ -112,6 +120,21 @@ typedef void FILE;
 #define stdout ((FILE*)0)
 #define stdin  ((FILE*)0)
 #define fflush(f) ((void)0)
+void vfprintf(FILE* stream, const char* fmt, __builtin_va_list args);
+void fputc(int c, FILE* stream);
+
+static inline int sage_tolower(int c) {
+    if (c >= 'A' && c <= 'Z') return c + ('a' - 'A');
+    return c;
+}
+static inline int sage_toupper(int c) {
+    if (c >= 'a' && c <= 'z') return c - ('a' - 'A');
+    return c;
+}
+#define tolower(c) sage_tolower(c)
+#define toupper(c) sage_toupper(c)
+#define isspace(c) sage_isspace(c)
+#define putchar(c) console_putc((char)(c))
 
 /* NULL */
 #ifndef NULL

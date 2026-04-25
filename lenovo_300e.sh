@@ -89,12 +89,16 @@ build_kernel() {
           -fno-pic \
           -fno-pie \
           -mno-red-zone \
+          -msoft-float \
           -mno-sse \
           -mno-sse2 \
           -Wall \
           -Wextra \
           -I"$KERNEL/include" \
+          -I"$KERNEL/core/sagelang" \
+          -I"$KERNEL/core/sagelang/compiler" \
           -include "$KERNEL/include/sage_libc_shim.h" \
+          -D__sageos__ \
           -DMETAL_STACK_SIZE=128 \
           -DMETAL_POOL_SIZE=256 \
           -DMETAL_STRING_POOL=16384 \

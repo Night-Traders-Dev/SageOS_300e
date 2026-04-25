@@ -16,31 +16,36 @@ static uint8_t sage_heap[SAGE_ARENA_SIZE] __attribute__((aligned(16)));
 static size_t sage_bump = 0;
 
 void *sage_malloc(size_t size) {
-    size = (size + 7) & ~(size_t)7;
-    if (sage_bump + size > SAGE_ARENA_SIZE) {
+    size = (size + 15) & ~(size_t)15;
+    if (sage_bump + size + 16 > SAGE_ARENA_SIZE) {
         console_write("\nsage: out of memory");
         return (void *)0;
     }
-    void *ptr = &sage_heap[sage_bump];
-    sage_bump += size;
+    size_t *header = (size_t *)&sage_heap[sage_bump];
+    *header = size;
+    sage_bump += size + 16;
+    void *ptr = (void *)(header + 2);
+    sage_memset(ptr, 0, size); // Compiler likes zeroed memory
     return ptr;
 }
 
 void *sage_calloc(size_t count, size_t size) {
-    size_t total = count * size;
-    void *p = sage_malloc(total);
-    if (p) { uint8_t *d = (uint8_t *)p; for (size_t i = 0; i < total; i++) d[i] = 0; }
-    return p;
+    return sage_malloc(count * size);
 }
 
-void *sage_realloc(void *ptr, size_t old_size, size_t new_size) {
+void *sage_realloc(void *ptr, size_t new_size) {
     if (!ptr) return sage_malloc(new_size);
     if (new_size == 0) return (void *)0;
+    
+    size_t *header = (size_t *)((uint8_t *)ptr - 16);
+    size_t old_size = *header;
+    
+    if (new_size <= old_size) return ptr; // Already big enough
+    
     void *np = sage_malloc(new_size);
     if (!np) return (void *)0;
-    size_t cp = old_size < new_size ? old_size : new_size;
-    uint8_t *d = (uint8_t *)np; const uint8_t *s = (const uint8_t *)ptr;
-    for (size_t i = 0; i < cp; i++) d[i] = s[i];
+    
+    sage_memcpy(np, ptr, old_size);
     return np;
 }
 
@@ -185,6 +190,83 @@ int sage_isdigit(int c) { return c >= '0' && c <= '9'; }
 int sage_isalpha(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 int sage_isalnum(int c) { return sage_isdigit(c) || sage_isalpha(c); }
 int sage_isspace(int c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+
+uint64_t sage_strtod(const char *s, char **end) {
+    long long res = 0, fact = 1; int neg = 0;
+    while (*s == ' ') s++;
+    if (*s == '-') { neg = 1; s++; }
+    while (*s >= '0' && *s <= '9') { res = res * 10 + (*s - '0'); s++; }
+    if (*s == '.') { 
+        s++; 
+        while (*s >= '0' && *s <= '9') { 
+            res = res * 10 + (*s - '0'); 
+            fact *= 10; 
+            s++; 
+        } 
+    }
+    if (end) *end = (char *)s;
+    
+    // We still need to do the division and convert to double bits.
+    // If I use double here, will it fail?
+    // Let's try using a pointer.
+    double d_res = (double)res / (double)fact;
+    if (neg) d_res = -d_res;
+    
+    union { double d; uint64_t u; } conv;
+    conv.d = d_res;
+    return conv.u;
+}
+
+long sage_strtol(const char *s, char **end, int base) {
+    long res = 0; int neg = 0;
+    while (*s == ' ') s++;
+    if (*s == '-') { neg = 1; s++; }
+    if (base == 0) {
+        if (*s == '0') {
+            if (*(s+1) == 'x' || *(s+1) == 'X') { base = 16; s += 2; }
+            else if (*(s+1) == 'b' || *(s+1) == 'B') { base = 2; s += 2; }
+            else base = 8;
+        } else base = 10;
+    } else if (base == 16 && *s == '0' && (*(s+1) == 'x' || *(s+1) == 'X')) s += 2;
+    for (;; s++) {
+        int d;
+        if (*s >= '0' && *s <= '9') d = *s - '0';
+        else if (*s >= 'a' && *s <= 'f') d = 10 + (*s - 'a');
+        else if (*s >= 'A' && *s <= 'F') d = 10 + (*s - 'A');
+        else break;
+        if (d >= base) break;
+        res = res * base + d;
+    }
+    if (end) *end = (char *)s;
+    return neg ? -res : res;
+}
+
+void vfprintf(void* stream, const char* fmt, __builtin_va_list ap) {
+    (void)stream;
+    while (*fmt) {
+        if (*fmt != '%') { console_putc(*fmt++); continue; }
+        fmt++;
+        if (*fmt == 's') { const char *s = __builtin_va_arg(ap, const char *); console_write(s ? s : "(null)"); }
+        else if (*fmt == 'd') { int v = __builtin_va_arg(ap, int); if (v < 0) { console_putc('-'); put_uint((uint64_t)(-(int64_t)v)); } else put_uint((uint64_t)v); }
+        else if (*fmt == 'u') { unsigned v = __builtin_va_arg(ap, unsigned); put_uint(v); }
+        else if (*fmt == 'c') { int c = __builtin_va_arg(ap, int); console_putc((char)c); }
+        else if (*fmt == '.') { /* skip precision for now */ while (*fmt && (*fmt < 'a' || *fmt > 'z')) fmt++; continue; }
+        else if (*fmt == '%') console_putc('%');
+        fmt++;
+    }
+}
+
+void fputc(int c, void* stream) { (void)stream; console_putc((char)c); }
+
+/* Dummy math functions for compiler linking */
+uint64_t sage_fmod(uint64_t x, uint64_t y) { (void)x; (void)y; return 0; }
+uint64_t sage_fabs(uint64_t x) { 
+    return x & 0x7FFFFFFFFFFFFFFFULL;
+}
+uint64_t sage_floor(uint64_t x) { return x; }
+uint64_t sage_ceil(uint64_t x) { return x; }
+uint64_t sage_pow(uint64_t b, uint64_t e) { (void)b; (void)e; return 0; }
+uint64_t sage_sqrt(uint64_t x) { (void)x; return 0; }
 
 /* Linker aliases for standard symbols required by Metal VM */
 #undef memset

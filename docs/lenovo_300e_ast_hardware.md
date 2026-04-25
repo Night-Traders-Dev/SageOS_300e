@@ -12,6 +12,8 @@ Sources checked:
   https://www.kernel.org/doc/html/latest/filesystems/proc.html
 - Linux Wireless ath10k firmware documentation:
   https://wireless.docs.kernel.org/en/latest/en/users/drivers/ath10k/firmware.html
+- QCA6174 PCI ID reference:
+  https://devicehunt.com/view/type/pci/vendor/168C/device/003E
 
 ## Confirmed Target Hardware
 

@@ -18,6 +18,7 @@
 #include "sdhci.h"
 #include "elf.h"
 #include "version.h"
+#include "dmesg.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) { if (*a != *b) return 0; a++; b++; }
@@ -328,12 +329,7 @@ static void cmd_fb(void) {
 }
 
 static void cmd_dmesg(void) {
-    console_write("\n[0.000000] SageOS modular kernel entered");
-    console_write("\n[0.000001] serial initialized");
-    console_write("\n[0.000002] framebuffer console initialized");
-    console_write("\n[0.000003] keyboard backend: "); console_write(keyboard_backend());
-    console_write("\n[0.000004] RAMFS mounted");
-    console_write("\n[0.000005] shell started");
+    dmesg_dump();
 }
 
 static void cmd_color(const char *name) {

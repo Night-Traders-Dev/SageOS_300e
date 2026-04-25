@@ -13,6 +13,7 @@
 #include "pci.h"
 #include "acpi.h"
 #include "sdhci.h"
+#include "dmesg.h"
 
 /* -----------------------------------------------------------------------
  * State
@@ -45,6 +46,7 @@ int sdhci_init(void) {
         sdhci_bus    = d->bus;
         sdhci_dev    = d->device;
         sdhci_func   = d->func;
+        dmesg_log("sdhci: controller found via PCI");
         return 1;
     }
 
@@ -55,9 +57,11 @@ int sdhci_init(void) {
         sdhci_found = 1;
         sdhci_is_acpi = 1;
         sdhci_bar0 = acpi_base;
+        dmesg_log("sdhci: controller found via ACPI (AMDI0040)");
         return 1;
     }
 
+    dmesg_log("sdhci: controller not found");
     return 0;
 }
 

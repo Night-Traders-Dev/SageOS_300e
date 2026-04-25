@@ -21,6 +21,7 @@
 #include "console.h"
 #include "io.h"
 #include "serial.h"
+#include "dmesg.h"
 
 /* ── CrOS EC LPC constants ─────────────────────────────────────────────── */
 #define EC_LPC_ADDR_MEMMAP          0x900u
@@ -122,6 +123,7 @@ void battery_init(void)
     /* Patch 3: Log every tried base so a serial capture reveals which
      * address range is visible on a given 300e firmware variant.      */
     serial_write("[battery] EC probe: trying 0x900, 0x880, 0x800 in order\r\n");
+    dmesg_log("battery: probing Chromebook EC at 0x900/0x880/0x800...");
     /* EC_PROBE_BASES_LOGGED */
     battery_present = acpi_has_battery_device();
     ec_present      = acpi_has_ec_device();
@@ -139,6 +141,7 @@ void battery_init(void)
         if (check_ec_id_at(candidates[i])) {
             ec_lpc_base = candidates[i];
             source_type = 2;
+            dmesg_log("battery: Chromebook EC confirmed");
             break;
         }
     }
@@ -148,8 +151,11 @@ void battery_init(void)
         if (pct >= 0) {
             percent       = pct;
             percent_valid = 1;
+            dmesg_log("battery: initial data valid");
         }
         /* EC found but battery data not yet valid — still mark source=2. */
+    } else {
+        dmesg_log("battery: Chromebook EC memory map not confirmed");
     }
 
     /*

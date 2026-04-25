@@ -14,6 +14,7 @@
 #include "pci.h"
 #include "sdhci.h"
 #include "version.h"
+#include "dmesg.h"
 
 extern int fat32_init(void);
 
@@ -45,31 +46,46 @@ void kmain(SageOSBootInfo *info) {
     serial_init();
     console_init(info);
 
+    dmesg_log("SageOS modular kernel starting...");
+    dmesg_log("serial and console initialized");
+
     acpi_init(info);
+    dmesg_log("ACPI initialized");
 
     if (!firmware_input) {
         smp_init();
+        dmesg_log("SMP initialized");
     } else {
         smp_init_firmware_bsp();
+        dmesg_log("SMP initialized (firmware input mode)");
     }
 
     /* Timer-driven status updates and CPU accounting must work even when
        firmware console input is active. */
     timer_init();
+    dmesg_log("timer initialized");
     idt_init();
+    dmesg_log("IDT initialized");
     irq_enable();
 
     battery_init();
+    dmesg_log("battery subsystem initialized");
 
     vfs_init();
+    dmesg_log("VFS initialized");
     fat32_init();
+    dmesg_log("FAT32 filesystem initialized");
 
     /* PCI bus enumeration — discovers AMD SoC, QCA6174A Wi-Fi, eMMC */
     pci_enumerate();
+    dmesg_log("PCI bus enumerated");
     sdhci_init();
+    dmesg_log("SDHCI initialized");
 
     keyboard_init();
+    dmesg_log("keyboard initialized");
     status_init();
+    dmesg_log("status bar initialized");
 
     banner();
 
@@ -83,5 +99,9 @@ void kmain(SageOSBootInfo *info) {
     console_write("\n");
     console_write("Type help to list commands.\n");
 
-    shell_run();
+    dmesg_log("shell starting");
+    for (;;) {
+        timer_poll();
+        shell_run();
+    }
 }

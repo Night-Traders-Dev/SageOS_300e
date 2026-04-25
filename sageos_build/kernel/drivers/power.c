@@ -2,26 +2,30 @@
 #include "console.h"
 #include "power.h"
 #include "acpi.h"
+#include "sysinfo.h"
 
 /*
  * power_qemu_exit
  *
  * Exits QEMU cleanly via the ISA debug-exit device (iobase 0x501, iosize 2).
  * Writing any value to port 0x501 causes QEMU to exit with code
- * ((value << 1) | 1).  We write 0 so the exit code is 1 (distinguishable
- * from a normal shell exit of 0).
+ * ((value << 1) | 1).  We write 0 so the exit code is 1.
  *
- * QEMU must be launched with:
- *   -device isa-debug-exit,iobase=0x501,iosize=2
- *
- * On real hardware this port is unused; the outb is a no-op and
- * execution falls through to the hlt loop so the system is safe.
+ * If not running in QEMU, it calls acpi_poweroff() to shut down.
  */
 void power_qemu_exit(void) {
-    console_write("\nExiting QEMU...");
-    outb(0x501, 0x00);
-    /* Fallback for real hardware: halt */
-    for (;;) cpu_hlt();
+    if (sysinfo_is_qemu()) {
+        console_write("\nExiting QEMU...");
+        outb(0x501, 0x00);
+        /* Fallback: halt */
+        for (;;) cpu_hlt();
+    } else {
+        console_write("\nExiting (Hardware Shutdown)...");
+        if (!acpi_poweroff()) {
+            console_write("\nACPI S5 failed. Halting.");
+            for (;;) cpu_hlt();
+        }
+    }
 }
 
 void power_reboot(void) {

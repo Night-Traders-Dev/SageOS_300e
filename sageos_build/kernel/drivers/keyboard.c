@@ -402,12 +402,12 @@ void keyboard_keydebug(void) {
 
     for (;;) {
         KeyEvent ev;
+        timer_poll();
         if (!keyboard_poll_event(&ev)) {
             status_tick_poll();
             cpu_hlt();
             continue;
         }
-
         console_write("sc=");
         console_hex64(ev.scancode);
         console_write(ev.pressed ? " make" : " break");
@@ -454,11 +454,14 @@ int keyboard_wait_event(KeyEvent *ev) {
         }
 
         status_tick_poll();
+        timer_poll(); /* Ensure we account for this loop in CPU% */
 
-        if (firmware_input_available())
+        if (firmware_input_available()) {
+            timer_delay_ms(1); /* 1ms delay for better responsiveness/lower CPU in firmware mode */
             timer_idle_poll();
-        else
+        } else {
             cpu_pause();
+        }
     }
 }
 

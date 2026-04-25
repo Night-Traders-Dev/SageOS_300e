@@ -118,7 +118,6 @@ static void fb_putpixel(uint32_t x, uint32_t y, uint32_t rgb) {
 }
 
 static void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t rgb) {
-    timer_poll();
     for (uint32_t yy = 0; yy < h; yy++)
         for (uint32_t xx = 0; xx < w; xx++)
             fb_putpixel(x + xx, y + yy, rgb);
@@ -237,11 +236,9 @@ static void scroll(void) {
     uint32_t pitch = g_info->pixels_per_scanline;
     uint32_t h = g_info->height;
     uint32_t w = g_info->width;
-    timer_poll();
     for (uint32_t y = status_rows * char_h; y < h; y++)
         for (uint32_t x = 0; x < w; x++)
             fb[(uint64_t)(y - char_h) * pitch + x] = fb[(uint64_t)y * pitch + x];
-    timer_poll();
     for (uint32_t y = h - char_h; y < h; y++)
         for (uint32_t x = 0; x < w; x++)
             fb[(uint64_t)y * pitch + x] = pack_rgb(bg);

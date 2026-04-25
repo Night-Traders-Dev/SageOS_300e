@@ -5,6 +5,7 @@
 #include "console.h"
 #include "timer.h"
 #include "io.h"
+#include "dmesg.h"
 
 static CpuInfo cpus[SAGEOS_MAX_CPUS];
 static uint32_t cpu_count;
@@ -125,6 +126,21 @@ void smp_init(void) {
             c->bootstrap = (cpu_count == 0) ? 1 : 0;
             c->started = c->bootstrap;
             c->stack_top = (uint64_t)&cpu_stacks[cpu_count][16384];
+
+            char msg[32];
+            msg[0] = 'S'; msg[1] = 'M'; msg[2] = 'P'; msg[3] = ':';
+            msg[4] = ' '; msg[5] = 'f'; msg[6] = 'o'; msg[7] = 'u';
+            msg[8] = 'n'; msg[9] = 'd'; msg[10] = ' '; msg[11] = 'c';
+            msg[12] = 'p'; msg[13] = 'u'; msg[14] = ' ';
+            msg[15] = (char)('0' + (cpu_count % 10));
+            msg[16] = ' '; msg[17] = '('; msg[18] = 'A'; msg[19] = 'P';
+            msg[20] = 'I'; msg[21] = 'C'; msg[22] = ' ';
+            msg[23] = (char)('0' + (c->apic_id % 10));
+            msg[24] = ')';
+            msg[25] = c->bootstrap ? '*' : ' ';
+            msg[26] = 0;
+            dmesg_log(msg);
+
             cpu_count++;
         }
         p += elen;
@@ -146,6 +162,14 @@ void ap_kernel_main(uint32_t apic_id) {
     for (uint32_t i = 0; i < cpu_count; i++) {
         if (cpus[i].apic_id == apic_id) {
             cpus[i].started = 1;
+            char msg[32];
+            msg[0] = 'S'; msg[1] = 'M'; msg[2] = 'P'; msg[3] = ':';
+            msg[4] = ' '; msg[5] = 'c'; msg[6] = 'p'; msg[7] = 'u';
+            msg[8] = ' '; msg[9] = (char)('0' + (i % 10));
+            msg[10] = ' '; msg[11] = 'o'; msg[12] = 'n'; msg[13] = 'l';
+            msg[14] = 'i'; msg[15] = 'n'; msg[16] = 'e';
+            msg[17] = 0;
+            dmesg_log(msg);
             break;
         }
     }

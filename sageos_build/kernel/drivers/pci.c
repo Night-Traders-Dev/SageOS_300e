@@ -13,6 +13,7 @@
 #include "console.h"
 #include "pci.h"
 #include "sdhci.h"
+#include "dmesg.h"
 
 /* -----------------------------------------------------------------------
  * Device table
@@ -62,6 +63,21 @@ static void pci_probe(uint8_t bus, uint8_t device, uint8_t func) {
     uint16_t dev_id = (reg0 >> 16) & 0xFFFF;
 
     if (vendor == 0xFFFF || vendor == 0x0000) return;
+
+    {
+        char msg[32];
+        static const char hex[] = "0123456789abcdef";
+        msg[0] = 'p'; msg[1] = 'c'; msg[2] = 'i'; msg[3] = ' ';
+        msg[4] = hex[(bus >> 4) & 0xF]; msg[5] = hex[bus & 0xF]; msg[6] = ':';
+        msg[7] = hex[(device >> 4) & 0xF]; msg[8] = hex[device & 0xF]; msg[9] = '.';
+        msg[10] = (char)('0' + (func & 7)); msg[11] = ' ';
+        msg[12] = hex[(vendor >> 12) & 0xF]; msg[13] = hex[(vendor >> 8) & 0xF];
+        msg[14] = hex[(vendor >> 4) & 0xF]; msg[15] = hex[vendor & 0xF]; msg[16] = ':';
+        msg[17] = hex[(dev_id >> 12) & 0xF]; msg[18] = hex[(dev_id >> 8) & 0xF];
+        msg[19] = hex[(dev_id >> 4) & 0xF]; msg[20] = hex[dev_id & 0xF];
+        msg[21] = 0;
+        dmesg_log(msg);
+    }
 
     uint32_t reg2 = pci_config_read(bus, device, func, 0x08);
     uint32_t reg3 = pci_config_read(bus, device, func, 0x0C);

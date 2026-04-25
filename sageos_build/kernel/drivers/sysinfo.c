@@ -100,6 +100,24 @@ static uint32_t kernel_used_kb(void) {
 /* sysinfo_cmd                                                         */
 /* ------------------------------------------------------------------ */
 
+int sysinfo_is_qemu(void) {
+    uint32_t eax, ebx, ecx, edx;
+
+    /* Check hypervisor bit in leaf 1 */
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "0"(1));
+    if (!(ecx & (1U << 31))) return 0;
+
+    /* Leaf 0x40000000 returns hypervisor signature */
+    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "0"(0x40000000));
+
+    /* QEMU/TCG: "TCGTCGTCGTCG" */
+    if (ebx == 0x47435420 && ecx == 0x47435420 && edx == 0x47435420) return 1;
+    /* KVM: "KVMKVMKVM\0\0\0" */
+    if (ebx == 0x4b4d564b && ecx == 0x564d4b4d && edx == 0x0000004d) return 1;
+
+    return 0;
+}
+
 void sysinfo_cmd(void) {
     console_write("\n=== System Info ===");
 

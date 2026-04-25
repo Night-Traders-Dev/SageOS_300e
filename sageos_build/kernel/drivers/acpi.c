@@ -4,6 +4,7 @@
 #include "acpi.h"
 #include "console.h"
 #include "io.h"
+#include "dmesg.h"
 
 static AcpiInfo g_acpi;
 
@@ -111,8 +112,11 @@ static void acpi_parse_root(void) {
     uint64_t rsdp = g_acpi.rsdp;
 
     if (!rsdp) {
+        dmesg_log("ACPI error: RSDP not found");
         return;
     }
+
+    dmesg_log("ACPI RSDP found");
 
     if (
         mem8(rsdp + 0) != 'R' ||
@@ -124,6 +128,7 @@ static void acpi_parse_root(void) {
         mem8(rsdp + 6) != 'R' ||
         mem8(rsdp + 7) != ' '
     ) {
+        dmesg_log("ACPI error: RSDP signature invalid");
         return;
     }
 
@@ -135,6 +140,7 @@ static void acpi_parse_root(void) {
         if (xsdt && sig4(xsdt, "XSDT")) {
             g_acpi.root = xsdt;
             g_acpi.xsdt = 1;
+            dmesg_log("ACPI using XSDT");
         }
     }
 
@@ -144,6 +150,7 @@ static void acpi_parse_root(void) {
         if (rsdt && sig4(rsdt, "RSDT")) {
             g_acpi.root = rsdt;
             g_acpi.xsdt = 0;
+            dmesg_log("ACPI using RSDT");
         }
     }
 
@@ -248,8 +255,12 @@ void acpi_init(SageOSBootInfo *boot) {
     acpi_parse_fadt();
 
     g_acpi.madt = acpi_find_table("APIC");
+    if (g_acpi.madt) dmesg_log("ACPI MADT/APIC table found");
 
     acpi_detect_devices();
+    if (g_acpi.has_battery_device) dmesg_log("ACPI battery device hint found");
+    if (g_acpi.has_ec_device) dmesg_log("ACPI EC device hint found");
+    if (g_acpi.has_lid_device) dmesg_log("ACPI lid device hint found");
 }
 
 void acpi_enable_sci(void) {

@@ -19,6 +19,8 @@ SageOSBootInfo *console_boot_info(void);
 
 uint32_t console_cols(void);
 uint32_t console_rows(void);
+void console_get_cursor(uint32_t *row, uint32_t *col);
+void console_set_cursor(uint32_t row, uint32_t col);
 void console_draw_status_bar(const char *right_text);
 
 #endif

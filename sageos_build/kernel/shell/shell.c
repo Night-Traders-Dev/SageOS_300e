@@ -46,6 +46,253 @@ static const char *arg_after(const char *line, const char *cmd) {
     return skip_spaces(line);
 }
 
+static void prompt(void);
+
+#define SHELL_LINE_MAX 160
+#define SHELL_HISTORY_SIZE 16
+
+static char shell_history[SHELL_HISTORY_SIZE][SHELL_LINE_MAX];
+static int shell_history_count;
+static int shell_history_head;
+static int shell_history_nav;
+
+static const char *const shell_commands[] = {
+    "about",
+    "battery",
+    "cat",
+    "clear",
+    "color",
+    "dmesg",
+    "fb",
+    "help",
+    "input",
+    "keydebug",
+    "ls",
+    "poweroff",
+    "reboot",
+    "shutdown",
+    "status",
+    "smp",
+    "smp start",
+    "stop",
+    "suspend",
+    "timer",
+    "uname",
+    "version",
+    "acpi",
+    "acpi battery",
+    "acpi fadt",
+    "acpi lid",
+    "acpi madt",
+    "acpi tables",
+    "echo",
+};
+
+static int starts_with(const char *text, const char *prefix) {
+    while (*prefix) {
+        if (*text != *prefix) return 0;
+        text++;
+        prefix++;
+    }
+
+    return 1;
+}
+
+static void *shell_memmove(void *dest, const void *src, size_t n) {
+    unsigned char *d = dest;
+    const unsigned char *s = src;
+
+    if (d < s) {
+        for (size_t i = 0; i < n; i++) {
+            d[i] = s[i];
+        }
+    } else if (d > s) {
+        for (size_t i = n; i > 0; i--) {
+            d[i - 1] = s[i - 1];
+        }
+    }
+
+    return dest;
+}
+
+static int history_physical_index(int idx) {
+    if (shell_history_count < SHELL_HISTORY_SIZE) {
+        return idx;
+    }
+
+    return (shell_history_head + idx) % SHELL_HISTORY_SIZE;
+}
+
+static void shell_save_history(const char *line) {
+    size_t len = 0;
+    while (line[len]) len++;
+    if (!len) return;
+
+    int newest_idx = shell_history_count ? history_physical_index(shell_history_count - 1) : -1;
+    if (shell_history_count && newest_idx >= 0 && starts_with(shell_history[newest_idx], line) && shell_history[newest_idx][len] == 0) {
+        shell_history_nav = -1;
+        return;
+    }
+
+    int store = shell_history_head;
+    for (size_t i = 0; i <= len && i < SHELL_LINE_MAX; i++) {
+        shell_history[store][i] = line[i];
+    }
+
+    if (shell_history_count < SHELL_HISTORY_SIZE) {
+        shell_history_count++;
+    }
+
+    shell_history_head = (shell_history_head + 1) % SHELL_HISTORY_SIZE;
+    shell_history_nav = -1;
+}
+
+static void shell_load_history(int nav, char *out_line, size_t *out_len) {
+    if (nav < 0 || nav >= shell_history_count) {
+        *out_len = 0;
+        out_line[0] = 0;
+        return;
+    }
+
+    int idx = history_physical_index(nav);
+    size_t len = 0;
+    while (len + 1 < SHELL_LINE_MAX && shell_history[idx][len]) {
+        out_line[len] = shell_history[idx][len];
+        len++;
+    }
+
+    out_line[len] = 0;
+    *out_len = len;
+}
+
+static void shell_redraw_line(
+    const char *line,
+    size_t pos,
+    uint32_t start_row,
+    uint32_t start_col,
+    size_t old_len
+) {
+    console_set_cursor(start_row, start_col);
+
+    for (size_t i = 0; i < old_len + 1; i++) {
+        console_putc(' ');
+    }
+
+    console_set_cursor(start_row, start_col);
+    console_write(line);
+
+    uint32_t cursor_offset = start_col + (uint32_t)pos;
+    uint32_t target_row = start_row + cursor_offset / console_cols();
+    uint32_t target_col = cursor_offset % console_cols();
+    console_set_cursor(target_row, target_col);
+}
+
+static size_t shell_token_start(const char *line, size_t pos) {
+    size_t start = pos;
+    while (start > 0 && line[start - 1] != ' ' && line[start - 1] != '\t') {
+        start--;
+    }
+
+    return start;
+}
+
+static void shell_tab_complete(
+    char *line,
+    size_t *len,
+    size_t *pos,
+    uint32_t start_row,
+    uint32_t start_col,
+    size_t old_len
+) {
+    size_t token_start = shell_token_start(line, *pos);
+    size_t token_len = *pos - token_start;
+    char token[SHELL_LINE_MAX];
+
+    for (size_t i = 0; i < token_len; i++) {
+        token[i] = line[token_start + i];
+    }
+
+    token[token_len] = 0;
+
+    int match_count = 0;
+    const char *match = NULL;
+    size_t common_len = 0;
+
+    for (size_t i = 0; i < sizeof(shell_commands) / sizeof(shell_commands[0]); i++) {
+        const char *candidate = shell_commands[i];
+        if (!starts_with(candidate, token)) {
+            continue;
+        }
+
+        if (!match) {
+            match = candidate;
+            common_len = 0;
+            while (match[common_len] && common_len < token_len) {
+                common_len++;
+            }
+        }
+
+        match_count++;
+
+        if (match_count == 1) {
+            size_t j = token_len;
+            while (candidate[j] && j < SHELL_LINE_MAX - 1) {
+                if (common_len <= j) {
+                    common_len = j + 1;
+                }
+                j++;
+            }
+        }
+    }
+
+    if (!match) {
+        return;
+    }
+
+    if (match_count == 1) {
+        size_t fill_len = 0;
+        while (match[token_len + fill_len] && token_len + fill_len < SHELL_LINE_MAX - 1) {
+            fill_len++;
+        }
+
+        if (fill_len > 0) {
+            if (*len + fill_len >= SHELL_LINE_MAX - 1) {
+                fill_len = SHELL_LINE_MAX - 1 - *len;
+            }
+
+            shell_memmove(line + token_start + token_len + fill_len,
+                    line + token_start + token_len,
+                    *len - token_start - token_len + 1);
+
+            for (size_t i = 0; i < fill_len; i++) {
+                line[token_start + token_len + i] = match[token_len + i];
+            }
+
+            *len += fill_len;
+            *pos = token_start + token_len + fill_len;
+            shell_redraw_line(line, *pos, start_row, start_col, old_len);
+        }
+
+        return;
+    }
+
+    console_write("\n");
+    for (size_t i = 0; i < sizeof(shell_commands) / sizeof(shell_commands[0]); i++) {
+        const char *candidate = shell_commands[i];
+        if (!starts_with(candidate, token)) {
+            continue;
+        }
+
+        console_write(candidate);
+        console_write("  ");
+    }
+
+    prompt();
+    console_get_cursor(&start_row, &start_col);
+    console_write(line);
+    shell_redraw_line(line, *pos, start_row, start_col, old_len);
+}
+
 static void prompt(void) {
     status_refresh();
 
@@ -62,6 +309,13 @@ static void help(void) {
     console_write("\n  version           show version");
     console_write("\n  uname             show system id");
     console_write("\n  about             project summary");
+    console_write("\n\nShell editing:");
+    console_write("\n  Up/Down arrows    history navigation");
+    console_write("\n  Left/Right arrows cursor move");
+    console_write("\n  Tab               autocomplete");
+    console_write("\n  Ctrl-A/Ctrl-E     jump begin/end");
+    console_write("\n  Ctrl-U            clear input line");
+    console_write("\n  Ctrl-C            cancel current line");
     console_write("\n  fb                framebuffer info");
     console_write("\n  input             input backend info");
     console_write("\n  status            show top-bar metrics");
@@ -325,34 +579,187 @@ static void exec(const char *cmd) {
 }
 
 void shell_run(void) {
-    char line[160];
+    char line[SHELL_LINE_MAX];
     size_t len = 0;
+    size_t pos = 0;
+    uint32_t start_row = 0;
+    uint32_t start_col = 0;
+
+    shell_history_count = 0;
+    shell_history_head = 0;
+    shell_history_nav = -1;
 
     prompt();
+    console_get_cursor(&start_row, &start_col);
+    line[0] = 0;
 
     for (;;) {
-        char c = keyboard_getchar();
+        size_t old_len = len;
+        KeyEvent ev;
 
-        if (c == 10 || c == 13) {
-            line[len] = 0;
-            exec(line);
-            len = 0;
-            prompt();
+        if (!keyboard_wait_event(&ev)) {
             continue;
         }
 
-        if (c == 8 || c == 127) {
-            if (len > 0) {
-                len--;
-                console_putc(8);
+        if (!ev.pressed) {
+            continue;
+        }
+
+        if (ev.scancode == 0xE0 || ev.scancode == 0xE1) {
+            continue;
+        }
+
+        if (ev.extended) {
+            if (ev.scancode == 0x48) {
+                if (shell_history_count == 0) {
+                    continue;
+                }
+
+                if (shell_history_nav < 0) {
+                    shell_history_nav = shell_history_count - 1;
+                } else if (shell_history_nav > 0) {
+                    shell_history_nav--;
+                }
+
+                shell_load_history(shell_history_nav, line, &len);
+                pos = len;
+                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                continue;
+            }
+
+            if (ev.scancode == 0x50) {
+                if (shell_history_nav < 0) {
+                    continue;
+                }
+
+                if (shell_history_nav < shell_history_count - 1) {
+                    shell_history_nav++;
+                    shell_load_history(shell_history_nav, line, &len);
+                    pos = len;
+                } else {
+                    shell_history_nav = -1;
+                    len = 0;
+                    pos = 0;
+                    line[0] = 0;
+                }
+
+                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                continue;
+            }
+
+            if (ev.scancode == 0x4B) {
+                if (pos > 0) {
+                    pos--;
+                    uint32_t cursor_offset = start_col + (uint32_t)pos;
+                    console_set_cursor(start_row + cursor_offset / console_cols(), cursor_offset % console_cols());
+                }
+                continue;
+            }
+
+            if (ev.scancode == 0x4D) {
+                if (pos < len) {
+                    pos++;
+                    uint32_t cursor_offset = start_col + (uint32_t)pos;
+                    console_set_cursor(start_row + cursor_offset / console_cols(), cursor_offset % console_cols());
+                }
+                continue;
+            }
+
+            if (ev.scancode == 0x47) {
+                pos = 0;
+                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                continue;
+            }
+
+            if (ev.scancode == 0x4F) {
+                pos = len;
+                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                continue;
+            }
+
+            if (ev.scancode == 0x53) {
+                if (pos < len) {
+                    shell_memmove(line + pos, line + pos + 1, len - pos);
+                    len--;
+                    line[len] = 0;
+                    shell_redraw_line(line, pos, start_row, start_col, old_len);
+                }
+                continue;
             }
 
             continue;
         }
 
-        if (c >= 32 && c <= 126 && len + 1 < sizeof(line)) {
-            line[len++] = c;
-            console_putc(c);
+        char c = ev.ascii;
+
+        if (c == '\r' || c == '\n') {
+            line[len] = 0;
+            console_write("\n");
+            if (len > 0) {
+                shell_save_history(line);
+            }
+            exec(line);
+            len = 0;
+            pos = 0;
+            line[0] = 0;
+            shell_history_nav = -1;
+            prompt();
+            console_get_cursor(&start_row, &start_col);
+            continue;
+        }
+
+        if (c == 3) {
+            console_write("^C\n");
+            len = 0;
+            pos = 0;
+            line[0] = 0;
+            shell_history_nav = -1;
+            prompt();
+            console_get_cursor(&start_row, &start_col);
+            continue;
+        }
+
+        if (c == 1) {
+            pos = 0;
+            shell_redraw_line(line, pos, start_row, start_col, old_len);
+            continue;
+        }
+
+        if (c == 5) {
+            pos = len;
+            shell_redraw_line(line, pos, start_row, start_col, old_len);
+            continue;
+        }
+
+        if (c == 21) {
+            len = 0;
+            pos = 0;
+            line[0] = 0;
+            shell_redraw_line(line, pos, start_row, start_col, old_len);
+            continue;
+        }
+
+        if (c == 9) {
+            shell_tab_complete(line, &len, &pos, start_row, start_col, old_len);
+            continue;
+        }
+
+        if (c == 8 || c == 127) {
+            if (pos > 0) {
+                shell_memmove(line + pos - 1, line + pos, len - pos + 1);
+                pos--;
+                len--;
+                shell_redraw_line(line, pos, start_row, start_col, old_len);
+            }
+            continue;
+        }
+
+        if ((uint8_t)c >= 32 && (uint8_t)c <= 126 && len + 1 < sizeof(line)) {
+            shell_memmove(line + pos + 1, line + pos, len - pos + 1);
+            line[pos] = c;
+            len++;
+            pos++;
+            shell_redraw_line(line, pos, start_row, start_col, old_len);
         }
     }
 }

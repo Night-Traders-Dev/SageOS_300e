@@ -35,6 +35,24 @@ int console_has_fb(void) {
     return g_have_fb;
 }
 
+void console_get_cursor(uint32_t *out_row, uint32_t *out_col) {
+    if (out_row) *out_row = row;
+    if (out_col) *out_col = col;
+}
+
+void console_set_cursor(uint32_t new_row, uint32_t new_col) {
+    if (new_row >= rows) {
+        new_row = rows - 1;
+    }
+
+    if (new_col >= cols) {
+        new_col = cols - 1;
+    }
+
+    row = new_row;
+    col = new_col;
+}
+
 uint32_t console_get_fg(void) {
     return fg;
 }

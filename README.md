@@ -242,6 +242,8 @@ kernel_size
 
 Current shell commands include:
 
+Shell editing now supports history navigation (Up/Down), tab completion, and common key sequences like Ctrl-A, Ctrl-E, Ctrl-U, and Ctrl-C.
+
 ```text
 help
 clear

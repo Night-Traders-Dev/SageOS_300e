@@ -67,6 +67,8 @@ volatile uint64_t scancode_buffer = 0;
 
 static int shift_down;
 static int caps_lock;
+static int ctrl_down;
+static int alt_down;
 static int extended_prefix;
 
 static int firmware_input_available(void) {
@@ -312,6 +314,18 @@ int keyboard_poll_event(KeyEvent *ev) {
             shift_down = 0;
         }
 
+        if (base == 0x1D) {
+            if (ev->extended) {
+                ctrl_down = 0;
+            } else {
+                ctrl_down = 0;
+            }
+        }
+
+        if (base == 0x38) {
+            alt_down = 0;
+        }
+
         return 1;
     }
 
@@ -325,7 +339,23 @@ int keyboard_poll_event(KeyEvent *ev) {
         return 1;
     }
 
+    if (sc == 0x1D) {
+        ctrl_down = 1;
+        return 1;
+    }
+
+    if (sc == 0x38) {
+        alt_down = 1;
+        return 1;
+    }
+
     ev->ascii = translate_ascii(sc);
+    if (ctrl_down && ev->ascii >= 'A' && ev->ascii <= 'Z') {
+        ev->ascii = (char)(ev->ascii - 'A' + 1);
+    } else if (ctrl_down && ev->ascii >= 'a' && ev->ascii <= 'z') {
+        ev->ascii = (char)(ev->ascii - 'a' + 1);
+    }
+
     return 1;
 }
 
@@ -366,23 +396,34 @@ void keyboard_keydebug(void) {
     }
 }
 
-char keyboard_getchar(void) {
-    for (;;) {
-        char serial_c;
-        char firmware_c;
-        KeyEvent ev;
+int keyboard_wait_event(KeyEvent *ev) {
+    char serial_c;
+    char firmware_c;
 
+    for (;;) {
         if (firmware_poll_char(&firmware_c)) {
-            return firmware_c;
+            ev->scancode = 0;
+            ev->pressed = 1;
+            ev->extended = 0;
+            ev->ascii = firmware_c == '\r' ? '\n' : firmware_c;
+            return 1;
         }
 
         if (serial_poll_char(&serial_c)) {
-            return serial_c == '\r' ? '\n' : serial_c;
+            ev->scancode = 0;
+            ev->pressed = 1;
+            ev->extended = 0;
+            ev->ascii = serial_c == '\r' ? '\n' : serial_c;
+            return 1;
         }
 
-        while (keyboard_poll_event(&ev)) {
-            if (ev.pressed && ev.ascii) {
-                return ev.ascii;
+        if (keyboard_poll_event(ev)) {
+            if (ev->pressed && ev->ascii) {
+                return 1;
+            }
+
+            if (ev->pressed && ev->ascii == 0) {
+                return 1;
             }
         }
 
@@ -394,13 +435,33 @@ char keyboard_getchar(void) {
         }
 
         if (firmware_poll_char(&firmware_c)) {
-            return firmware_c;
+            ev->scancode = 0;
+            ev->pressed = 1;
+            ev->extended = 0;
+            ev->ascii = firmware_c == '\r' ? '\n' : firmware_c;
+            return 1;
         }
 
         if (serial_poll_char(&serial_c)) {
-            return serial_c == '\r' ? '\n' : serial_c;
+            ev->scancode = 0;
+            ev->pressed = 1;
+            ev->extended = 0;
+            ev->ascii = serial_c == '\r' ? '\n' : serial_c;
+            return 1;
         }
 
         cpu_hlt();
+    }
+}
+
+char keyboard_getchar(void) {
+    KeyEvent ev;
+
+    for (;;) {
+        if (keyboard_wait_event(&ev)) {
+            if (ev.pressed && ev.ascii) {
+                return ev.ascii;
+            }
+        }
     }
 }

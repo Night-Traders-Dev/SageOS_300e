@@ -94,6 +94,12 @@ build_kernel() {
           -Wall \
           -Wextra \
           -I"$KERNEL/include" \
+          -include "$KERNEL/include/sage_libc_shim.h" \
+          -DMETAL_STACK_SIZE=128 \
+          -DMETAL_POOL_SIZE=256 \
+          -DMETAL_STRING_POOL=16384 \
+          -DMETAL_HEAP_SIZE=32768 \
+          -DMETAL_CONST_POOL=256 \
           -c "$src" \
           -o "$obj"
 

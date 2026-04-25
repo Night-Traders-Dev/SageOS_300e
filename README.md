@@ -405,12 +405,11 @@ resume path cleanup
 
 ### Filesystem
 
-The current filesystem is a tiny built-in RAMFS. There is no persistent filesystem driver yet.
+The current filesystem is a tiny built-in RAMFS. A read-only FAT32 root filesystem is now mounted from the EFI System Partition and accessible from the shell.
 
 Next required work:
 
 ```text
-FAT32 read support from ESP
 initrd support
 VFS expansion
 file-backed shell commands

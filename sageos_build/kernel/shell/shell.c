@@ -3,6 +3,7 @@
 #include "console.h"
 #include "keyboard.h"
 #include "ramfs.h"
+#include "fat32.h"
 #include "power.h"
 #include "bootinfo.h"
 #include "shell.h"
@@ -327,8 +328,8 @@ static void help(void) {
     console_write("\n  acpi madt         show MADT/APIC fields");
     console_write("\n  battery           show battery/EC detector");
     console_write("\n  keydebug          raw keyboard scancode monitor");
-    console_write("\n  ls                list RAMFS");
-    console_write("\n  cat <path>        print RAMFS file");
+    console_write("\n  ls                list RAMFS and FAT32 root");
+    console_write("\n  cat <path>        print RAMFS or FAT32 file");
     console_write("\n  echo <text>       print text");
     console_write("\n  color <name>      white green amber blue red");
     console_write("\n  dmesg             early log");
@@ -512,6 +513,17 @@ static void exec(const char *cmd) {
     }
 
     if (starts_word(cmd, "ls")) {
+        const char *path = arg_after(cmd, "ls");
+
+        if (*path && !streq(path, "/")) {
+            console_write("\nusage: ls [/path]");
+            return;
+        }
+
+        if (fat32_is_available()) {
+            fat32_ls();
+        }
+
         ramfs_ls();
         return;
     }
@@ -521,6 +533,10 @@ static void exec(const char *cmd) {
 
         if (!*path) {
             console_write("\nusage: cat <path>");
+            return;
+        }
+
+        if (fat32_is_available() && fat32_cat(path)) {
             return;
         }
 

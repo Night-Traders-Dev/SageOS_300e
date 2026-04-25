@@ -548,7 +548,7 @@ int keyboard_wait_event(KeyEvent *ev) {
             return 1;
         }
 
-        cpu_hlt();
+        cpu_pause();
     }
 }
 

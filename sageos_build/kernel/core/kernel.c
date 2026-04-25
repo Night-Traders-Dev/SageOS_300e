@@ -10,8 +10,9 @@
 #include "battery.h"
 #include "idt.h"
 #include "vfs.h"
+#include "fat32.h"
 
-extern void fat32_init(void);
+extern int fat32_init(void);
 
 static void banner(void) {
     uint32_t old = console_get_fg();

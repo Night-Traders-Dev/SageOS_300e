@@ -1,3 +1,21 @@
+# fix_table.pl — Regenerates the ShellCommand dispatch table in shell.c
+#
+# PURPOSE
+#   Replaces the static ShellCommand commands[] array inside shell.c with the
+#   canonical table defined in $table below.  Run this whenever you add or
+#   remove a cmd_* handler so the dispatch table stays in sync without hand-
+#   editing the C source.
+#
+# USAGE
+#   perl fix_table.pl < sageos_build/kernel/shell/shell.c > shell.c.new
+#   mv shell.c.new sageos_build/kernel/shell/shell.c
+#
+# NOTES
+#   - Entries must be sorted longest-prefix-first for two-word commands
+#     ("acpi battery" before "acpi") so the dispatcher matches correctly.
+#   - After running, rebuild with: ./lenovo_300e.sh build-kernel
+#
+# GUARD: fix_table.pl-header-v1
 undef $/;
 my $file = <STDIN>;
 my $table = q{    {"about", "project summary", cmd_about},

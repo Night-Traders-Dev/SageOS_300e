@@ -151,6 +151,15 @@ build_image() {
     rm -f "$OBJ/uefi_loader.obj" "$OBJ/kernel.o" "$OBJ/entry.o"
     rm -f "$ESP" "$IMG"
 
+        # Patch 2: Warn when boot services remain active (the default).
+    # Native i8042 and PIT IRQ0 drivers may conflict with UEFI firmware
+    # interrupt ownership.  Use SAGEOS_EXIT_BOOT_SERVICES=1 for the strict
+    # hardware path (keyboard reverts to native-only; ConIn no longer works).
+    if [ "${SAGEOS_EXIT_BOOT_SERVICES:-0}" = "0" ]; then
+        echo "WARN: SAGEOS_EXIT_BOOT_SERVICES=0 — UEFI boot services remain active."
+        echo "      Native i8042/PIT IRQ0 may conflict with firmware IRQ ownership."
+        echo "      Build with SAGEOS_EXIT_BOOT_SERVICES=1 for the strict native path."
+    fi
     echo "--- Building UEFI loader: MS ABI PE/COFF + GOP handoff ---"
 
     clang \

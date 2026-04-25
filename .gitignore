@@ -71,3 +71,4 @@ sageos_build/BOOTX64.EFI
 sageos_build/backups
 artifacts
 sageos_build/KERNEL.BIN
+.sageos_patch_backups/

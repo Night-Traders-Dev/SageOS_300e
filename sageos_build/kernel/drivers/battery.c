@@ -118,6 +118,10 @@ static int read_battery_percent(void)
 
 void battery_init(void)
 {
+    /* Patch 3: Log every tried base so a serial capture reveals which
+     * address range is visible on a given 300e firmware variant.      */
+    serial_write("[battery] EC probe: trying 0x900, 0x880, 0x800 in order\r\n");
+    /* EC_PROBE_BASES_LOGGED */
     battery_present = acpi_has_battery_device();
     ec_present      = acpi_has_ec_device();
     percent         = -1;

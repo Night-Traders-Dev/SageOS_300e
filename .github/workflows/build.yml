@@ -1,0 +1,129 @@
+# .github/workflows/build.yml
+# Patch 7: SageOS_300e CI — build + QEMU serial smoke test
+#
+# Jobs
+#   build       — install Clang/LLD toolchain, run lenovo_300e.sh build
+#   qemu-smoke  — boot the image in headless QEMU, assert shell prompt appears
+#
+# The smoke test boots for up to 30 s over -serial stdio and greps for "sage>"
+# (the SageOS shell prompt).  Adjust PROMPT_PATTERN if your prompt differs.
+
+name: SageOS Build & QEMU Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  # Change to "1" repo-wide once ExitBootServices is stable on all hardware.
+  SAGEOS_EXIT_BOOT_SERVICES: "1"
+  PROMPT_PATTERN: "sage>"
+
+jobs:
+  # ── Build ──────────────────────────────────────────────────────────────
+  build:
+    name: Build image (Clang/LLD)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm \
+            qemu-system-x86 ovmf \
+            dosfstools mtools gdisk util-linux
+
+      - name: Verify required tools present
+        run: |
+          for t in clang lld-link ld.lld llvm-nm llvm-objcopy \
+                   mkfs.fat mcopy mmd sgdisk truncate dd; do
+            command -v "$t" || { echo "Missing: $t"; exit 1; }
+          done
+
+      - name: Build
+        run: |
+          chmod +x lenovo_300e.sh
+          ./lenovo_300e.sh build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sageos-${{ github.sha }}
+          retention-days: 7
+          path: |
+            sageos.img
+            sageos_build/BOOTX64.EFI
+            sageos_build/KERNEL.BIN
+            sageos_build/kernel.elf
+
+  # ── QEMU smoke test ────────────────────────────────────────────────────
+  qemu-smoke:
+    name: QEMU serial smoke test
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 5
+
+    steps:
+      - name: Install QEMU + OVMF
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 ovmf
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sageos-${{ github.sha }}
+
+      - name: Locate OVMF firmware
+        id: ovmf
+        run: |
+          for f in /usr/share/ovmf/OVMF.fd \
+                   /usr/share/OVMF/OVMF_CODE.fd \
+                   /usr/share/qemu/OVMF.fd; do
+            if [ -f "$f" ]; then echo "path=$f" >> "$GITHUB_OUTPUT"; exit 0; fi
+          done
+          echo "ERROR: OVMF firmware not found" >&2; exit 1
+
+      - name: Boot + assert shell prompt
+        env:
+          OVMF: ${{ steps.ovmf.outputs.path }}
+        run: |
+          set +e
+          timeout 30s qemu-system-x86_64 \
+            -bios "$OVMF" \
+            -cpu Skylake-Client \
+            -drive id=hd0,file=sageos.img,format=raw,media=disk,snapshot=on \
+            -m 256M \
+            -nographic \
+            -monitor none \
+            -serial stdio \
+            -device isa-debug-exit,iobase=0x501,iosize=2 \
+            2>&1 | tee /tmp/sageos-serial.log
+          set -e
+
+          echo "--- Serial output ---"
+          cat /tmp/sageos-serial.log
+
+          if grep -qF "$PROMPT_PATTERN" /tmp/sageos-serial.log; then
+            echo "PASS: shell prompt '$PROMPT_PATTERN' detected in serial output"
+          else
+            echo "FAIL: shell prompt '$PROMPT_PATTERN' not found — boot did not reach shell"
+            exit 1
+          fi
+
+      - name: Upload serial log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sageos-serial-log-${{ github.sha }}
+          path: /tmp/sageos-serial.log
+          retention-days: 3

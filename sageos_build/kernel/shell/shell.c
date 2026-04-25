@@ -170,12 +170,12 @@ static void exec(const char *cmd) {
     }
 
     if (starts_word(cmd, "version")) {
-        console_write("\nSageOS kernel 0.0.10 modular x86_64");
+        console_write("\nSageOS kernel 0.1.1 modular x86_64");
         return;
     }
 
     if (starts_word(cmd, "uname")) {
-        console_write("\nSageOS sageos 0.0.10 x86_64 lenovo_300e");
+        console_write("\nSageOS sageos 0.1.1 x86_64 lenovo_300e");
         return;
     }
 

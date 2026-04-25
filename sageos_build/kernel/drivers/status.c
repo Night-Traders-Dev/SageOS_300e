@@ -51,9 +51,9 @@ static uint32_t ram_percent(void) {
 
     /*
      * Sanity check: memory_total shouldn't be Petabytes on a Lenovo 300e.
-     * 128 GB (0x20 0000 0000) is a safe upper bound for sanity.
+     * 128 GB (0x20 0000 0000 0) is a safe upper bound for sanity.
      */
-    if (b->memory_total > 0x2000000000ULL || b->memory_total < 0x100000ULL) {
+    if (b->memory_total > 0x20000000000ULL || b->memory_total < 0x100000ULL) {
         return 0xFFFFFFFFU;
     }
 

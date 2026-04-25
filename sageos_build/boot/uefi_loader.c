@@ -474,7 +474,12 @@ static void update_memory_summary(
         UINT64 bytes = d->NumberOfPages * 4096ULL;
         total += bytes;
 
-        if (d->Type == EfiConventionalMemory) {
+        if (d->Type == EfiConventionalMemory ||
+            d->Type == EfiLoaderCode ||
+            d->Type == EfiLoaderData ||
+            d->Type == EfiBootServicesCode ||
+            d->Type == EfiBootServicesData ||
+            d->Type == EfiACPIReclaimMemory) {
             usable += bytes;
         }
     }

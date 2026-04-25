@@ -407,7 +407,7 @@ void console_draw_status_bar(const char *right_text) {
 
     if (cols < 255) current[cols] = 0;
 
-    const char *left = " SageOS v0.0.10 ";
+    const char *left = " SageOS v0.1.1 ";
     for (uint32_t i = 0; left[i] && i < 255 && i < cols; i++) {
         current[i] = left[i];
     }

@@ -8,8 +8,8 @@ typedef struct {
 } RamFile;
 
 static const RamFile files[] = {
-    {"/etc/motd", "Welcome to SageOS modular v0.0.7.\nType help for commands.\n"},
-    {"/etc/version", "SageOS 0.0.7 modular kernel\n"},
+    {"/etc/motd", "Welcome to SageOS modular v0.1.1.\nType help for commands.\n"},
+    {"/etc/version", "SageOS 0.1.1 modular kernel\n"},
     {"/bin/sh", "Kernel-resident shell\n"},
     {"/dev/fb0", "UEFI GOP framebuffer\n"},
     {"/proc/input", "native-i8042-ps2\n"},

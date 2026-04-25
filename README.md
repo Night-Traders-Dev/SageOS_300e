@@ -39,7 +39,7 @@ CPU:    AMD x86_64, Multi-core SMP enabled
 | CPU% accounting | Working — Real-time 1s sliding window |
 | Status bar | Working — persistent top-bar, non-blocking refresh, preserved during scroll |
 | Keyboard | Working — UEFI firmware input fallback + native i8042/serial |
-| RAM status | Working — Real-time Used RAM tracking |
+| RAM status | Working — Real-time used RAM tracking; may report high reservation when firmware boot services remain active |
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
 | ACPI | Working — Minimal AML parser, Battery (_BST) & Lid detection |
 | Battery | Working — Chromebook EC (LPC 0x900..0x400) capacity polling |
@@ -126,6 +126,8 @@ Use `lenovo_300e.sh` for all normal operations.
 ```
 
 This build and the statusbar fix have been validated using QEMU with the provided disk image.
+
+> Note: QEMU does not expose a real ACPI battery by default, so `battery` may report unavailable in the emulator. `CPU` may also read as `0%` while the VM is idle, which is expected for an otherwise idle shell session.
 
 ### Flash to USB
 

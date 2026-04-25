@@ -389,7 +389,7 @@ char keyboard_getchar(void) {
         status_tick_poll();
 
         if (firmware_input_available()) {
-            cpu_pause();
+            timer_idle_poll();
             continue;
         }
 

@@ -45,12 +45,15 @@ void kmain(SageOSBootInfo *info) {
 
     if (!firmware_input) {
         smp_init();
-        idt_init();
-        timer_init();
-        irq_enable();
     } else {
         smp_init_firmware_bsp();
     }
+
+    /* Timer-driven status updates and CPU accounting must work even when
+       firmware console input is active. */
+    timer_init();
+    idt_init();
+    irq_enable();
 
     battery_init();
 
@@ -62,7 +65,7 @@ void kmain(SageOSBootInfo *info) {
 
     banner();
 
-    console_write("SageOS modular kernel v0.0.10 entered.\n");
+    console_write("SageOS modular kernel v0.1.1 entered.\n");
     console_write("Framebuffer console online.\n");
     console_write("Keyboard backend: ");
     console_write(keyboard_backend());

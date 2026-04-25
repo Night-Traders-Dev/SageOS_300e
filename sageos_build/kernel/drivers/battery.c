@@ -20,6 +20,7 @@
 #include "acpi.h"
 #include "console.h"
 #include "io.h"
+#include "serial.h"
 
 /* ── CrOS EC LPC constants ─────────────────────────────────────────────── */
 #define EC_LPC_ADDR_MEMMAP          0x900u

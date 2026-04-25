@@ -186,3 +186,9 @@ int sage_isalpha(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'
 int sage_isalnum(int c) { return sage_isdigit(c) || sage_isalpha(c); }
 int sage_isspace(int c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
+/* Linker aliases for standard symbols required by Metal VM */
+void *memset(void *s, int c, size_t n) __attribute__((alias("sage_memset")));
+void *memcpy(void *dest, const void *src, size_t n) __attribute__((alias("sage_memcpy")));
+size_t strlen(const char *s) __attribute__((alias("sage_strlen")));
+int strcmp(const char *a, const char *b) __attribute__((alias("sage_strcmp")));
+

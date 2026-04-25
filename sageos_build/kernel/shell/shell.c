@@ -12,6 +12,7 @@
 #include "acpi.h"
 #include "smp.h"
 #include "battery.h"
+#include "sysinfo.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) {
@@ -77,6 +78,7 @@ static const char *const shell_commands[] = {
     "status",
     "stop",
     "suspend",
+    "sysinfo",
     "timer",
     "uname",
     "version",
@@ -100,7 +102,7 @@ static void *shell_memmove(void *dest, const void *src, size_t n) {
     return dest;
 }
 
-/* ── History ring-buffer helpers ───────────────────────────────────────────
+/* ── History ring-buffer helpers ──────────────────────────────────────────────
  *
  * Layout: shell_history[0..SHELL_HISTORY_SIZE-1] is a circular buffer.
  * shell_history_head  = next *write* slot.
@@ -418,6 +420,7 @@ static void help(void) {
     console_write("\n  version           show version");
     console_write("\n  uname             show system id");
     console_write("\n  about             project summary");
+    console_write("\n  sysinfo           CPU frequency, RAM, and storage usage");
     console_write("\n\nShell editing:");
     console_write("\n  Up/Down arrows    history navigation (newest first)");
     console_write("\n  Left/Right arrows cursor move");
@@ -493,6 +496,7 @@ static void exec(const char *cmd) {
     if (starts_word(cmd, "fb"))           { cmd_fb(); return; }
     if (starts_word(cmd, "input"))        { console_write("\nInput backend: "); console_write(keyboard_backend()); console_write("\nUse keydebug to inspect raw scancodes."); return; }
     if (starts_word(cmd, "status"))       { status_print(); return; }
+    if (starts_word(cmd, "sysinfo"))      { sysinfo_cmd(); return; }
     if (starts_word(cmd, "timer"))        { timer_cmd_info(); return; }
     if (starts_word(cmd, "smp start"))    { smp_boot_aps(); return; }
     if (starts_word(cmd, "smp"))          { smp_cmd_info(); return; }
@@ -568,7 +572,7 @@ void shell_run(void) {
         if (!keyboard_wait_event(&ev)) continue;
         if (!ev.pressed) continue;
 
-        /* ── Extended / special keys ──────────────────────────────────── */
+        /* ── Extended / special keys ────────────────────────────────────── */
         if (ev.extended) {
             switch (ev.scancode) {
 
@@ -641,7 +645,7 @@ void shell_run(void) {
             continue;
         }
 
-        /* ── ASCII / control characters ───────────────────────────────── */
+        /* ── ASCII / control characters ──────────────────────────────────── */
         char c = ev.ascii;
 
         if (c == '\r' || c == '\n') {

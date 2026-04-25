@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./lenovo_300e.sh build:*)",
+      "Bash(./lenovo_300e.sh qemu:*)",
+      "Bash(pkill -f qemu-system-x86)",
+      "WebSearch",
+      "WebFetch(domain:chromium.googlesource.com)",
+      "WebFetch(domain:www.kernel.org)",
+      "WebFetch(domain:psref.lenovo.com)"
+    ]
+  }
+}

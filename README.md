@@ -198,6 +198,64 @@ dd
 qemu-system-x86_64
 ```
 
+## Prerequisites
+
+- Linux host system
+- Required tools: clang, lld, llvm, qemu-system-x86, ovmf, dosfstools, mtools, gdisk, util-linux
+
+Install on Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install -y clang lld llvm qemu-system-x86 ovmf dosfstools mtools gdisk util-linux
+```
+
+## Building
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Night-Traders-Dev/SageOS_300e.git
+   cd SageOS_300e
+   ```
+
+2. Build the OS image:
+   ```bash
+   ./lenovo_300e.sh build
+   ```
+
+## Running
+
+### In QEMU (recommended for testing)
+```bash
+./lenovo_300e.sh qemu
+```
+
+### On Hardware (Lenovo 300e)
+1. Flash to USB drive:
+   ```bash
+   ./lenovo_300e.sh flash /dev/sdX  # Replace /dev/sdX with your USB device
+   ```
+2. Boot the Lenovo 300e from USB in developer mode.
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly in QEMU
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Repository
+
+- **GitHub**: https://github.com/Night-Traders-Dev/SageOS_300e
+- **Issues**: https://github.com/Night-Traders-Dev/SageOS_300e/issues
+
 ## Boot Flow
 
 ```text

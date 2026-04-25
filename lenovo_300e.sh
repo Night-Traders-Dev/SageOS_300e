@@ -228,18 +228,34 @@ qemu_run() {
         build_image
     fi
 
+    echo "Disk device is $IMG"
+
     pkill -9 -f qemu-system-x86_64 >/dev/null 2>&1 || true
     restore_tty
 
+    # -device isa-debug-exit,iobase=0x501,iosize=2
+    #   Exposes a 2-byte I/O port at 0x501.  Writing any value causes QEMU
+    #   to exit with code ((value<<1)|1).  The kernel's power_qemu_exit()
+    #   writes 0x00, so the process exits with code 1.
+    #   On real hardware this port is unassigned; the outb is ignored.
+    #
+    # -drive id=hd0,...,media=disk
+    #   'media=disk' suppresses the OVMF "Disk device is ..." diagnostic
+    #   that appeared when the media type was left unspecified.
     if ! qemu-system-x86_64 \
       -bios "$ovmf" \
-      -drive file="$IMG",format=raw,snapshot=on \
+      -drive id=hd0,file="$IMG",format=raw,media=disk,snapshot=on \
       -m 256M \
       -nographic \
       -monitor none \
-      -serial stdio; then
-        restore_tty
-        return 1
+      -serial stdio \
+      -device isa-debug-exit,iobase=0x501,iosize=2; then
+        # exit code 1 is the normal 'exit' command path (value=0 => (0<<1)|1 = 1)
+        local rc=$?
+        if [ "$rc" -ne 1 ]; then
+            restore_tty
+            return "$rc"
+        fi
     fi
 
     restore_tty

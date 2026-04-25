@@ -38,6 +38,17 @@ typedef struct {
     char fs_type[8];
 } __attribute__((packed)) FAT32_BPB;
 
+/* FAT32 FSInfo sector layout (offset within the sector) */
+typedef struct {
+    uint32_t lead_sig;          /* 0x41615252 */
+    uint8_t  reserved1[480];
+    uint32_t struc_sig;         /* 0x61417272 */
+    uint32_t free_count;        /* 0xFFFFFFFF = unknown */
+    uint32_t next_free;
+    uint8_t  reserved2[12];
+    uint32_t trail_sig;         /* 0xAA550000 */
+} __attribute__((packed)) FAT32_FSInfo;
+
 typedef struct {
     char name[8];
     char ext[3];
@@ -60,6 +71,9 @@ static uint16_t fat32_sectors_per_cluster;
 static uint16_t fat32_reserved_sectors;
 static uint8_t fat32_fat_count;
 static uint32_t fat32_fat_size;
+static uint32_t fat32_total_sectors;   /* from BPB total_sectors_32 */
+static uint16_t fat32_fsinfo_sector;   /* BPB fs_info field */
+static uint16_t fat32_bytes_per_sector;
 
 extern void ata_read_sector(uint32_t lba, uint16_t *buffer);
 
@@ -226,12 +240,15 @@ int fat32_init(void) {
         return 0;
     }
 
-    fat32_available = 1;
+    fat32_available        = 1;
     fat32_sectors_per_cluster = bpb->sectors_per_cluster;
     fat32_reserved_sectors = bpb->reserved_sectors;
-    fat32_fat_count = bpb->fat_count;
-    fat32_fat_size = bpb->fat_size_32;
-    fat32_root_cluster = bpb->root_cluster;
+    fat32_fat_count        = bpb->fat_count;
+    fat32_fat_size         = bpb->fat_size_32;
+    fat32_root_cluster     = bpb->root_cluster;
+    fat32_total_sectors    = bpb->total_sectors_32;
+    fat32_fsinfo_sector    = bpb->fs_info;
+    fat32_bytes_per_sector = bpb->bytes_per_sector;
 
     console_write("\nFAT32: Mounted on primary master");
     console_write("\n  partition start LBA: ");
@@ -247,6 +264,49 @@ int fat32_init(void) {
 
 int fat32_is_available(void) {
     return fat32_available;
+}
+
+/*
+ * fat32_storage_info
+ *
+ * total_kb = (total_sectors_32 * bytes_per_sector) / 1024
+ * free_kb  = (free_cluster_count * sectors_per_cluster * bytes_per_sector) / 1024
+ *
+ * Returns 1 if free_kb is valid (FSInfo lead/struc signatures present and
+ * free_count != 0xFFFFFFFF), 0 otherwise (total_kb is still set).
+ */
+int fat32_storage_info(uint32_t *total_kb, uint32_t *free_kb) {
+    if (!fat32_available) {
+        *total_kb = 0;
+        *free_kb  = 0;
+        return 0;
+    }
+
+    /* Total size from BPB */
+    uint64_t total_bytes = (uint64_t)fat32_total_sectors * fat32_bytes_per_sector;
+    *total_kb = (uint32_t)(total_bytes / 1024ULL);
+
+    /* Free count from FSInfo sector */
+    *free_kb = 0;
+    if (!fat32_fsinfo_sector) {
+        return 0;
+    }
+
+    uint8_t buf[512];
+    fat32_read_sector(FAT32_PARTITION_START_LBA + fat32_fsinfo_sector, buf);
+    FAT32_FSInfo *fi = (FAT32_FSInfo *)buf;
+
+    if (fi->lead_sig  != 0x41615252U ||
+        fi->struc_sig != 0x61417272U ||
+        fi->free_count == 0xFFFFFFFFU) {
+        return 0;
+    }
+
+    uint64_t free_bytes = (uint64_t)fi->free_count *
+                          fat32_sectors_per_cluster *
+                          fat32_bytes_per_sector;
+    *free_kb = (uint32_t)(free_bytes / 1024ULL);
+    return 1;
 }
 
 void fat32_ls(void) {

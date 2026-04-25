@@ -67,7 +67,7 @@ typedef enum {
 typedef struct {
     MetalValueType type;
     union {
-        double number;
+        uint64_t num_bits;
         int boolean;
         int str_idx;        // String pool index
         int arr_idx;        // Array pool index
@@ -197,7 +197,7 @@ int metal_vm_step(MetalVM* vm);
 
 // Value constructors
 MetalValue mv_nil(void);
-MetalValue mv_num(double v);
+MetalValue mv_num(uint64_t v);
 MetalValue mv_bool(int v);
 MetalValue mv_str(MetalVM* vm, const char* s, int len);
 MetalValue mv_ptr(void* p);

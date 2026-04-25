@@ -3,6 +3,7 @@
 #include "ramfs.h"
 #include "bin_hello.h"
 #include "bin_hello_json.h"
+#include "bin_hello_kernel.h"
 
 /* -----------------------------------------------------------------------
  * Test SageLang source — embedded as a string constant
@@ -43,6 +44,7 @@ static const RamFile files[] = {
     {"/proc/input",  "native-i8042-ps2\n", 0},
     {"/etc/test.sage", test_sage_source, 0},
     {"/etc/test_err.sage", test_error_sage_source, 0},
+    {"/etc/hello_native.sagec", (const char *)hello_kernel_sagec, sizeof(hello_kernel_sagec)},
 };
 
 /* -----------------------------------------------------------------------

@@ -19,10 +19,15 @@ extern int strcmp(const char* s1, const char* s2);
 #define OP_TRUE           2
 #define OP_FALSE          3
 #define OP_POP            4
-#define OP_DUP            5
-#define OP_GET_GLOBAL     6
-#define OP_DEFINE_GLOBAL  7
-#define OP_SET_GLOBAL     8
+#define OP_GET_GLOBAL     5
+#define OP_DEFINE_GLOBAL  6
+#define OP_SET_GLOBAL     7
+#define OP_DEFINE_FN      8
+#define OP_GET_PROPERTY   9
+#define OP_SET_PROPERTY   10
+#define OP_GET_INDEX      11
+#define OP_SET_INDEX      12
+#define OP_SLICE          13
 #define OP_ADD            14
 #define OP_SUB            15
 #define OP_MUL            16
@@ -35,29 +40,28 @@ extern int strcmp(const char* s1, const char* s2);
 #define OP_GREATER_EQ     23
 #define OP_LESS           24
 #define OP_LESS_EQ        25
-#define OP_NOT            26
-#define OP_TRUTHY         27
-#define OP_BIT_AND        28
-#define OP_BIT_OR         29
-#define OP_BIT_XOR        30
-#define OP_BIT_NOT        31
-#define OP_SHIFT_LEFT     32
-#define OP_SHIFT_RIGHT    33
+#define OP_BIT_AND        26
+#define OP_BIT_OR         27
+#define OP_BIT_XOR        28
+#define OP_BIT_NOT        29
+#define OP_SHIFT_LEFT     30
+#define OP_SHIFT_RIGHT    31
+#define OP_NOT            32
+#define OP_TRUTHY         33
 #define OP_JUMP           34
 #define OP_JUMP_IF_FALSE  35
-#define OP_LOOP_BACK      36
-#define OP_CALL           37
-#define OP_RETURN         38
-#define OP_PRINT          39
-#define OP_ARRAY          40
-#define OP_ARRAY_LEN      41
-#define OP_GET_INDEX      42
-#define OP_SET_INDEX      43
-#define OP_PUSH_ENV       48
-#define OP_POP_ENV        49
-#define OP_BREAK          50
-#define OP_CONTINUE       51
-#define OP_DEFINE_FN      52
+#define OP_CALL           36
+#define OP_CALL_METHOD    37
+#define OP_ARRAY          38
+#define OP_TUPLE          39
+#define OP_DICT           40
+#define OP_PRINT          41
+#define OP_RETURN         43
+#define OP_PUSH_ENV       44
+#define OP_POP_ENV        45
+#define OP_DUP            46
+#define OP_ARRAY_LEN      47
+#define OP_LOOP_BACK      50
 #define OP_HALT           0xFF
 
 // ============================================================================
@@ -121,11 +125,11 @@ static void metal_print_double(MetalVM* vm, double d) {
 // ============================================================================
 
 MetalValue mv_nil(void) {
-    MetalValue v; v.type = MV_NIL; v.as.number = 0; return v;
+    MetalValue v; v.type = MV_NIL; v.as.num_bits = 0; return v;
 }
 
-MetalValue mv_num(double val) {
-    MetalValue v; v.type = MV_NUM; v.as.number = val; return v;
+MetalValue mv_num(uint64_t val) {
+    MetalValue v; v.type = MV_NUM; v.as.num_bits = val; return v;
 }
 
 MetalValue mv_bool(int val) {
@@ -309,9 +313,12 @@ static void scope_assign(MetalVM* vm, unsigned int hash, MetalValue value) {
 
 void metal_print_value(MetalVM* vm, MetalValue value) {
     switch (value.type) {
-        case MV_NUM:
-            metal_print_double(vm, value.as.number);
+        case MV_NUM: {
+            union { double d; uint64_t u; } val;
+            val.u = value.as.num_bits;
+            metal_print_double(vm, val.d);
             break;
+        }
         case MV_BOOL:
             metal_print_str(vm, value.as.boolean ? "true" : "false");
             break;
@@ -346,7 +353,11 @@ static int metal_truthy(MetalValue v) {
     switch (v.type) {
         case MV_NIL:  return 0;
         case MV_BOOL: return v.as.boolean;
-        case MV_NUM:  return v.as.number != 0.0;
+        case MV_NUM: {
+            union { double d; uint64_t u; } val;
+            val.u = v.as.num_bits;
+            return val.d != 0.0;
+        }
         default:      return 1;
     }
 }
@@ -410,47 +421,61 @@ int metal_vm_step(MetalVM* vm) {
 
         // Arithmetic
         case OP_ADD: {
-            MetalValue b = metal_vm_pop(vm);
-            MetalValue a = metal_vm_pop(vm);
-            if (a.type == MV_NUM && b.type == MV_NUM)
-                metal_vm_push(vm, mv_num(a.as.number + b.as.number));
-            else
-                metal_vm_push(vm, mv_nil());
+            MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = va.d + vb.d;
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_SUB: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num(a.as.number - b.as.number));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = va.d - vb.d;
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_MUL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num(a.as.number * b.as.number));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = va.d * vb.d;
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_DIV: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            if (b.as.number == 0.0) { vm->error = 1; vm->error_msg = "division by zero"; return 0; }
-            metal_vm_push(vm, mv_num(a.as.number / b.as.number));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            if (vb.d == 0.0) { vm->error = 1; vm->error_msg = "division by zero"; return 0; }
+            vr.d = va.d / vb.d;
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_MOD: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            if (b.as.number == 0.0) { vm->error = 1; vm->error_msg = "modulo by zero"; return 0; }
-            long long la = (long long)a.as.number, lb = (long long)b.as.number;
-            metal_vm_push(vm, mv_num((double)(la % lb)));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            if (vb.d == 0.0) { vm->error = 1; vm->error_msg = "modulo by zero"; return 0; }
+            long long la = (long long)va.d, lb = (long long)vb.d;
+            vr.d = (double)(la % lb);
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_NEGATE: {
             MetalValue a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num(-a.as.number));
+            union { double d; uint64_t u; } va, vr;
+            va.u = a.as.num_bits;
+            vr.d = -va.d;
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
 
         // Comparison
         case OP_EQUAL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            int eq = (a.type == b.type) && (a.type == MV_NUM ? a.as.number == b.as.number :
+            int eq = (a.type == b.type) && (a.type == MV_NUM ? a.as.num_bits == b.as.num_bits :
                      a.type == MV_BOOL ? a.as.boolean == b.as.boolean :
                      a.type == MV_NIL ? 1 : 0);
             metal_vm_push(vm, mv_bool(eq));
@@ -458,7 +483,7 @@ int metal_vm_step(MetalVM* vm) {
         }
         case OP_NOT_EQUAL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            int eq = (a.type == b.type) && (a.type == MV_NUM ? a.as.number == b.as.number :
+            int eq = (a.type == b.type) && (a.type == MV_NUM ? a.as.num_bits == b.as.num_bits :
                      a.type == MV_BOOL ? a.as.boolean == b.as.boolean :
                      a.type == MV_NIL ? 1 : 0);
             metal_vm_push(vm, mv_bool(!eq));
@@ -466,22 +491,30 @@ int metal_vm_step(MetalVM* vm) {
         }
         case OP_GREATER: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_bool(a.as.number > b.as.number));
+            union { double d; uint64_t u; } va, vb;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            metal_vm_push(vm, mv_bool(va.d > vb.d));
             break;
         }
         case OP_GREATER_EQ: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_bool(a.as.number >= b.as.number));
+            union { double d; uint64_t u; } va, vb;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            metal_vm_push(vm, mv_bool(va.d >= vb.d));
             break;
         }
         case OP_LESS: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_bool(a.as.number < b.as.number));
+            union { double d; uint64_t u; } va, vb;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            metal_vm_push(vm, mv_bool(va.d < vb.d));
             break;
         }
         case OP_LESS_EQ: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_bool(a.as.number <= b.as.number));
+            union { double d; uint64_t u; } va, vb;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            metal_vm_push(vm, mv_bool(va.d <= vb.d));
             break;
         }
         case OP_NOT: {
@@ -498,32 +531,50 @@ int metal_vm_step(MetalVM* vm) {
         // Bitwise
         case OP_BIT_AND: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num((double)((long long)a.as.number & (long long)b.as.number)));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = (double)((long long)va.d & (long long)vb.d);
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_BIT_OR: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num((double)((long long)a.as.number | (long long)b.as.number)));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = (double)((long long)va.d | (long long)vb.d);
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_BIT_XOR: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num((double)((long long)a.as.number ^ (long long)b.as.number)));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = (double)((long long)va.d ^ (long long)vb.d);
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_BIT_NOT: {
             MetalValue a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num((double)(~(long long)a.as.number)));
+            union { double d; uint64_t u; } va, vr;
+            va.u = a.as.num_bits;
+            vr.d = (double)(~(long long)va.d);
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_SHIFT_LEFT: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num((double)((long long)a.as.number << (int)b.as.number)));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = (double)((long long)va.d << (int)vb.d);
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_SHIFT_RIGHT: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_num((double)((long long)a.as.number >> (int)b.as.number)));
+            union { double d; uint64_t u; } va, vb, vr;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits;
+            vr.d = (double)((long long)va.d >> (int)vb.d);
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
 
@@ -580,19 +631,24 @@ int metal_vm_step(MetalVM* vm) {
         }
         case OP_ARRAY_LEN: {
             MetalValue a = metal_vm_pop(vm);
+            union { double d; uint64_t u; } vr;
             if (a.type == MV_ARR)
-                metal_vm_push(vm, mv_num((double)metal_array_len(vm, a.as.arr_idx)));
+                vr.d = (double)metal_array_len(vm, a.as.arr_idx);
             else
-                metal_vm_push(vm, mv_num(0));
+                vr.d = 0.0;
+            metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_GET_INDEX: {
             MetalValue idx = metal_vm_pop(vm);
             MetalValue obj = metal_vm_pop(vm);
-            if (obj.type == MV_ARR)
-                metal_vm_push(vm, metal_array_get(vm, obj.as.arr_idx, (int)idx.as.number));
-            else
+            if (obj.type == MV_ARR) {
+                union { double d; uint64_t u; } vi;
+                vi.u = idx.as.num_bits;
+                metal_vm_push(vm, metal_array_get(vm, obj.as.arr_idx, (int)vi.d));
+            } else {
                 metal_vm_push(vm, mv_nil());
+            }
             break;
         }
         case OP_SET_INDEX: {
@@ -601,7 +657,9 @@ int metal_vm_step(MetalVM* vm) {
             MetalValue obj = metal_vm_pop(vm);
             if (obj.type == MV_ARR) {
                 int ai = obj.as.arr_idx;
-                int ii = (int)idx.as.number;
+                union { double d; uint64_t u; } vi;
+                vi.u = idx.as.num_bits;
+                int ii = (int)vi.d;
                 int max = (int)(sizeof(vm->arrays) / sizeof(vm->arrays[0]));
                 if (ai >= 0 && ai < max && ii >= 0 && ii < vm->arrays[ai].count)
                     vm->arrays[ai].elems[ii] = val;

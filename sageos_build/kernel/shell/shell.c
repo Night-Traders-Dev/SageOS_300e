@@ -160,26 +160,86 @@ static void shell_load_history(int nav, char *out_line, size_t *out_len) {
     *out_len = len;
 }
 
+/*
+ * shell_redraw_line
+ *
+ * Erase [start_col .. start_col + erase_len) on start_row (wrapping
+ * across rows as needed), then rewrite `line`, then place the cursor
+ * at `pos` characters past start_col.
+ *
+ * erase_len must be >= the number of characters currently visible on
+ * screen (i.e. the *previously* displayed line length, not the new one).
+ * Pass max(old_displayed_len, new_len) + 1 to be safe.
+ */
 static void shell_redraw_line(
     const char *line,
     size_t pos,
     uint32_t start_row,
     uint32_t start_col,
-    size_t old_len
+    size_t erase_len
 ) {
     int saved_serial_echo = console_get_serial_echo();
     if (console_has_fb()) console_set_serial_echo(0);
 
+    /* Erase the old content — go one beyond to wipe any ghost char */
     console_set_cursor(start_row, start_col);
-    for (size_t i = 0; i < old_len + 1; i++) console_putc(' ');
+    for (size_t i = 0; i <= erase_len; i++) console_putc(' ');
 
+    /* Rewrite the new content */
     console_set_cursor(start_row, start_col);
     console_write(line);
 
+    /* Reposition cursor */
     uint32_t cursor_offset = start_col + (uint32_t)pos;
     console_set_cursor(
         start_row + cursor_offset / console_cols(),
         cursor_offset % console_cols()
+    );
+
+    if (console_has_fb()) console_set_serial_echo(saved_serial_echo);
+}
+
+/*
+ * shell_draw_hint
+ *
+ * Draw a fish-style grey ghost hint for a unique tab-completion match.
+ * Shows the remaining suffix of `match` after the `typed_len` chars
+ * the user already typed, in a dim colour, then restores the cursor
+ * to `pos` characters past start_col.
+ *
+ * The hint is drawn after the line content already on screen so it
+ * never disturbs the actual line buffer.
+ */
+static void shell_draw_hint(
+    const char *match,
+    size_t typed_len,
+    size_t line_len,
+    size_t pos,
+    uint32_t start_row,
+    uint32_t start_col
+) {
+    int saved_serial_echo = console_get_serial_echo();
+    if (console_has_fb()) console_set_serial_echo(0);
+
+    /* Position right after the current line content */
+    uint32_t end_off = start_col + (uint32_t)line_len;
+    console_set_cursor(
+        start_row + end_off / console_cols(),
+        end_off % console_cols()
+    );
+
+    /* Draw hint in dim grey */
+    uint32_t old_fg = console_get_fg();
+    console_set_fg(0x606060);
+    const char *suffix = match + typed_len;
+    while (*suffix) console_putc(*suffix++);
+    console_set_fg(old_fg);
+
+    /* Restore cursor to the actual edit position */
+    uint32_t cur_off = start_col + (uint32_t)pos;
+    console_set_cursor(
+        start_row + cur_off / console_cols(),
+        cur_off % console_cols()
     );
 
     if (console_has_fb()) console_set_serial_echo(saved_serial_echo);
@@ -192,13 +252,22 @@ static size_t shell_token_start(const char *line, size_t pos) {
     return start;
 }
 
+/*
+ * shell_tab_complete
+ *
+ * start_row / start_col are passed as pointers so that after printing
+ * candidates below the prompt and re-issuing a new prompt, the caller's
+ * anchor coordinates are updated to the new prompt position.  Without
+ * this, all subsequent shell_redraw_line calls use stale coordinates
+ * and overdraw the wrong row.
+ */
 static void shell_tab_complete(
     char *line,
     size_t *len,
     size_t *pos,
-    uint32_t start_row,
-    uint32_t start_col,
-    size_t old_len
+    uint32_t *start_row,
+    uint32_t *start_col,
+    size_t displayed_len
 ) {
     size_t token_start = shell_token_start(line, *pos);
     size_t token_len   = *pos - token_start;
@@ -221,7 +290,17 @@ static void shell_tab_complete(
     if (!first_match) return;
 
     if (match_count == 1) {
-        /* Unique match — complete the remainder */
+        /*
+         * Unique match.
+         *
+         * 1. Draw a fish-style grey ghost hint showing the suffix that
+         *    would be completed (visible before the user presses Tab
+         *    again — though here we show it momentarily and then
+         *    complete inline on the same Tab press, matching fish
+         *    behaviour when there is only one candidate).
+         * 2. Complete the remainder into the line buffer.
+         * 3. Redraw with the full completed text.
+         */
         size_t fill_start = token_len;
         size_t fill_len   = 0;
         while (first_match[fill_start + fill_len] &&
@@ -229,6 +308,15 @@ static void shell_tab_complete(
             fill_len++;
 
         if (fill_len > 0) {
+            /*
+             * Show the grey hint first so the user can see what will
+             * be inserted.  We redraw the hint immediately then
+             * complete — on a fast display this is effectively
+             * instant; on a slow framebuffer it gives a brief flash.
+             */
+            shell_draw_hint(first_match, token_start + token_len,
+                            *len, *pos, *start_row, *start_col);
+
             if (*len + fill_len >= SHELL_LINE_MAX - 1)
                 fill_len = SHELL_LINE_MAX - 1 - *len;
 
@@ -242,25 +330,23 @@ static void shell_tab_complete(
 
             *len += fill_len;
             *pos  = token_start + token_len + fill_len;
-            shell_redraw_line(line, *pos, start_row, start_col, old_len);
+
+            /* erase_len must cover the hint glyphs we just drew */
+            size_t erase = displayed_len + fill_len + 2;
+            shell_redraw_line(line, *pos, *start_row, *start_col, erase);
         }
         return;
     }
 
     /*
      * Multiple matches — compute the longest common prefix across ALL
-     * matching candidates, then complete up to that prefix and print
-     * the candidates below the current line.
-     *
-     * The old code tracked a running "max index" which was not a correct
-     * LCP computation and produced garbage on multi-match Tab presses.
+     * matching candidates, fill that much into the line, then print
+     * the candidates on the next line and re-issue the prompt.
      */
     size_t lcp = 0;
     {
-        /* Start with the full length of the first match */
         while (first_match[lcp]) lcp++;
 
-        /* Shrink to where every other match agrees */
         for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
             const char *cand = shell_commands[i];
             if (!starts_with(cand, token)) continue;
@@ -273,7 +359,6 @@ static void shell_tab_complete(
         }
     }
 
-    /* Fill the common prefix beyond what the user has typed */
     if (lcp > token_len) {
         size_t fill_len = lcp - token_len;
         if (*len + fill_len >= SHELL_LINE_MAX - 1)
@@ -293,7 +378,7 @@ static void shell_tab_complete(
         }
     }
 
-    /* Print candidates below the prompt */
+    /* Print candidates below the current line */
     console_write("\n");
     for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
         if (!starts_with(shell_commands[i], token)) continue;
@@ -301,10 +386,21 @@ static void shell_tab_complete(
         console_write("  ");
     }
 
+    /*
+     * Re-issue the prompt and rewrite the (possibly extended) line.
+     * After prompt() the cursor is at the start of the new input area;
+     * we must update start_row/start_col so the caller's subsequent
+     * redraws land in the right place.
+     */
     prompt();
-    console_get_cursor(&start_row, &start_col);
+    console_get_cursor(start_row, start_col);
     console_write(line);
-    shell_redraw_line(line, *pos, start_row, start_col, old_len);
+    /* Reposition cursor to *pos characters into the new prompt line */
+    uint32_t off = *start_col + (uint32_t)(*pos);
+    console_set_cursor(
+        *start_row + off / console_cols(),
+        off % console_cols()
+    );
 }
 
 static void prompt(void) {
@@ -447,6 +543,17 @@ void shell_run(void) {
     uint32_t start_row = 0;
     uint32_t start_col = 0;
 
+    /*
+     * displayed_len tracks how many characters are *currently visible*
+     * on screen past start_col.  This is NOT always equal to len:
+     * after drawing a ghost hint the visible span is len + hint_chars,
+     * and after a history load the visible span is the previous entry's
+     * length until the next redraw completes.  We use this value as
+     * erase_len in shell_redraw_line so the clear-pass always wipes
+     * exactly what was last drawn — no ghost characters left behind.
+     */
+    size_t displayed_len = 0;
+
     shell_history_count = 0;
     shell_history_head  = 0;
     shell_history_nav   = -1;
@@ -456,7 +563,6 @@ void shell_run(void) {
     line[0] = 0;
 
     for (;;) {
-        size_t   old_len = len;
         KeyEvent ev;
 
         if (!keyboard_wait_event(&ev)) continue;
@@ -469,26 +575,27 @@ void shell_run(void) {
             case 0x48: /* Up — older entry */
                 if (shell_history_count == 0) break;
                 if (shell_history_nav < 0)
-                    shell_history_nav = 0;                        /* newest */
+                    shell_history_nav = 0;
                 else if (shell_history_nav < shell_history_count - 1)
-                    shell_history_nav++;                          /* go older */
+                    shell_history_nav++;
                 shell_load_history(shell_history_nav, line, &len);
                 pos = len;
-                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+                displayed_len = len;
                 break;
 
             case 0x50: /* Down — newer entry or clear */
                 if (shell_history_nav < 0) break;
                 if (shell_history_nav > 0) {
-                    shell_history_nav--;                          /* go newer */
+                    shell_history_nav--;
                     shell_load_history(shell_history_nav, line, &len);
                     pos = len;
                 } else {
-                    /* Already at newest — clear the line */
                     shell_history_nav = -1;
                     len = 0; pos = 0; line[0] = 0;
                 }
-                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+                displayed_len = len;
                 break;
 
             case 0x4B: /* Left */
@@ -509,12 +616,14 @@ void shell_run(void) {
 
             case 0x47: /* Home */
                 pos = 0;
-                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+                displayed_len = len;
                 break;
 
             case 0x4F: /* End */
                 pos = len;
-                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+                displayed_len = len;
                 break;
 
             case 0x53: /* Delete */
@@ -522,7 +631,8 @@ void shell_run(void) {
                     shell_memmove(line + pos, line + pos + 1, len - pos);
                     len--;
                     line[len] = 0;
-                    shell_redraw_line(line, pos, start_row, start_col, old_len);
+                    shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+                    displayed_len = len;
                 }
                 break;
 
@@ -540,45 +650,77 @@ void shell_run(void) {
             if (len > 0) shell_save_history(line);
             exec(line);
             len = 0; pos = 0; line[0] = 0;
+            displayed_len = 0;
             shell_history_nav = -1;
             prompt();
             console_get_cursor(&start_row, &start_col);
             continue;
         }
 
-        if (c == 3)  { /* Ctrl-C */
+        if (c == 3) { /* Ctrl-C */
             console_write("^C\n");
             len = 0; pos = 0; line[0] = 0;
+            displayed_len = 0;
             shell_history_nav = -1;
             prompt();
             console_get_cursor(&start_row, &start_col);
             continue;
         }
 
-        if (c == 1)  { pos = 0; shell_redraw_line(line, pos, start_row, start_col, old_len); continue; }  /* Ctrl-A */
-        if (c == 5)  { pos = len; shell_redraw_line(line, pos, start_row, start_col, old_len); continue; } /* Ctrl-E */
-        if (c == 21) { len = 0; pos = 0; line[0] = 0; shell_redraw_line(line, pos, start_row, start_col, old_len); continue; } /* Ctrl-U */
-        if (c == 9)  { shell_tab_complete(line, &len, &pos, start_row, start_col, old_len); continue; }   /* Tab */
+        if (c == 1) { /* Ctrl-A */
+            pos = 0;
+            shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+            displayed_len = len;
+            continue;
+        }
+        if (c == 5) { /* Ctrl-E */
+            pos = len;
+            shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+            displayed_len = len;
+            continue;
+        }
+        if (c == 21) { /* Ctrl-U */
+            len = 0; pos = 0; line[0] = 0;
+            shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+            displayed_len = 0;
+            continue;
+        }
+        if (c == 9) { /* Tab */
+            shell_tab_complete(line, &len, &pos, &start_row, &start_col, displayed_len);
+            displayed_len = len;
+            continue;
+        }
 
         if (c == 8 || c == 127) { /* Backspace */
             if (pos > 0) {
+                /*
+                 * erase_len must be the OLD displayed width so the
+                 * clear-pass wipes the character that just disappeared.
+                 * Pass displayed_len (which includes any ghost hint
+                 * from a previous Tab) to be thorough.
+                 */
+                size_t erase = displayed_len > len ? displayed_len : len;
                 shell_memmove(line + pos - 1, line + pos, len - pos + 1);
                 pos--; len--;
-                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                shell_redraw_line(line, pos, start_row, start_col, erase);
+                displayed_len = len;
             }
             continue;
         }
 
         if ((uint8_t)c >= 32 && (uint8_t)c <= 126 && len + 1 < sizeof(line)) {
-            int append_at_end = (pos == len);
+            int append_at_end = (pos == len) && (displayed_len == len);
             shell_memmove(line + pos + 1, line + pos, len - pos + 1);
             line[pos] = c;
             len++; pos++;
             line[len] = 0;
-            if (append_at_end)
+            if (append_at_end) {
                 console_putc(c);
-            else
-                shell_redraw_line(line, pos, start_row, start_col, old_len);
+                displayed_len = len;
+            } else {
+                shell_redraw_line(line, pos, start_row, start_col, displayed_len);
+                displayed_len = len;
+            }
         }
     }
 }

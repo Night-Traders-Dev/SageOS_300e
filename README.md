@@ -51,6 +51,8 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate; `--` shown when EC or data not confirmed |
 | VFS / FAT32 | Working — ATA PIO block driver, VFS layer, FAT32 mount |
 | SageLang Backend | Working — bare-metal stabilized, runtime-free modules |
+| ELF Execution | Working — segment mapping, BSS, entry jump |
+| SageLang Toolchain | Working — compiler/runtime hooks |
 
 ## Important Design Note
 

@@ -61,6 +61,32 @@ extern volatile uint64_t ap_stack_ptr;
 extern volatile uint64_t ap_entry_ptr;
 extern volatile uint64_t ap_cr3_ptr;
 
+static void smp_set_single_bsp(void) {
+    for (uint32_t i = 0; i < SAGEOS_MAX_CPUS; i++) {
+        cpus[i].processor_id = 0;
+        cpus[i].apic_id = 0;
+        cpus[i].flags = 0;
+        cpus[i].enabled = 0;
+        cpus[i].bootstrap = 0;
+        cpus[i].stack_top = 0;
+        cpus[i].started = 0;
+    }
+
+    cpus[0].processor_id = 0;
+    cpus[0].apic_id = 0;
+    cpus[0].flags = 1;
+    cpus[0].enabled = 1;
+    cpus[0].bootstrap = 1;
+    cpus[0].started = 1;
+    cpus[0].stack_top = (uint64_t)&cpu_stacks[0][16384];
+    cpu_count = 1;
+    lapic_base = 0;
+}
+
+void smp_init_firmware_bsp(void) {
+    smp_set_single_bsp();
+}
+
 void smp_init(void) {
     cpu_count = 0;
     lapic_base = 0;
@@ -68,14 +94,7 @@ void smp_init(void) {
     uint64_t madt = acpi_find_table("APIC");
 
     if (!madt) {
-        /* Fallback for single CPU */
-        cpus[0].processor_id = 0;
-        cpus[0].apic_id = 0;
-        cpus[0].flags = 1;
-        cpus[0].enabled = 1;
-        cpus[0].bootstrap = 1;
-        cpus[0].started = 1;
-        cpu_count = 1;
+        smp_set_single_bsp();
         return;
     }
 
@@ -83,6 +102,11 @@ void smp_init(void) {
     lapic_base = (uint64_t)mem32(madt + 36);
 
     uint32_t len = mem32(madt + 4);
+    if (len < 44 || len > 65536) {
+        smp_set_single_bsp();
+        return;
+    }
+
     uint64_t p = madt + 44;
     uint64_t end = madt + len;
 
@@ -90,7 +114,7 @@ void smp_init(void) {
         uint8_t type = *(uint8_t *)(uintptr_t)p;
         uint8_t elen = *(uint8_t *)(uintptr_t)(p + 1);
 
-        if (elen < 2) break;
+        if (elen < 2 || p + elen > end) break;
 
         if (type == 0 && elen >= 8 && cpu_count < SAGEOS_MAX_CPUS) {
             CpuInfo *c = &cpus[cpu_count];
@@ -106,7 +130,14 @@ void smp_init(void) {
         p += elen;
     }
 
-    lapic_enable();
+    if (cpu_count == 0) {
+        smp_set_single_bsp();
+        return;
+    }
+
+    if (lapic_base) {
+        lapic_enable();
+    }
 }
 
 void ap_kernel_main(uint32_t apic_id) {
@@ -126,6 +157,11 @@ void ap_kernel_main(uint32_t apic_id) {
 }
 
 void smp_boot_aps(void) {
+    if (!lapic_base) {
+        console_write("\nSMP: native AP startup unavailable in firmware-input mode.");
+        return;
+    }
+
     console_write("\nSMP: Starting Application Processors...");
 
     /* 1. Prepare trampoline at 0x8000 */
@@ -183,6 +219,9 @@ void smp_cmd_info(void) {
     console_u32(cpu_count);
     console_write("\n  LAPIC base: ");
     console_hex64(lapic_base);
+    if (!lapic_base) {
+        console_write("\n  native APIC/SIPI startup disabled");
+    }
 
     for (uint32_t i = 0; i < cpu_count; i++) {
         CpuInfo *c = &cpus[i];

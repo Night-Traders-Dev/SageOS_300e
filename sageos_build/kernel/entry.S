@@ -6,6 +6,17 @@
 
 _start:
     cld
+    mov %rcx, %rbx
+
+    /*
+     * KERNEL.BIN is loaded as a flat image, so the loader does not apply ELF
+     * NOBITS semantics. Clear BSS before touching C globals or the stack.
+     */
+    lea __bss_start(%rip), %rdi
+    lea __bss_end(%rip), %rcx
+    sub %rdi, %rcx
+    xor %eax, %eax
+    rep stosb
 
     lea stack_top(%rip), %rsp
     andq $-16, %rsp
@@ -17,7 +28,7 @@ _start:
      * Kernel C is built for SysV x86_64 ABI.
      * SysV expects the first argument in RDI.
      */
-    mov %rcx, %rdi
+    mov %rbx, %rdi
 
     call kmain
 

@@ -37,6 +37,7 @@ typedef struct {
 #define LAPIC_TMRDIV      0x03E0
 
 void smp_init(void);
+void smp_init_firmware_bsp(void);
 uint32_t smp_cpu_count(void);
 const CpuInfo *smp_cpu(uint32_t idx);
 void smp_cmd_info(void);

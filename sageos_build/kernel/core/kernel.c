@@ -48,6 +48,8 @@ void kmain(SageOSBootInfo *info) {
         idt_init();
         timer_init();
         irq_enable();
+    } else {
+        smp_init_firmware_bsp();
     }
 
     battery_init();

@@ -173,17 +173,6 @@ static void shell_redraw_line(
     uint32_t start_col,
     size_t old_len
 ) {
-    int saved_serial_echo = console_get_serial_echo();
-
-    /*
-     * Redraw is a framebuffer operation. Without this guard, every
-     * erase/repaint pass is also appended to COM1, producing output
-     * like: b ba bat batt batte batter battery.
-     */
-    if (console_has_fb()) {
-        console_set_serial_echo(0);
-    }
-
     console_set_cursor(start_row, start_col);
 
     for (size_t i = 0; i < old_len + 1; i++) {
@@ -197,10 +186,6 @@ static void shell_redraw_line(
     uint32_t target_row = start_row + cursor_offset / console_cols();
     uint32_t target_col = cursor_offset % console_cols();
     console_set_cursor(target_row, target_col);
-
-    if (console_has_fb()) {
-        console_set_serial_echo(saved_serial_echo);
-    }
 }
 
 static size_t shell_token_start(const char *line, size_t pos) {
@@ -786,19 +771,11 @@ void shell_run(void) {
         }
 
         if ((uint8_t)c >= 32 && (uint8_t)c <= 126 && len + 1 < sizeof(line)) {
-            int append_at_end = (pos == len);
-
             shell_memmove(line + pos + 1, line + pos, len - pos + 1);
             line[pos] = c;
             len++;
             pos++;
-            line[len] = 0;
-
-            if (append_at_end) {
-                console_putc(c);
-            } else {
-                shell_redraw_line(line, pos, start_row, start_col, old_len);
-            }
+            shell_redraw_line(line, pos, start_row, start_col, old_len);
         }
     }
 }

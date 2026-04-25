@@ -27,14 +27,6 @@ static const uint32_t status_rows = 2;
 static uint32_t fg = 0xE8E8E8;
 static uint32_t bg = 0x05070A;
 
-/*
- * Serial mirroring is useful for boot logs and command output,
- * but framebuffer line editing uses absolute cursor movement.
- * Serial terminals are append-only unless we emit terminal control
- * sequences, so shell redraws temporarily disable this echo.
- */
-static int serial_echo = 1;
-
 SageOSBootInfo *console_boot_info(void) {
     return g_info;
 }
@@ -67,14 +59,6 @@ uint32_t console_get_fg(void) {
 
 void console_set_fg(uint32_t rgb) {
     fg = rgb;
-}
-
-int console_get_serial_echo(void) {
-    return serial_echo;
-}
-
-void console_set_serial_echo(int enabled) {
-    serial_echo = enabled ? 1 : 0;
 }
 
 static uint32_t pack_rgb(uint32_t rgb) {
@@ -308,9 +292,7 @@ void console_putc(char c) {
         status_tick_poll();
     }
 
-    if (serial_echo) {
-        serial_putc(c);
-    }
+    serial_putc(c);
 
     if (c == '\r') {
         col = 0;

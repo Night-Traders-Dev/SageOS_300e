@@ -15,8 +15,6 @@ void console_u32(uint32_t v);
 void console_set_fg(uint32_t rgb);
 uint32_t console_get_fg(void);
 int console_has_fb(void);
-int console_get_serial_echo(void);
-void console_set_serial_echo(int enabled);
 SageOSBootInfo *console_boot_info(void);
 
 uint32_t console_cols(void);

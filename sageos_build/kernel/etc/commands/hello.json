@@ -1,0 +1,5 @@
+{
+  "name": "hello",
+  "binary": "/bin/hello",
+  "description": "Run hello binary"
+}

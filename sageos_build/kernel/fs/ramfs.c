@@ -1,6 +1,8 @@
 #include <stddef.h>
 #include "console.h"
 #include "ramfs.h"
+#include "bin_hello.h"
+#include "bin_hello_json.h"
 
 typedef struct {
     const char *path;
@@ -12,6 +14,7 @@ static const RamFile files[] = {
     {"/etc/version", "SageOS 0.1.1 modular kernel\n"},
     {"/bin/sh", "Kernel-resident shell\n"},
     {"/dev/fb0", "UEFI GOP framebuffer\n"},
+    {"/bin/hello", (const char *)bin_hello},
     {"/proc/input", "native-i8042-ps2\n"},
 };
 

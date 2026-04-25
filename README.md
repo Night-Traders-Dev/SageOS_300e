@@ -269,9 +269,10 @@ acpi battery
 battery
 ls
 cat <path>
+execelf <path>
+sage <module>
 echo <text>
-color <white|green|amber|blue|red>
-dmesg
+color <white|green|amber|blue|red>dmesg
 shutdown
 poweroff
 suspend

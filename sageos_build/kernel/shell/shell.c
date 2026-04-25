@@ -285,6 +285,8 @@ static void help(void) {
     console_write("\n  keydebug          raw keyboard scancode monitor");
     console_write("\n  ls                list RAMFS and FAT32 root");
     console_write("\n  cat <path>        print RAMFS or FAT32 file");
+    console_write("\n  execelf <path>    execute ELF binary");
+    console_write("\n  sage <module>     execute SageLang module");
     console_write("\n  echo <text>       print text");
     console_write("\n  color <name>      white green amber blue red");
     console_write("\n  dmesg             early log");
@@ -350,14 +352,14 @@ static void exec(const char *cmd) {
     if (starts_word(cmd, "acpi"))         { acpi_cmd_summary(); return; }
     if (starts_word(cmd, "keydebug"))     { keyboard_keydebug(); return; }
     if (starts_word(cmd, "exit"))         { power_qemu_exit(); return; }
-    if (starts_word(cmd, "ls")) {
+    if (starts_with(cmd, "ls")) {
         const char *path = arg_after(cmd, "ls");
         if (*path && !streq(path, "/")) { console_write("\nusage: ls [/path]"); return; }
         if (fat32_is_available()) fat32_ls();
         ramfs_ls();
         return;
     }
-    if (starts_word(cmd, "cat")) {
+    if (starts_with(cmd, "cat")) {
         const char *path = arg_after(cmd, "cat");
         if (!*path) { console_write("\nusage: cat <path>"); return; }
         if (fat32_is_available() && fat32_cat(path)) return;
@@ -366,7 +368,23 @@ static void exec(const char *cmd) {
         console_write("\n"); console_write(data);
         return;
     }
-    if (starts_word(cmd, "echo"))  { console_write("\n"); console_write(arg_after(cmd, "echo")); return; }
+    if (starts_with(cmd, "execelf")) {
+        const char *path = arg_after(cmd, "execelf");
+        if (!*path) { console_write("\nusage: execelf <path>"); return; }
+        const char *data = ramfs_find(path);
+        if (!data) { console_write("\nexecelf: no such file: "); console_write(path); return; }
+        extern void elf_exec(const void *data);
+        elf_exec(data);
+        return;
+    }
+    if (starts_with(cmd, "sage")) {
+        const char *mod = arg_after(cmd, "sage");
+        if (!*mod) { console_write("\nusage: sage <module>"); return; }
+        extern void sage_execute(const char *module_name);
+        sage_execute(mod);
+        return;
+    }
+    if (starts_with(cmd, "echo"))  { console_write("\n"); console_write(arg_after(cmd, "echo")); return; }
     if (starts_word(cmd, "color")) { cmd_color(arg_after(cmd, "color")); return; }
     if (starts_word(cmd, "dmesg")) { cmd_dmesg(); return; }
     if (starts_word(cmd, "shutdown") || starts_word(cmd, "poweroff")) { power_shutdown_stub(); return; }

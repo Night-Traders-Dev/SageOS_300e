@@ -98,6 +98,17 @@ static SageVar *sage_define_var(const char *name) {
 
 static const char *sage_src;
 
+int sage_error_flag = 0;
+char sage_error_msg[128] = {0};
+
+static void sage_set_error(const char *msg) {
+    if (sage_error_flag) return;
+    sage_error_flag = 1;
+    int i = 0;
+    while (msg[i] && i < 127) { sage_error_msg[i] = msg[i]; i++; }
+    sage_error_msg[i] = 0;
+}
+
 static void sage_skip_ws(void) {
     while (*sage_src == ' ' || *sage_src == '\t') sage_src++;
 }
@@ -166,9 +177,11 @@ static int64_t sage_parse_primary(void) {
 
         SageVar *v = sage_find_var(name);
         if (v && !v->is_string) return v->num_val;
+        sage_set_error("undefined variable");
         return 0;
     }
 
+    sage_set_error("syntax error in primary expression");
     return 0;
 }
 
@@ -178,9 +191,16 @@ static int64_t sage_parse_factor(void) {
     while (*sage_src == '*' || *sage_src == '/' || *sage_src == '%') {
         char op = *sage_src++;
         int64_t right = sage_parse_primary();
-        if (op == '*') left *= right;
-        else if (op == '/') left = right != 0 ? left / right : 0;
-        else left = right != 0 ? left % right : 0;
+        if (sage_error_flag) return 0;
+        if (op == '*') {
+            left *= right;
+        } else if (op == '/') {
+            if (right == 0) { sage_set_error("division by zero"); return 0; }
+            left /= right;
+        } else {
+            if (right == 0) { sage_set_error("modulo by zero"); return 0; }
+            left %= right;
+        }
         sage_skip_ws();
     }
     return left;
@@ -287,7 +307,84 @@ static int starts_kw(const char *s, const char *kw) {
     return *s == ' ' || *s == '(' || *s == 0;
 }
 
+static int sage_exec_line_internal(const char *line);
+
 static int sage_exec_line(const char *line) {
+    sage_error_flag = 0;
+    sage_error_msg[0] = 0;
+
+    sage_src = line;
+    sage_skip_ws();
+
+    if (starts_kw(sage_src, "try")) {
+        sage_src += 3;
+        sage_skip_ws();
+        char try_expr[128];
+        int ti = 0;
+        while (*sage_src && !starts_kw(sage_src, "catch") && ti < 127) {
+            try_expr[ti++] = *sage_src++;
+        }
+        try_expr[ti] = 0;
+
+        char catch_var[32];
+        catch_var[0] = 0;
+        char catch_expr[128];
+        catch_expr[0] = 0;
+
+        sage_skip_ws();
+        if (starts_kw(sage_src, "catch")) {
+            sage_src += 5;
+            sage_skip_ws();
+            if (*sage_src == '(') {
+                sage_src++;
+                sage_skip_ws();
+                int ci = 0;
+                while (sage_is_alpha(*sage_src) || sage_is_digit(*sage_src)) {
+                    if (ci < 31) catch_var[ci++] = *sage_src;
+                    sage_src++;
+                }
+                catch_var[ci] = 0;
+                sage_skip_ws();
+                if (*sage_src == ')') sage_src++;
+            }
+            sage_skip_ws();
+            int ei = 0;
+            while (*sage_src && ei < 127) {
+                catch_expr[ei++] = *sage_src++;
+            }
+            catch_expr[ei] = 0;
+        }
+
+        int r = sage_exec_line_internal(try_expr);
+        if (sage_error_flag) {
+            sage_error_flag = 0; // Clear it to handle catch
+            if (catch_var[0]) {
+                SageVar *v = sage_define_var(catch_var);
+                if (v) {
+                    v->is_string = 1;
+                    int j = 0;
+                    while (sage_error_msg[j] && j < 127) { v->str_val[j] = sage_error_msg[j]; j++; }
+                    v->str_val[j] = 0;
+                }
+            }
+            if (catch_expr[0]) {
+                return sage_exec_line_internal(catch_expr);
+            }
+        }
+        return r;
+    }
+
+    int ret = sage_exec_line_internal(line);
+    if (sage_error_flag) {
+        console_write("Exception: ");
+        console_write(sage_error_msg);
+        console_write("\n");
+        sage_error_flag = 0;
+    }
+    return ret;
+}
+
+static int sage_exec_line_internal(const char *line) {
     sage_src = line;
     sage_skip_ws();
 
@@ -319,8 +416,10 @@ static int sage_exec_line(const char *line) {
         } else {
             sage_src = save;
             int64_t val = sage_parse_expr();
-            SageVar *v = sage_define_var(name);
-            if (v) { v->num_val = val; v->is_string = 0; }
+            if (!sage_error_flag) {
+                SageVar *v = sage_define_var(name);
+                if (v) { v->num_val = val; v->is_string = 0; }
+            }
         }
         return 0;
     }
@@ -339,11 +438,11 @@ static int sage_exec_line(const char *line) {
         } else {
             sage_src = save;
             int64_t val = sage_parse_expr();
-            sage_print_int(val);
+            if (!sage_error_flag) sage_print_int(val);
         }
         sage_skip_ws();
         if (*sage_src == ')') sage_src++;
-        console_write("\n");
+        if (!sage_error_flag) console_write("\n");
         return 0;
     }
 
@@ -354,6 +453,7 @@ static int sage_exec_line(const char *line) {
         int64_t addr = sage_parse_expr();
         sage_skip_ws();
         if (*sage_src == ')') sage_src++;
+        if (sage_error_flag) return 0;
         volatile uint8_t *p = (volatile uint8_t *)(uintptr_t)addr;
         console_write("0x");
         console_hex64(*p);
@@ -371,6 +471,7 @@ static int sage_exec_line(const char *line) {
         int64_t val = sage_parse_expr();
         sage_skip_ws();
         if (*sage_src == ')') sage_src++;
+        if (sage_error_flag) return 0;
         volatile uint8_t *p = (volatile uint8_t *)(uintptr_t)addr;
         *p = (uint8_t)val;
         console_write("ok\n");
@@ -384,6 +485,7 @@ static int sage_exec_line(const char *line) {
         uint16_t port = (uint16_t)sage_parse_expr();
         sage_skip_ws();
         if (*sage_src == ')') sage_src++;
+        if (sage_error_flag) return 0;
         uint8_t val = inb(port);
         console_write("0x");
         console_hex64(val);
@@ -401,6 +503,7 @@ static int sage_exec_line(const char *line) {
         uint8_t val = (uint8_t)sage_parse_expr();
         sage_skip_ws();
         if (*sage_src == ')') sage_src++;
+        if (sage_error_flag) return 0;
         outb(port, val);
         console_write("ok\n");
         return 0;
@@ -418,8 +521,10 @@ static int sage_exec_line(const char *line) {
     } else {
         sage_src = save;
         int64_t val = sage_parse_expr();
-        sage_print_int(val);
-        console_write("\n");
+        if (!sage_error_flag) {
+            sage_print_int(val);
+            console_write("\n");
+        }
     }
     return 0;
 }

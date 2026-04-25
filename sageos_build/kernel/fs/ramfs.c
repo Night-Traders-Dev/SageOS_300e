@@ -17,6 +17,13 @@ static const char test_sage_source[] =
     "print(\"Hello, \" + name + \"!\")\n"
     "print(x + y)\n";
 
+static const char test_error_sage_source[] =
+    "print(\"Testing division by zero...\")\n"
+    "try let a = 10 / 0 catch (e) print(e)\n"
+    "print(\"Testing undefined var...\")\n"
+    "try print(undefined_var) catch (err) print(err)\n"
+    "print(\"Done.\")\n";
+
 /* -----------------------------------------------------------------------
  * File table
  * ----------------------------------------------------------------------- */
@@ -35,6 +42,7 @@ static const RamFile files[] = {
     {"/bin/hello",   (const char *)bin_hello, sizeof(bin_hello)},
     {"/proc/input",  "native-i8042-ps2\n", 0},
     {"/etc/test.sage", test_sage_source, 0},
+    {"/etc/test_err.sage", test_error_sage_source, 0},
 };
 
 /* -----------------------------------------------------------------------

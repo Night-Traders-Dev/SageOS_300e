@@ -279,6 +279,54 @@ int acpi_has_lid_device(void) {
     return g_acpi.has_lid_device;
 }
 
+static uint32_t search_amdi0040_base(uint64_t table) {
+    if (!table) return 0;
+    uint32_t len = mem32(table + 4);
+    if (len < 36) return 0;
+    
+    for (uint32_t i = 36; i + 8 < len; i++) {
+        if (mem8(table + i) == 'A' && mem8(table + i + 1) == 'M' &&
+            mem8(table + i + 2) == 'D' && mem8(table + i + 3) == 'I' &&
+            mem8(table + i + 4) == '0' && mem8(table + i + 5) == '0' &&
+            mem8(table + i + 6) == '4' && mem8(table + i + 7) == '0') {
+            
+            for (uint32_t j = i; j < i + 512 && j + 4 < len; j++) {
+                if (mem8(table + j) == '_' && mem8(table + j + 1) == 'C' &&
+                    mem8(table + j + 2) == 'R' && mem8(table + j + 3) == 'S') {
+                    
+                    for (uint32_t k = j; k < j + 128 && k + 12 < len; k++) {
+                        if (mem8(table + k) == 0x86 && mem8(table + k + 1) == 0x09 && mem8(table + k + 2) == 0x00) {
+                            return mem32(table + k + 4);
+                        }
+                        if (mem8(table + k) == 0x87 && mem8(table + k + 1) == 0x17 && mem8(table + k + 2) == 0x00) {
+                            return mem32(table + k + 8);
+                        }
+                        if (mem8(table + k) == 0x8A && mem8(table + k + 1) == 0x2B && mem8(table + k + 2) == 0x00) {
+                            return mem32(table + k + 14);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+uint32_t acpi_get_emmc_base(void) {
+    uint32_t base = search_amdi0040_base(g_acpi.dsdt);
+    if (base) return base;
+    
+    for (uint32_t i = 0; i < g_acpi.table_count; i++) {
+        uint64_t table = g_acpi.xsdt ? mem64(g_acpi.root + 36 + i * 8) : mem32(g_acpi.root + 36 + i * 4);
+        if (!table) continue;
+        if (sig4(table, "SSDT")) {
+            base = search_amdi0040_base(table);
+            if (base) return base;
+        }
+    }
+    return 0;
+}
+
 void acpi_cmd_lid(void) {
     console_write("\nLid Device:");
     console_write("\n  detected: ");

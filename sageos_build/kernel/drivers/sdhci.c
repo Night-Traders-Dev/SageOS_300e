@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include "console.h"
 #include "pci.h"
+#include "acpi.h"
 #include "sdhci.h"
 
 /* -----------------------------------------------------------------------
@@ -18,6 +19,7 @@
  * ----------------------------------------------------------------------- */
 
 static int       sdhci_found = 0;
+static int       sdhci_is_acpi = 0;
 static uint32_t  sdhci_bar0  = 0;
 static uint16_t  sdhci_vendor = 0;
 static uint16_t  sdhci_device = 0;
@@ -31,6 +33,7 @@ static uint8_t   sdhci_func  = 0;
 
 int sdhci_init(void) {
     sdhci_found = 0;
+    sdhci_is_acpi = 0;
 
     /* Search PCI for class 08:05 (SD Host Controller) */
     const PciDevice *d = pci_find_class(SDHCI_PCI_CLASS, SDHCI_PCI_SUBCLASS);
@@ -45,8 +48,16 @@ int sdhci_init(void) {
         return 1;
     }
 
-    /* The AMD Stoney Ridge eMMC may use ACPI-based discovery (sdhci-acpi)
-       instead of standard PCI.  Future: probe ACPI DSDT for AMDI0040. */
+    /* The AMD Stoney Ridge eMMC uses ACPI-based discovery (sdhci-acpi AMDI0040)
+       instead of standard PCI. Probe ACPI DSDT/SSDT. */
+    uint32_t acpi_base = acpi_get_emmc_base();
+    if (acpi_base) {
+        sdhci_found = 1;
+        sdhci_is_acpi = 1;
+        sdhci_bar0 = acpi_base;
+        return 1;
+    }
+
     return 0;
 }
 
@@ -78,32 +89,31 @@ void sdhci_cmd_info(void) {
     console_write("\nSDHCI / eMMC Controller Status:");
 
     if (!sdhci_found) {
-        console_write("\n  Not found via PCI enumeration.");
-        console_write("\n  The AMD Stoney Ridge eMMC may use ACPI (sdhci-acpi).");
-        console_write("\n  Future: probe ACPI DSDT for AMDI0040 device.");
+        console_write("\n  Not found via PCI enumeration or ACPI AMDI0040.");
         return;
     }
 
-    console_write("\n  Found: ");
-    print_hex16(sdhci_vendor);
-    console_write(":");
-    print_hex16(sdhci_device);
+    if (sdhci_is_acpi) {
+        console_write("\n  Found via ACPI AML (AMDI0040)");
+    } else {
+        console_write("\n  Found via PCI: ");
+        print_hex16(sdhci_vendor);
+        console_write(":");
+        print_hex16(sdhci_device);
 
-    console_write("\n  PCI location: ");
-    print_hex8_s(sdhci_bus);
-    console_write(":");
-    print_hex8_s(sdhci_dev);
-    console_write(".");
-    char fc = '0' + sdhci_func;
-    console_putc(fc);
+        console_write("\n  PCI location: ");
+        print_hex8_s(sdhci_bus);
+        console_write(":");
+        print_hex8_s(sdhci_dev);
+        console_write(".");
+        char fc = '0' + sdhci_func;
+        console_putc(fc);
+    }
 
     console_write("\n  BAR0 (MMIO base): ");
     console_hex64(sdhci_bar0);
 
     if (sdhci_bar0 != 0) {
-        /* Read capabilities from MMIO — only safe if BAR is mapped.
-           In early kernel with identity-mapped lower memory or UEFI
-           boot services active, direct MMIO reads may work.  Be cautious. */
         console_write("\n  (MMIO registers not read — paging/mapping TBD)");
     }
 

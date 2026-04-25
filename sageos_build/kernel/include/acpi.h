@@ -48,4 +48,6 @@ int acpi_has_lid_device(void);
 void acpi_enable_sci(void);
 void acpi_check_events(void);
 
+uint32_t acpi_get_emmc_base(void);
+
 #endif

@@ -51,7 +51,7 @@
 #define PF_R          0x4  /* Read */
 
 /* Allowed virtual address range for loaded ELF segments */
-#define ELF_VADDR_MIN 0x400000ULL
+#define ELF_VADDR_MIN 0x200000ULL
 #define ELF_VADDR_MAX 0x10000000ULL
 
 /* -----------------------------------------------------------------------

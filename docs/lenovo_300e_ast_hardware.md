@@ -8,6 +8,8 @@ Sources checked:
   https://chromium.googlesource.com/chromiumos/platform/ec/+/HEAD/include/ec_commands.h
 - UEFI ACPI 6.5 battery specification:
   https://uefi.org/specs/ACPI/6.5/10_Power_Source_and_Power_Meter_Devices.html
+- Linux kernel `/proc/stat` CPU accounting documentation:
+  https://www.kernel.org/doc/html/latest/filesystems/proc.html
 - Linux Wireless ath10k firmware documentation:
   https://wireless.docs.kernel.org/en/latest/en/users/drivers/ath10k/firmware.html
 
@@ -64,8 +66,9 @@ batteries, percent is remaining capacity divided by last full charge capacity.
 
 ## Wi-Fi And Networking
 
-The target Wi-Fi device is Qualcomm QCA6174A. Linux supports this family with
-`ath10k`, and QCA6174 hw3.0 uses the ath10k firmware API 6 path.
+The target Wi-Fi device is Qualcomm QCA6174A. The expected PCI ID for this
+family is `168c:003e`. Linux supports it with `ath10k`, and QCA6174 hw3.0 uses
+the ath10k firmware API 6 path.
 
 Driver bring-up order for SageOS:
 

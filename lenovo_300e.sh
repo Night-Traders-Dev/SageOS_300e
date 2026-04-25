@@ -233,25 +233,30 @@ qemu_run() {
     pkill -9 -f qemu-system-x86_64 >/dev/null 2>&1 || true
     restore_tty
 
+    # -cpu Skylake-Client
+    #   Exposes CPUID leaf 0x16 (processor frequency information) so
+    #   sysinfo can read base/max MHz directly instead of falling back
+    #   to RDTSC calibration.  Skylake-Client matches the ISA level of
+    #   the Celeron N4020 (Gemini Lake, which is Goldmont Plus — a
+    #   close enough model for diagnostic purposes).
+    #
     # -device isa-debug-exit,iobase=0x501,iosize=2
-    #   Exposes a 2-byte I/O port at 0x501.  Writing any value causes QEMU
-    #   to exit with code ((value<<1)|1).  The kernel's power_qemu_exit()
-    #   writes 0x00, so the process exits with code 1.
-    #   On real hardware this port is unassigned; the outb is ignored.
+    #   Allows the kernel 'exit' command to terminate QEMU cleanly.
+    #   Writing 0x00 to port 0x501 exits with code 1.
     #
     # -drive id=hd0,...,media=disk
-    #   'media=disk' suppresses the OVMF "Disk device is ..." diagnostic
-    #   that appeared when the media type was left unspecified.
+    #   Suppresses OVMF's "Disk device is ..." probe diagnostic.
     if ! qemu-system-x86_64 \
       -bios "$ovmf" \
+      -cpu Skylake-Client \
       -drive id=hd0,file="$IMG",format=raw,media=disk,snapshot=on \
       -m 256M \
       -nographic \
       -monitor none \
       -serial stdio \
       -device isa-debug-exit,iobase=0x501,iosize=2; then
-        # exit code 1 is the normal 'exit' command path (value=0 => (0<<1)|1 = 1)
         local rc=$?
+        # rc=1 is the normal 'exit' command path (write 0x00 => (0<<1)|1 = 1)
         if [ "$rc" -ne 1 ]; then
             restore_tty
             return "$rc"

@@ -14,6 +14,9 @@
 #include "battery.h"
 #include "sysinfo.h"
 #include "serial.h"
+#include "pci.h"
+#include "sdhci.h"
+#include "elf.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) { if (*a != *b) return 0; a++; b++; }
@@ -48,9 +51,10 @@ static int  shell_history_nav;
 static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
     "acpi tables", "battery", "cat", "clear", "color", "dmesg", "echo",
-    "exit", "fb", "halt", "help", "input", "keydebug", "ls", "poweroff",
-    "reboot", "shutdown", "smp", "smp start", "status", "stop", "suspend",
-    "sysinfo", "timer", "uname", "version",
+    "execelf", "exit", "fb", "halt", "help", "input", "keydebug", "ls",
+    "pci", "poweroff", "reboot", "sage", "sdhci", "shutdown", "smp",
+    "smp start", "status", "stop", "suspend", "sysinfo", "timer",
+    "uname", "version",
 };
 
 #define SHELL_CMD_COUNT (sizeof(shell_commands) / sizeof(shell_commands[0]))
@@ -292,9 +296,12 @@ static void help(void) {
     console_write("\n  acpi madt         show MADT/APIC fields");
     console_write("\n  battery           show battery/EC detector");
     console_write("\n  keydebug          raw keyboard scancode monitor");
+    console_write("\n  pci               list PCI devices");
+    console_write("\n  sdhci             eMMC/SD controller info");
     console_write("\n  ls                list RAMFS and FAT32 root");
     console_write("\n  cat <path>        print RAMFS or FAT32 file");
     console_write("\n  execelf <path>    execute ELF binary");
+    console_write("\n  sage              interactive SageLang REPL");
     console_write("\n  sage <module>     execute SageLang module");
     console_write("\n  echo <text>       print text");
     console_write("\n  color <name>      white green amber blue red");
@@ -342,8 +349,8 @@ static void exec(const char *cmd) {
     if (streq(cmd, "")) return;
     if (starts_word(cmd, "help"))         { help(); return; }
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
-    if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel 0.1.1 modular x86_64"); return; }
-    if (starts_word(cmd, "uname"))        { console_write("\nSageOS sageos 0.1.1 x86_64 lenovo_300e"); return; }
+    if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel 0.1.2 modular x86_64"); return; }
+    if (starts_word(cmd, "uname"))        { console_write("\nSageOS sageos 0.1.2 x86_64 lenovo_300e"); return; }
     if (starts_word(cmd, "about"))        { console_write("\nSageOS is a small POSIX-inspired OS target."); console_write("\nCurrent phase: modular kernel and hardware diagnostics."); return; }
     if (starts_word(cmd, "fb"))           { cmd_fb(); return; }
     if (starts_word(cmd, "input"))        { console_write("\nInput backend: "); console_write(keyboard_backend()); console_write("\nUse keydebug to inspect raw scancodes."); return; }
@@ -360,6 +367,8 @@ static void exec(const char *cmd) {
     if (starts_word(cmd, "acpi battery")) { acpi_cmd_battery(); return; }
     if (starts_word(cmd, "acpi"))         { acpi_cmd_summary(); return; }
     if (starts_word(cmd, "keydebug"))     { keyboard_keydebug(); return; }
+    if (starts_word(cmd, "pci"))          { pci_cmd_info(); return; }
+    if (starts_word(cmd, "sdhci"))        { sdhci_cmd_info(); return; }
     if (starts_word(cmd, "exit"))         { power_qemu_exit(); return; }
     if (starts_with(cmd, "ls")) {
         const char *path = arg_after(cmd, "ls");
@@ -380,15 +389,14 @@ static void exec(const char *cmd) {
     if (starts_with(cmd, "execelf")) {
         const char *path = arg_after(cmd, "execelf");
         if (!*path) { console_write("\nusage: execelf <path>"); return; }
-        const char *data = ramfs_find(path);
-        if (!data) { console_write("\nexecelf: no such file: "); console_write(path); return; }
-        extern void elf_exec(const void *data);
-        elf_exec(data);
+        const char *file_data;
+        uint64_t file_size = ramfs_find_size(path, &file_data);
+        if (!file_data) { console_write("\nexecelf: no such file: "); console_write(path); return; }
+        elf_exec(file_data, file_size);
         return;
     }
     if (starts_with(cmd, "sage")) {
         const char *mod = arg_after(cmd, "sage");
-        if (!*mod) { console_write("\nusage: sage <module>"); return; }
         extern void sage_execute(const char *module_name);
         sage_execute(mod);
         return;

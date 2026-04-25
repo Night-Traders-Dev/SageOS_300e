@@ -11,6 +11,8 @@
 #include "idt.h"
 #include "vfs.h"
 #include "fat32.h"
+#include "pci.h"
+#include "sdhci.h"
 
 extern int fat32_init(void);
 
@@ -61,15 +63,22 @@ void kmain(SageOSBootInfo *info) {
     vfs_init();
     fat32_init();
 
+    /* PCI bus enumeration — discovers AMD SoC, QCA6174A Wi-Fi, eMMC */
+    pci_enumerate();
+    sdhci_init();
+
     keyboard_init();
     status_init();
 
     banner();
 
-    console_write("SageOS modular kernel v0.1.1 entered.\n");
+    console_write("SageOS modular kernel v0.1.2 entered.\n");
     console_write("Framebuffer console online.\n");
     console_write("Keyboard backend: ");
     console_write(keyboard_backend());
+    console_write("\n");
+    console_write("PCI devices: ");
+    console_u32((uint32_t)pci_device_count());
     console_write("\n");
     console_write("Type help to list commands.\n");
 

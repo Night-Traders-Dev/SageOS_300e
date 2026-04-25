@@ -145,7 +145,6 @@ void sage_printf(const char *fmt, ...) {
         case 'd': { int v = __builtin_va_arg(ap, int); if (v < 0) { console_putc('-'); put_uint((uint64_t)(-(int64_t)v)); } else put_uint((uint64_t)v); break; }
         case 'u': { unsigned v = __builtin_va_arg(ap, unsigned); put_uint(v); break; }
         case 'c': { int c = __builtin_va_arg(ap, int); console_putc((char)c); break; }
-        case 'f': { double v = __builtin_va_arg(ap, double); if (v < 0) { console_putc('-'); v = -v; } put_uint((uint64_t)v); console_putc('.'); double f = v - (double)((uint64_t)v); for (int i = 0; i < 6; i++) { f *= 10.0; console_putc('0' + (char)((int)f)); f -= (int)f; } break; }
         case '%': console_putc('%'); break;
         case 0: goto done;
         default: console_putc('%'); console_putc(*fmt); break;
@@ -178,29 +177,7 @@ volatile int sage_exit_flag = 0;
 int sage_exit_code = 0;
 void sage_exit(int code) { sage_exit_flag = 1; sage_exit_code = code; }
 
-/* --- Math --- */
-double sage_fmod(double x, double y) { if (y == 0.0) return 0.0; return x - (double)((int64_t)(x / y)) * y; }
-double sage_fabs(double x) { return x < 0 ? -x : x; }
-double sage_floor(double x) { int64_t i = (int64_t)x; return (double)(x < (double)i ? i - 1 : i); }
-double sage_ceil(double x) { int64_t i = (int64_t)x; return (double)(x > (double)i ? i + 1 : i); }
-double sage_pow(double b, double e) {
-    if (e == (double)(int64_t)e) { int64_t n = (int64_t)e; double r = 1.0; int neg = 0; if (n < 0) { neg = 1; n = -n; } while (n > 0) { if (n & 1) r *= b; b *= b; n >>= 1; } return neg ? 1.0 / r : r; }
-    return 0.0;
-}
-double sage_sqrt(double x) {
-    if (x <= 0.0) return 0.0;
-    double g = x / 2.0; for (int i = 0; i < 50; i++) g = (g + x / g) / 2.0; return g;
-}
-
-double sage_strtod(const char *s, char **end) {
-    double r = 0.0; int sg = 1;
-    while (*s == ' ') s++;
-    if (*s == '-') { sg = -1; s++; } else if (*s == '+') s++;
-    while (*s >= '0' && *s <= '9') { r = r * 10.0 + (*s - '0'); s++; }
-    if (*s == '.') { s++; double f = 0.1; while (*s >= '0' && *s <= '9') { r += (*s - '0') * f; f *= 0.1; s++; } }
-    if (end) *end = (char *)s;
-    return r * sg;
-}
+/* --- Integer math / char classification --- */
 
 int sage_atoi(const char *s) { int r = 0, sg = 1; while (*s == ' ') s++; if (*s == '-') { sg = -1; s++; } while (*s >= '0' && *s <= '9') { r = r * 10 + (*s - '0'); s++; } return r * sg; }
 
@@ -208,3 +185,4 @@ int sage_isdigit(int c) { return c >= '0' && c <= '9'; }
 int sage_isalpha(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 int sage_isalnum(int c) { return sage_isdigit(c) || sage_isalpha(c); }
 int sage_isspace(int c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+

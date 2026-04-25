@@ -3,6 +3,7 @@
 #include "compiler/parser.h"
 #include "compiler/bytecode.h"
 #include "metal_vm.h"
+#include "console.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -103,6 +104,10 @@ void sage_repl_step(const char* line) {
 }
 
 void sage_execute(const char* line) {
+    if (!line || !*line) {
+        printf("Sage REPL: Use 'sage <code>' to execute Sage code.\n");
+        return;
+    }
     sage_repl_step(line);
 }
 

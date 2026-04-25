@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include "value.h"
 #include "gc.h"
+#include "console.h"
 
 
 // ========== VALUE CONSTRUCTORS ==========

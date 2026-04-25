@@ -251,9 +251,12 @@ void console_clear(void) {
     col = 0;
 
     if (g_have_fb && g_info) {
-        fill_rect(0, 0, g_info->width, g_info->height, bg);
+        // Clear from below the status bar to preserve it
+        uint32_t status_height = status_rows * char_h;
+        fill_rect(0, status_height, g_info->width, g_info->height - status_height, bg);
     } else {
-        for (size_t y = 0; y < VGA_H; y++)
+        // For VGA, clear from below status_rows
+        for (size_t y = status_rows; y < VGA_H; y++)
             for (size_t x = 0; x < VGA_W; x++)
                 VGA_MEM[y * VGA_W + x] = ((uint16_t)0x0F << 8) | ' ';
     }

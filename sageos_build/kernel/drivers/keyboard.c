@@ -280,6 +280,96 @@ static int firmware_poll_char(char *out) {
     return 1;
 }
 
+static int parse_serial_escape(KeyEvent *ev) {
+    char next;
+    int wait = 0;
+
+    while (wait++ < 2000) {
+        if (serial_poll_char(&next)) {
+            break;
+        }
+
+        status_tick_poll();
+        cpu_hlt();
+    }
+
+    if (next != '[') {
+        ev->scancode = 0;
+        ev->pressed = 1;
+        ev->extended = 0;
+        ev->ascii = 27;
+        return 1;
+    }
+
+    wait = 0;
+    while (wait++ < 2000) {
+        if (serial_poll_char(&next)) {
+            break;
+        }
+
+        status_tick_poll();
+        cpu_hlt();
+    }
+
+    if (next == 'A') {
+        ev->scancode = 0x48;
+        ev->pressed = 1;
+        ev->extended = 1;
+        ev->ascii = 0;
+        return 1;
+    }
+
+    if (next == 'B') {
+        ev->scancode = 0x50;
+        ev->pressed = 1;
+        ev->extended = 1;
+        ev->ascii = 0;
+        return 1;
+    }
+
+    if (next == 'C') {
+        ev->scancode = 0x4D;
+        ev->pressed = 1;
+        ev->extended = 1;
+        ev->ascii = 0;
+        return 1;
+    }
+
+    if (next == 'D') {
+        ev->scancode = 0x4B;
+        ev->pressed = 1;
+        ev->extended = 1;
+        ev->ascii = 0;
+        return 1;
+    }
+
+    if (next == '3') {
+        wait = 0;
+        while (wait++ < 2000) {
+            if (serial_poll_char(&next)) {
+                break;
+            }
+
+            status_tick_poll();
+            cpu_hlt();
+        }
+
+        if (next == '~') {
+            ev->scancode = 0x53;
+            ev->pressed = 1;
+            ev->extended = 1;
+            ev->ascii = 0;
+            return 1;
+        }
+    }
+
+    ev->scancode = 0;
+    ev->pressed = 1;
+    ev->extended = 0;
+    ev->ascii = 27;
+    return 1;
+}
+
 int keyboard_poll_event(KeyEvent *ev) {
     uint8_t sc;
 
@@ -410,6 +500,10 @@ int keyboard_wait_event(KeyEvent *ev) {
         }
 
         if (serial_poll_char(&serial_c)) {
+            if (serial_c == 27) {
+                return parse_serial_escape(ev);
+            }
+
             ev->scancode = 0;
             ev->pressed = 1;
             ev->extended = 0;
@@ -443,6 +537,10 @@ int keyboard_wait_event(KeyEvent *ev) {
         }
 
         if (serial_poll_char(&serial_c)) {
+            if (serial_c == 27) {
+                return parse_serial_escape(ev);
+            }
+
             ev->scancode = 0;
             ev->pressed = 1;
             ev->extended = 0;

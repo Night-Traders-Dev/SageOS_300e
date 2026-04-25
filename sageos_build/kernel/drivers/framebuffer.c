@@ -110,6 +110,17 @@ static uint32_t pack_rgb(uint32_t rgb) {
     return ((uint32_t)b) | ((uint32_t)g_c << 8) | ((uint32_t)r << 16);
 }
 
+static void my_memset32(void *dest, uint32_t val, size_t count) {
+    uint32_t *p = (uint32_t *)dest;
+    while (count--) *p++ = val;
+}
+
+static void my_memcpy32(void *dest, const void *src, size_t count) {
+    uint32_t *d = (uint32_t *)dest;
+    const uint32_t *s = (const uint32_t *)src;
+    while (count--) *d++ = *s++;
+}
+
 static void fb_putpixel(uint32_t x, uint32_t y, uint32_t rgb) {
     if (!g_have_fb || !g_info) return;
     if (x >= g_info->width || y >= g_info->height) return;
@@ -118,9 +129,14 @@ static void fb_putpixel(uint32_t x, uint32_t y, uint32_t rgb) {
 }
 
 static void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t rgb) {
-    for (uint32_t yy = 0; yy < h; yy++)
-        for (uint32_t xx = 0; xx < w; xx++)
-            fb_putpixel(x + xx, y + yy, rgb);
+    if (!g_have_fb || !g_info) return;
+    uint32_t packed = pack_rgb(rgb);
+    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
+    uint32_t pitch = g_info->pixels_per_scanline;
+
+    for (uint32_t yy = 0; yy < h; yy++) {
+        my_memset32((void *)(fb + (uint64_t)(y + yy) * pitch + x), packed, w);
+    }
 }
 
 static const uint8_t *glyph(char ch) {
@@ -236,12 +252,19 @@ static void scroll(void) {
     uint32_t pitch = g_info->pixels_per_scanline;
     uint32_t h = g_info->height;
     uint32_t w = g_info->width;
-    for (uint32_t y = status_rows * char_h; y < h; y++)
-        for (uint32_t x = 0; x < w; x++)
-            fb[(uint64_t)(y - char_h) * pitch + x] = fb[(uint64_t)y * pitch + x];
-    for (uint32_t y = h - char_h; y < h; y++)
-        for (uint32_t x = 0; x < w; x++)
-            fb[(uint64_t)y * pitch + x] = pack_rgb(bg);
+    uint32_t status_height = status_rows * char_h;
+
+    for (uint32_t y = status_height + char_h; y < h; y++) {
+        my_memcpy32((void *)(fb + (uint64_t)(y - char_h) * pitch),
+                    (void *)(fb + (uint64_t)y * pitch),
+                    w);
+    }
+
+    uint32_t bg_packed = pack_rgb(bg);
+    for (uint32_t y = h - char_h; y < h; y++) {
+        my_memset32((void *)(fb + (uint64_t)y * pitch), bg_packed, w);
+    }
+
     if (row > status_rows) row--;
 }
 
@@ -250,9 +273,14 @@ void console_clear(void) {
     col = 0;
 
     if (g_have_fb && g_info) {
-        // Clear from below the status bar to preserve it
         uint32_t status_height = status_rows * char_h;
-        fill_rect(0, status_height, g_info->width, g_info->height - status_height, bg);
+        uint32_t bg_packed = pack_rgb(bg);
+        volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
+        uint32_t pitch = g_info->pixels_per_scanline;
+
+        for (uint32_t y = status_height; y < g_info->height; y++) {
+            my_memset32((void *)(fb + (uint64_t)y * pitch), bg_packed, g_info->width);
+        }
     } else {
         // For VGA, clear from below status_rows
         for (size_t y = status_rows; y < VGA_H; y++)

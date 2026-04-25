@@ -53,7 +53,7 @@ static int  shell_history_nav;
 static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
     "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
-    "execelf", "exit", "fb", "halt", "help", "input", "keydebug", "ls",
+    "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
     "neofetch", "pci", "poweroff", "reboot", "sage", "sdhci", "shutdown", "smp",
     "smp start", "status", "stop", "suspend", "sysinfo", "timer",
     "uname", "version",
@@ -291,6 +291,7 @@ static void help(void) {
     console_write("\n  Ctrl-C            cancel current line");
     console_write("\n  fb                framebuffer info");
     console_write("\n  input             input backend info");
+    console_write("\n  install           install to local drive");
     console_write("\n  status            show top-bar metrics");
     console_write("\n  timer             show PIT timer info");
     console_write("\n  smp               show CPU/APIC discovery");
@@ -350,6 +351,7 @@ static void exec(const char *cmd) {
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
     if (starts_word(cmd, "neofetch"))     { cmd_neofetch(); return; }
     if (starts_word(cmd, "btop"))         { cmd_btop(); return; }
+    if (starts_word(cmd, "install"))      { cmd_install(); return; }
     if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel " SAGEOS_VERSION " modular x86_64"); return; }
     if (starts_word(cmd, "uname"))        { console_write("\nSageOS sageos " SAGEOS_VERSION " x86_64 lenovo_300e"); return; }
     if (starts_word(cmd, "about"))        { console_write("\nSageOS is a small POSIX-inspired OS target."); console_write("\nCurrent phase: modular kernel and hardware diagnostics."); return; }

@@ -31,3 +31,25 @@ void ata_read_sector(uint32_t lba, uint16_t *buffer) {
         buffer[i] = inw(ATA_PRIMARY_DATA);
     }
 }
+
+void ata_write_sector(uint32_t lba, const uint16_t *buffer) {
+    outb(ATA_PRIMARY_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
+    outb(ATA_PRIMARY_SECCOUNT, 1);
+    outb(ATA_PRIMARY_LBA_LOW, (uint8_t)lba);
+    outb(ATA_PRIMARY_LBA_MID, (uint8_t)(lba >> 8));
+    outb(ATA_PRIMARY_LBA_HIGH, (uint8_t)(lba >> 16));
+    outb(ATA_PRIMARY_COMMAND, 0x30); /* Write sectors */
+
+    while (!(inb(ATA_PRIMARY_STATUS) & 0x08)) {
+        cpu_pause();
+    }
+
+    for (int i = 0; i < 256; i++) {
+        outw(ATA_PRIMARY_DATA, buffer[i]);
+    }
+
+    /* Wait for disk to finish writing */
+    while (inb(ATA_PRIMARY_STATUS) & 0x80) {
+        cpu_pause();
+    }
+}

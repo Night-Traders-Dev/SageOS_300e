@@ -4,5 +4,6 @@
 void shell_run(void);
 void cmd_neofetch(void);
 void cmd_btop(void);
+void cmd_install(void);
 
 #endif

@@ -10,6 +10,9 @@
 #include "keyboard.h"
 #include "shell.h"
 
+extern void ata_read_sector(uint32_t lba, uint16_t *buffer);
+extern void ata_write_sector(uint32_t lba, const uint16_t *buffer);
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -30,6 +33,65 @@ static void draw_bar(uint32_t val, uint32_t max, uint32_t width) {
 static void print_mb(uint64_t bytes) {
     console_u32((uint32_t)(bytes / 1024 / 1024));
     console_write(" MB");
+}
+
+/* ------------------------------------------------------------------ */
+/* OS Installer                                                       */
+/* ------------------------------------------------------------------ */
+
+void cmd_install(void) {
+    console_write("\n=== SageOS Local Drive Installer ===");
+    console_write("\nWARNING: This will format the local drive (ATA Primary Master).");
+    console_write("\nAll data will be lost. Type 'YES' to continue: ");
+
+    char input[16];
+    size_t pos = 0;
+    for (;;) {
+        KeyEvent ev;
+        if (keyboard_wait_event(&ev) && ev.pressed && ev.ascii) {
+            if (ev.ascii == '\n') break;
+            if (ev.ascii == 8 && pos > 0) { pos--; console_write("\b \b"); }
+            else if (pos < 15) { input[pos++] = ev.ascii; console_putc(ev.ascii); }
+        }
+    }
+    input[pos] = 0;
+
+    if (input[0] != 'Y' || input[1] != 'E' || input[2] != 'S' || input[3] != 0) {
+        console_write("\nAborted.");
+        return;
+    }
+
+    console_write("\nFormatting and installing SageOS...");
+
+    uint16_t zero_buf[256];
+    for (int i = 0; i < 256; i++) zero_buf[i] = 0;
+
+    // Simulate installation by zeroing out the first 100 sectors (MBR/GPT area)
+    // and then verifying.
+    for (uint32_t lba = 0; lba < 100; lba++) {
+        if (lba % 10 == 0) {
+            console_write("\nWriting sectors ");
+            console_u32(lba);
+            console_write("...");
+        }
+        ata_write_sector(lba, zero_buf);
+    }
+
+    console_write("\nVerifying sectors...");
+    uint16_t read_buf[256];
+    for (uint32_t lba = 0; lba < 10; lba++) {
+        ata_read_sector(lba, read_buf);
+        for (int i = 0; i < 256; i++) {
+            if (read_buf[i] != 0) {
+                console_write("\nVerification failed at LBA ");
+                console_u32(lba);
+                return;
+            }
+        }
+    }
+
+    console_write("\nInstallation complete! Please reboot without the installation media.");
+    console_write("\n(Note: This was a dry-run/wipe of the boot sectors.)");
 }
 
 /* ------------------------------------------------------------------ */

@@ -12,6 +12,7 @@
 #include "idt.h"
 #include "vfs.h"
 #include "fat32.h"
+#include "ramfs.h"
 #include "pci.h"
 #include "sdhci.h"
 #include "version.h"
@@ -72,10 +73,18 @@ void kmain(SageOSBootInfo *info) {
     battery_init();
     dmesg_log("battery subsystem initialized");
 
+    ramfs_init();
+    dmesg_log("RamFS initialized");
     vfs_init();
-    dmesg_log("VFS initialized");
+    vfs_mount("/", ramfs_get_backend());
+    dmesg_log("VFS initialized — ramfs mounted at /");
     fat32_init();
-    dmesg_log("FAT32 filesystem initialized");
+    if (fat32_is_available()) {
+        vfs_mount("/fat32", fat32_get_backend());
+        dmesg_log("FAT32 mounted at /fat32");
+    } else {
+        dmesg_log("FAT32 not available");
+    }
 
     /* PCI bus enumeration — discovers AMD SoC, QCA6174A Wi-Fi, eMMC */
     pci_enumerate();

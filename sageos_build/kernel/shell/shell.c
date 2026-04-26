@@ -4,6 +4,7 @@
 #include "keyboard.h"
 #include "ramfs.h"
 #include "fat32.h"
+#include "vfs.h"
 #include "power.h"
 #include "bootinfo.h"
 #include "shell.h"
@@ -55,9 +56,9 @@ static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
     "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
     "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
-    "neofetch", "pci", "poweroff", "reboot", "sage", "sageshell", "sdhci",
-    "shutdown", "smp", "smp start", "status", "stop", "suspend", "sysinfo",
-    "timer", "uname", "version",
+    "mkdir", "neofetch", "pci", "poweroff", "reboot", "rm", "sage", "sageshell",
+    "sdhci", "shutdown", "smp", "smp start", "stat", "status", "stop", "suspend",
+    "sysinfo", "timer", "touch", "uname", "version", "write",
 };
 
 #define SHELL_CMD_COUNT (sizeof(shell_commands) / sizeof(shell_commands[0]))
@@ -309,8 +310,13 @@ static void help(void) {
     console_write("\n  keydebug          raw keyboard scancode monitor");
     console_write("\n  pci               list PCI devices");
     console_write("\n  sdhci             eMMC/SD controller info");
-    console_write("\n  ls                list RAMFS and FAT32 root");
-    console_write("\n  cat <path>        print RAMFS or FAT32 file");
+    console_write("\n  ls [path]         list directory (default: /)");
+    console_write("\n  cat <path>        print file contents");
+    console_write("\n  mkdir <path>      create a directory");
+    console_write("\n  touch <path>      create an empty file");
+    console_write("\n  rm <path>         remove a file or empty directory");
+    console_write("\n  stat <path>       show file/directory info");
+    console_write("\n  write <path> <text>  write text to a file");
     console_write("\n  execelf <path>    execute ELF binary");
     console_write("\n  sage              interactive SageLang REPL");
     console_write("\n  sage <code>       execute one Sage statement");
@@ -382,18 +388,81 @@ static void exec(const char *cmd) {
     if (starts_word(cmd, "exit"))         { power_qemu_exit(); return; }
     if (starts_with(cmd, "ls")) {
         const char *path = arg_after(cmd, "ls");
-        if (*path && !streq(path, "/")) { console_write("\nusage: ls [/path]"); return; }
-        if (fat32_is_available()) fat32_ls();
-        ramfs_ls();
+        if (!*path) path = "/";
+        vfs_ls(path);
         return;
     }
     if (starts_with(cmd, "cat")) {
         const char *path = arg_after(cmd, "cat");
         if (!*path) { console_write("\nusage: cat <path>"); return; }
-        if (fat32_is_available() && fat32_cat(path)) return;
-        const char *data = ramfs_find(path);
-        if (!data) { console_write("\ncat: no such file: "); console_write(path); return; }
-        console_write("\n"); console_write(data);
+        /* Read in 512-byte chunks and print */
+        char buf[513];
+        uint64_t off = 0;
+        int first = 1;
+        while (1) {
+            int n = vfs_read(path, off, buf, 512);
+            if (n < 0) {
+                if (first) { console_write("\ncat: "); console_write(path); console_write(": "); console_write(vfs_strerror(n)); }
+                break;
+            }
+            if (n == 0) break;
+            if (first) { console_write("\n"); first = 0; }
+            buf[n] = 0;
+            console_write(buf);
+            off += (uint64_t)n;
+        }
+        return;
+    }
+    if (starts_with(cmd, "mkdir")) {
+        const char *path = arg_after(cmd, "mkdir");
+        if (!*path) { console_write("\nusage: mkdir <path>"); return; }
+        int r = vfs_mkdir(path);
+        if (r < 0) { console_write("\nmkdir: "); console_write(vfs_strerror(r)); }
+        return;
+    }
+    if (starts_with(cmd, "touch")) {
+        const char *path = arg_after(cmd, "touch");
+        if (!*path) { console_write("\nusage: touch <path>"); return; }
+        int r = vfs_create(path);
+        if (r < 0 && r != VFS_EEXIST) { console_write("\ntouch: "); console_write(vfs_strerror(r)); }
+        return;
+    }
+    if (starts_with(cmd, "rm")) {
+        const char *path = arg_after(cmd, "rm");
+        if (!*path) { console_write("\nusage: rm <path>"); return; }
+        int r = vfs_unlink(path);
+        if (r < 0) { console_write("\nrm: "); console_write(vfs_strerror(r)); }
+        return;
+    }
+    if (starts_word(cmd, "stat")) {
+        const char *path = arg_after(cmd, "stat");
+        if (!*path) { console_write("\nusage: stat <path>"); return; }
+        VfsStat st;
+        int r = vfs_stat(path, &st);
+        if (r < 0) { console_write("\nstat: "); console_write(path); console_write(": "); console_write(vfs_strerror(r)); return; }
+        console_write("\n  File: "); console_write(st.name);
+        console_write("\n  Type: "); console_write(st.type == VFS_DIRECTORY ? "directory" : (st.type == VFS_SYMLINK ? "symlink" : "file"));
+        console_write("\n  Size: "); console_u32((uint32_t)st.size); console_write(" B");
+        return;
+    }
+    if (starts_with(cmd, "write")) {
+        /* write <path> <content> */
+        const char *rest = arg_after(cmd, "write");
+        if (!*rest) { console_write("\nusage: write <path> <content>"); return; }
+        /* Split path and content */
+        const char *p = rest;
+        while (*p && *p != ' ') p++;
+        char wpath[256];
+        int plen = (int)(p - rest);
+        if (plen >= 256) plen = 255;
+        for (int i = 0; i < plen; i++) wpath[i] = rest[i];
+        wpath[plen] = 0;
+        const char *content = (*p == ' ') ? p + 1 : "";
+        int clen = 0; const char *c = content; while (*c) { clen++; c++; }
+        /* Create if needed, then write */
+        vfs_create(wpath); /* ignore EEXIST */
+        int r = vfs_write(wpath, 0, content, (size_t)clen);
+        if (r < 0) { console_write("\nwrite: "); console_write(vfs_strerror(r)); }
         return;
     }
     if (starts_with(cmd, "execelf")) {

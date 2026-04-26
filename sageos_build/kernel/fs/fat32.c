@@ -391,3 +391,193 @@ int fat32_cat(const char *path) {
 
     return 1;
 }
+
+/* -----------------------------------------------------------------------
+ * New VFS-compatible API
+ * ----------------------------------------------------------------------- */
+
+static void fat32_entry_to_name(const FAT32_DirEntry *entry, char *out, size_t out_size) {
+    size_t len = 0;
+    for (size_t i = 0; i < 8 && entry->name[i] != ' ' && len < out_size - 1; i++) {
+        out[len++] = entry->name[i];
+    }
+    if (entry->ext[0] != ' ') {
+        if (len < out_size - 1) out[len++] = '.';
+        for (size_t i = 0; i < 3 && entry->ext[i] != ' ' && len < out_size - 1; i++) {
+            out[len++] = entry->ext[i];
+        }
+    }
+    out[len] = 0;
+}
+
+int fat32_stat(const char *path, VfsStat *out) {
+    if (!fat32_available) return VFS_EIO;
+
+    /* Root directory */
+    if (path[0] == '/' && path[1] == 0) {
+        out->name[0] = '/'; out->name[1] = 0;
+        out->type = VFS_DIRECTORY;
+        out->size = 0;
+        out->mode = 0755;
+        return VFS_OK;
+    }
+
+    FAT32_DirEntry entry;
+    if (!fat32_find_root_entry(path, &entry)) {
+        return VFS_ENOENT;
+    }
+
+    fat32_entry_to_name(&entry, out->name, VFS_NAME_MAX);
+    out->type = (entry.attr & FAT32_ATTR_DIRECTORY) ? VFS_DIRECTORY : VFS_FILE;
+    out->size = entry.file_size;
+    out->mode = (entry.attr & FAT32_ATTR_DIRECTORY) ? 0755 : 0644;
+    return VFS_OK;
+}
+
+int fat32_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
+    if (!fat32_available) return VFS_EIO;
+
+    uint32_t cluster;
+
+    if (path[0] == '/' && path[1] == 0) {
+        /* Root directory */
+        cluster = fat32_root_cluster;
+    } else {
+        FAT32_DirEntry dir_entry;
+        if (!fat32_find_root_entry(path, &dir_entry)) {
+            return VFS_ENOENT;
+        }
+        if (!(dir_entry.attr & FAT32_ATTR_DIRECTORY)) {
+            return VFS_ENOTDIR;
+        }
+        cluster = ((uint32_t)dir_entry.first_cluster_hi << 16) | dir_entry.first_cluster_lo;
+    }
+
+    uint8_t sector[512];
+    int count = 0;
+
+    while (!fat32_is_end_of_chain(cluster) && count < max_entries) {
+        for (uint32_t sector_idx = 0; sector_idx < fat32_sectors_per_cluster; sector_idx++) {
+            uint32_t lba = fat32_cluster_to_lba(cluster) + sector_idx;
+            fat32_read_sector(lba, sector);
+
+            for (uint32_t offset = 0; offset < 512 && count < max_entries; offset += FAT32_ENTRY_SIZE) {
+                FAT32_DirEntry *e = (FAT32_DirEntry *)(sector + offset);
+
+                if ((uint8_t)e->name[0] == 0x00) goto done;
+                if ((uint8_t)e->name[0] == 0xE5) continue;
+                if (e->attr == FAT32_ATTR_LONG_NAME) continue;
+
+                fat32_entry_to_name(e, entries[count].name, VFS_NAME_MAX);
+                entries[count].type = (e->attr & FAT32_ATTR_DIRECTORY) ? VFS_DIRECTORY : VFS_FILE;
+                entries[count].size = e->file_size;
+                count++;
+            }
+        }
+        cluster = fat32_next_cluster(cluster);
+    }
+
+done:
+    return count;
+}
+
+int fat32_read(const char *path, uint64_t offset, void *buffer, size_t size) {
+    if (!fat32_available) return VFS_EIO;
+
+    FAT32_DirEntry entry;
+    if (!fat32_find_root_entry(path, &entry)) {
+        return VFS_ENOENT;
+    }
+
+    if (entry.attr & FAT32_ATTR_DIRECTORY) {
+        return VFS_EISDIR;
+    }
+
+    if (offset >= entry.file_size) return 0;
+
+    size_t avail = entry.file_size - (size_t)offset;
+    if (size > avail) size = avail;
+
+    uint32_t cluster = ((uint32_t)entry.first_cluster_hi << 16) | entry.first_cluster_lo;
+    uint32_t cluster_bytes = (uint32_t)fat32_sectors_per_cluster * 512;
+
+    /* Skip clusters until we reach the offset */
+    uint64_t skip = offset;
+    while (skip >= cluster_bytes && !fat32_is_end_of_chain(cluster)) {
+        cluster = fat32_next_cluster(cluster);
+        skip -= cluster_bytes;
+    }
+
+    uint8_t sector[512];
+    uint8_t *out = (uint8_t *)buffer;
+    size_t bytes_read = 0;
+
+    while (bytes_read < size && !fat32_is_end_of_chain(cluster)) {
+        for (uint32_t sector_idx = 0;
+             sector_idx < fat32_sectors_per_cluster && bytes_read < size;
+             sector_idx++) {
+            uint32_t lba = fat32_cluster_to_lba(cluster) + sector_idx;
+            uint32_t sector_offset = 0;
+
+            /* Handle initial offset within the first sector */
+            if (skip > 0) {
+                if (skip >= 512) {
+                    skip -= 512;
+                    continue;
+                }
+                sector_offset = (uint32_t)skip;
+                skip = 0;
+            }
+
+            fat32_read_sector(lba, sector);
+
+            uint32_t to_copy = 512 - sector_offset;
+            if (to_copy > size - bytes_read) to_copy = (uint32_t)(size - bytes_read);
+
+            for (uint32_t i = 0; i < to_copy; i++) {
+                out[bytes_read++] = sector[sector_offset + i];
+            }
+        }
+        cluster = fat32_next_cluster(cluster);
+    }
+
+    return (int)bytes_read;
+}
+
+/* -----------------------------------------------------------------------
+ * VFS Backend adapter
+ * ----------------------------------------------------------------------- */
+
+static int fat32_be_stat(VfsBackend *self, const char *rel_path, VfsStat *out) {
+    (void)self;
+    return fat32_stat(rel_path, out);
+}
+
+static int fat32_be_readdir(VfsBackend *self, const char *rel_path,
+                            VfsDirEntry *entries, int max_entries) {
+    (void)self;
+    return fat32_readdir(rel_path, entries, max_entries);
+}
+
+static int fat32_be_read(VfsBackend *self, const char *rel_path,
+                         uint64_t offset, void *buffer, size_t size) {
+    (void)self;
+    return fat32_read(rel_path, offset, buffer, size);
+}
+
+static VfsBackend g_fat32_backend = {
+    .name    = "fat32",
+    .stat    = fat32_be_stat,
+    .readdir = fat32_be_readdir,
+    .read    = fat32_be_read,
+    .write   = NULL,     /* read-only */
+    .mkdir   = NULL,
+    .create  = NULL,
+    .unlink  = NULL,
+    .priv    = NULL
+};
+
+VfsBackend *fat32_get_backend(void) {
+    return &g_fat32_backend;
+}
+

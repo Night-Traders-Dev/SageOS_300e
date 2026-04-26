@@ -131,55 +131,41 @@ except Exception as e:
     sys.exit(1)
 
 # Construct Binary Blob (SGVM)
-# We'll merge everything into a single blob that MetalVM can parse.
 # Format:
 # MAGIC "SGVM" (4)
-# GLOBAL_CONST_COUNT (u16)
-# GLOBAL_CONSTS...
-# FUNCTION_COUNT (u16)
-# FUNCTIONS... [code_offset(u32), code_len(u32), params(u8)]
+# MAIN_CONST_COUNT (u16)
+# MAIN_CONSTS... [Type(u8), Data]
 # MAIN_CODE_LEN (u32)
 # MAIN_CODE_BYTES...
-# BIG_CODE_POOL (all function code concatenated)
+# FUNCTION_COUNT (u16)
+# FUNCTIONS... [const_count(u16), consts, code_len(u32), code_bytes]
 
 blob = bytearray(b"SGVM")
 
-# For simplicity in this first version, we'll use the last chunk as "main".
-# And we'll merge all constants into the main pool.
+def pack_consts(consts):
+    res = struct.pack("<H", len(consts))
+    for ct, cv in consts:
+        if ct == 'num':
+            res += b'\x01'
+            res += struct.pack("<d", cv)
+        else:
+            res += b'\x02'
+            res += struct.pack("<H", len(cv))
+            res += cv
+    return res
+
+# Main chunk
 main_chunk = chunks[-1] if chunks else {'consts': [], 'code': b''}
-all_consts = main_chunk['consts']
-
-blob += struct.pack("<H", len(all_consts))
-for ct, cv in all_consts:
-    if ct == 'num':
-        blob += b'\x01'
-        blob += struct.pack("<d", cv)
-    else:
-        blob += b'\x02'
-        blob += struct.pack("<H", len(cv))
-        blob += cv
-
-blob += struct.pack("<H", len(functions))
-code_pool = bytearray()
-fn_metadata = []
-
-# Note: In SageBC, OP_DEFINE_FN uses an index into the functions table.
-# We need to store where each function's code starts in our pool.
-for fn in functions:
-    offset = len(code_pool)
-    code_pool += fn['code']
-    fn_metadata.append(struct.pack("<IIB", offset, len(fn['code']), fn['params']))
-
-for fmeta in fn_metadata:
-    blob += fmeta
-
+blob += pack_consts(main_chunk['consts'])
 blob += struct.pack("<I", len(main_chunk['code']))
-main_code_offset = len(blob) + 4
 blob += main_chunk['code']
 
-# Append the function code pool at the end
-code_pool_offset = len(blob)
-blob += code_pool
+# Functions
+blob += struct.pack("<H", len(functions))
+for fn in functions:
+    blob += pack_consts(fn['consts'])
+    blob += struct.pack("<I", len(fn['code']))
+    blob += fn['code']
 
 # Write C header
 size = len(blob)

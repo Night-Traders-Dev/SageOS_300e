@@ -156,6 +156,7 @@ MetalValue mv_ptr(void* p) {
 
 void metal_vm_init(MetalVM* vm) {
     memset(vm, 0, sizeof(MetalVM));
+    vm->constants = vm->main_constants;
 }
 
 void metal_vm_load(MetalVM* vm, const unsigned char* code, int length) {
@@ -176,6 +177,27 @@ static int read_u16_le(const unsigned char* p, int* pos) {
     return v;
 }
 
+static int load_const_pool(MetalVM* vm, const unsigned char* data, int* pos, MetalValue* pool, int max) {
+    int count = read_u16_le(data, pos);
+    for (int i = 0; i < count; i++) {
+        int type = data[(*pos)++];
+        MetalValue v;
+        if (type == 1) { // Num
+            memcpy(&v.as.num_bits, &data[*pos], 8);
+            v.type = MV_NUM;
+            *pos += 8;
+        } else if (type == 2) { // Str
+            int slen = read_u16_le(data, pos);
+            v = mv_str(vm, (const char*)&data[*pos], slen);
+            *pos += slen;
+        } else {
+            v = mv_nil();
+        }
+        if (i < max) pool[i] = v;
+    }
+    return count;
+}
+
 int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     int pos = 0;
     if (length < 8) return 0;
@@ -185,35 +207,10 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
         return 0;
     pos = 4;
     
-    // Constant Count
-    int const_count = read_u16_le(data, &pos);
-    for (int i = 0; i < const_count; i++) {
-        int type = data[pos++];
-        if (type == 1) { // Num
-            uint64_t bits;
-            memcpy(&bits, &data[pos], 8);
-            pos += 8;
-            metal_vm_add_constant(vm, mv_num(bits));
-        } else if (type == 2) { // Str
-            int slen = read_u16_le(data, &pos);
-            metal_vm_add_constant(vm, mv_str(vm, (const char*)&data[pos], slen));
-            pos += slen;
-        }
-    }
-    
-    // Function Count
-    int fn_count = read_u16_le(data, &pos);
-    vm->fn_count = fn_count;
-    
-    // We'll read the offsets first, then adjust them after we know where the code pool is.
-    int* temp_offsets = (int*)&vm->heap[vm->heap_used];
-    if (vm->heap_used + fn_count * 4 > METAL_HEAP_SIZE) return 0;
-    
-    for (int i = 0; i < fn_count; i++) {
-        temp_offsets[i] = read_u32_le(data, &pos);
-        vm->functions[i].code_length = read_u32_le(data, &pos);
-        vm->functions[i].param_count = data[pos++];
-    }
+    // Main Constants
+    vm->main_const_count = load_const_pool(vm, data, &pos, vm->main_constants, METAL_CONST_POOL);
+    vm->constants = vm->main_constants;
+    vm->const_count = vm->main_const_count;
     
     // Main Code
     int main_len = read_u32_le(data, &pos);
@@ -221,19 +218,35 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     vm->code_length = main_len;
     vm->ip = 0;
     
-    // The code pool for functions starts after main code
-    const unsigned char* pool_base = &data[pos + main_len];
+    // Functions
+    int fn_count = read_u16_le(data, &pos);
+    vm->fn_count = fn_count;
     for (int i = 0; i < fn_count; i++) {
-        vm->functions[i].code = &pool_base[temp_offsets[i]];
+        // Load function's constants onto heap
+        if (vm->heap_used + 256 * sizeof(MetalValue) > METAL_HEAP_SIZE) return 0;
+        MetalValue* pool = (MetalValue*)&vm->heap[vm->heap_used];
+        int c_count = read_u16_le(data, &pos);
+        // Rewind pos to re-parse with load_const_pool or just inline it
+        pos -= 2; 
+        int actual_count = load_const_pool(vm, data, &pos, pool, 256);
+        vm->functions[i].constants = pool;
+        vm->functions[i].const_count = actual_count;
+        vm->heap_used += actual_count * sizeof(MetalValue);
+        
+        // Function Code
+        int flen = read_u32_le(data, &pos);
+        vm->functions[i].code = &data[pos];
+        vm->functions[i].code_length = flen;
+        pos += flen;
     }
     
     return 1;
 }
 
 int metal_vm_add_constant(MetalVM* vm, MetalValue value) {
-    if (vm->const_count >= METAL_CONST_POOL) return -1;
-    vm->constants[vm->const_count] = value;
-    return vm->const_count++;
+    if (vm->main_const_count >= METAL_CONST_POOL) return -1;
+    vm->main_constants[vm->main_const_count] = value;
+    return vm->main_const_count++;
 }
 
 // ============================================================================
@@ -498,7 +511,17 @@ static int metal_truthy(MetalValue v) {
 int metal_vm_step(MetalVM* vm) {
     if (vm->halted || vm->error || vm->ip >= vm->code_length) return 0;
 
+    int current_ip = vm->ip;
     int op = read_u8(vm->code, &vm->ip);
+    
+    /*
+    static char debug_buf[128];
+    metal_print_str(vm, "[VM] IP:");
+    metal_print_int(vm, current_ip);
+    metal_print_str(vm, " OP:");
+    metal_print_int(vm, op);
+    metal_print_str(vm, "\n");
+    */
 
     switch (op) {
         case OP_HALT:
@@ -778,10 +801,14 @@ int metal_vm_step(MetalVM* vm) {
                     frame->code = vm->code;
                     frame->code_length = vm->code_length;
                     frame->sp_base = vm->sp - argc - 1;
+                    frame->constants = vm->constants;
+                    frame->const_count = vm->const_count;
                     
                     vm->code = fn->code;
                     vm->code_length = fn->code_length;
                     vm->ip = 0;
+                    vm->constants = fn->constants;
+                    vm->const_count = fn->const_count;
                     
                     if (vm->scope_depth < METAL_ENV_DEPTH - 1) {
                         vm->scope_depth++;
@@ -870,15 +897,15 @@ int metal_vm_step(MetalVM* vm) {
         case OP_RETURN: {
             MetalValue result = metal_vm_pop(vm);
             if (vm->frame_count > 0) {
-                // Pop scope
                 if (vm->scope_depth > 0) vm->scope_depth--;
                 
-                // Restore frame
                 MetalFrame* frame = &vm->call_stack[--vm->frame_count];
                 vm->ip = frame->ip;
                 vm->code = frame->code;
                 vm->code_length = frame->code_length;
-                vm->sp = frame->sp_base; // Clean up arguments and callee
+                vm->constants = frame->constants;
+                vm->const_count = frame->const_count;
+                vm->sp = frame->sp_base;
                 
                 metal_vm_push(vm, result);
                 break;

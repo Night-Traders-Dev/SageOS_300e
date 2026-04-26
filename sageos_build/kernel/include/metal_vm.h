@@ -129,6 +129,8 @@ typedef struct {
 typedef struct {
     const unsigned char* code;    // Pointer to function bytecode
     int code_length;    // Length of function bytecode
+    MetalValue* constants;       // Function-specific constant pool
+    int const_count;
     int param_count;    // Number of parameters
     int scope_depth;    // Scope depth at definition
 } MetalFunction;
@@ -152,6 +154,8 @@ typedef struct {
     int code_length;
     int ip;
     int sp_base;        // Where the stack was before arguments
+    MetalValue* constants;   // Constant pool to restore
+    int const_count;
 } MetalFrame;
 
 #ifndef METAL_CALL_STACK
@@ -177,8 +181,10 @@ struct MetalVM {
     int ip;                                  // Instruction pointer
 
     // Constant pool
-    MetalValue constants[METAL_CONST_POOL];
-    int const_count;
+    MetalValue  main_constants[METAL_CONST_POOL];
+    MetalValue* constants;                   // Current active pool
+    int         const_count;                 // Current active count
+    int         main_const_count;            // Main pool count
 
     // Scope chain (flat array, not linked list)
     MetalScope scopes[METAL_ENV_DEPTH];

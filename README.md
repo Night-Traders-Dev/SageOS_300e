@@ -6,13 +6,15 @@ The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP fr
 
 Recent updates:
 - **SageShell & MetalVM**: The kernel shell has been fully ported to SageLang. It runs on the **MetalVM** bytecode interpreter, which now features a 32-level call stack, per-function constant pools, and a custom binary loading format (**SGVM**) for efficient execution.
-- **Unified VFS & Shell Integration**: The SageShell now communicates directly with the kernel's C-based VFS layer. Support for recursive directory removal (`rm -rf`), persistent directory creation (`mkdir`), and file creation (`touch`) is fully implemented.
+- **Unified Command Dispatch**: SageShell now owns prompt, history, and line editing while delegating command execution to the kernel C dispatcher. Command names, help text, file operations, power commands, and diagnostics now have one source of truth.
+- **Unified VFS & Shell Integration**: The shell communicates directly with the kernel's C-based VFS layer. Support for recursive directory removal (`rm -rf`), persistent directory creation (`mkdir`), and file creation (`touch`) is fully implemented.
 - **Recursive Directory Removal**: Added `vfs_rm_rf` to the kernel VFS, allowing recursive deletion of non-empty directory trees from the shell.
 - **Improved Power Management**: The `exit`, `shutdown`, `poweroff`, `halt`, `reboot`, and `suspend` commands are now fully wired from the SageShell to the kernel's power management backend.
 - **SGVM Binary Format**: Replaced raw text bytecode with a packed binary format that includes function metadata, constant pools, and remapped branch offsets, enabling complex multi-file SageLang applications to run on bare metal.
 - **Battery & EC**: Stabilized CrOS EC identity checks and `BATT_FLAG` validation. The status bar now provides real-time battery percentage with proper fallback handling.
-- **Line Editing**: Advanced fish-style completion, history navigation, and prompt anchoring are now fully implemented in SageLang.
-- **Keyboard & Input**: Unified UEFI and native i8042 scancode mapping for consistent arrow key and special character handling.
+- **Line Editing**: Fish-style command suggestions, right-arrow acceptance, Tab completion, history navigation, prompt anchoring, and Ctrl-A/E/K/L/U/C handling are implemented through a normalized key path shared by QEMU serial, UEFI ConIn, and native i8042.
+- **btop / nano / scripts**: `btop` now redraws in place on framebuffer and serial/QEMU, `nano <path>` provides a small text editor, and `sh <path>` / `source <path>` run shell scripts from VFS files.
+- **Keyboard & Input**: Unified UEFI, serial, and native i8042 scancode mapping for consistent arrow key, Ctrl-combo, and special-key handling.
 
 ## Current Version
 
@@ -26,7 +28,7 @@ SageOS v0.1.2
 Device: Lenovo 300e Chromebook 2nd Gen AST
 Boot:   x86_64 UEFI
 Display: UEFI GOP framebuffer
-Input:  UEFI ConIn firmware fallback + native i8042/PS2 driver
+Input:  UEFI ConIn + serial by default; native i8042/PS2 in strict/fallback builds
 CPU:    AMD x86_64, multi-core SMP enabled
 ```
 
@@ -40,19 +42,21 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | Kernel loading | Working |
 | GOP framebuffer console | Working |
 | Kernel shell | Working — **SageShell** (SageLang-based) is now the default REPL |
-| Shell line editing | Working — insert, delete, cursor move, history in SageShell |
+| Shell line editing | Working — fish-style suggestions, Tab completion, cursor movement, history, and Ctrl combos in SageShell |
 | Unified build/flash tool | Working |
 | Modular kernel tree | Working |
 | IDT installation | Working |
 | PIT timer (IRQ0) | Working |
 | CPU% accounting | Working — real-time 1 s sliding window |
 | Status bar | Working — persistent top-bar, non-blocking refresh, preserved during scroll |
-| Keyboard | Working — UEFI ConIn + native i8042; arrow/special keys unified across both paths |
+| Keyboard | Working — UEFI ConIn, serial/QEMU, and native i8042; arrow/special keys unified across input paths |
 | RAM status | Working — real-time used RAM tracking; may read high while firmware boot services are active |
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
 | ACPI | Working — minimal AML parser, Battery (_BST) & Lid detection |
 | Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate; `--` shown when EC or data not confirmed |
 | VFS / FAT32 | Working — Unified VFS layer, dynamic RamFS backend (writable), and read-only FAT32 boot partition mount |
+| Text editor | Working — `nano <path>` edits small text files in RamFS |
+| Shell scripting | Initial support — `sh <path>` / `source <path>` run line-oriented shell scripts |
 | SageLang Backend | Working — bare-metal stabilized, runtime-free modules |
 | ELF Execution | Working — segment mapping, BSS, entry jump |
 | SageLang Toolchain | Working — compiler/runtime hooks |
@@ -117,7 +121,38 @@ Use `lenovo_300e.sh` for all normal operations.
 > **QEMU notes:**
 > - Battery reads `--` — QEMU exposes no real ACPI battery by default.
 > - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
-> - All shell line editing features (backspace, history, tab hint) are fully functional in QEMU as of v0.1.2.
+> - Shell line editing, Ctrl combinations, `btop`, and full-screen `nano` are mirrored with ANSI sequences so they behave correctly in QEMU serial output.
+
+## Shell Features
+
+SageShell is the default REPL. Its command execution is centralized in the C kernel dispatcher while the interactive line editor stays in Sage.
+
+Supported line editing:
+
+```text
+Up/Down      history navigation
+Left/Right   cursor movement; Right accepts a fish-style suggestion at end of line
+Home/End     jump to start/end
+Tab          complete the current command or list matches
+Ctrl-A/E     jump to start/end
+Ctrl-K       delete to end of line
+Ctrl-L       clear screen and redraw prompt
+Ctrl-U       clear the current line
+Ctrl-C       cancel the current line
+```
+
+Useful shell commands:
+
+```text
+btop              in-place resource monitor; press q to exit
+nano <path>       edit a small text file; ^S saves and ^X exits
+sh <path>         run a line-oriented shell script
+source <path>     alias for sh <path>
+write <path> <s>  write text to a file
+cat <path>        print a file
+```
+
+Shell scripts are plain text files. Empty lines and lines starting with `#` are skipped. Each remaining line is sent through the same command dispatcher as interactive input, so scripts can mix file commands, diagnostics, and `sage <code>` statements.
 
 ### Flash to USB
 

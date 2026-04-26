@@ -34,17 +34,47 @@
 /* Generated at build time by scripts/compile_sage_shell.sh */
 #include "sage_shell_bytecode.h"
 
+#define SAGE_KEY_UP      1001
+#define SAGE_KEY_DOWN    1002
+#define SAGE_KEY_RIGHT   1003
+#define SAGE_KEY_LEFT    1004
+#define SAGE_KEY_HOME    1005
+#define SAGE_KEY_END     1006
+#define SAGE_KEY_DELETE  1008
+
+static const char *SAGE_PROMPT = "root@sageos:/# ";
+
 /* -----------------------------------------------------------------------
  * VM instance for the Sage shell (persistent across prompt cycles)
  * --------------------------------------------------------------------- */
 static MetalVM g_sage_shell_vm;
 static int     g_sage_shell_init = 0;
 static int     g_sage_shell_running = 0;
+static uint32_t g_input_start_row = 0;
+static uint32_t g_input_start_col = 0;
 
 /* -----------------------------------------------------------------------
  * I/O bridge
  * --------------------------------------------------------------------- */
 static void bridge_write_char(char c) { console_putc(c); }
+
+static int key_event_code(const KeyEvent *ev) {
+    if (!ev || !ev->pressed) return -1;
+    if (ev->extended) {
+        switch (ev->scancode) {
+        case 0x48: return SAGE_KEY_UP;
+        case 0x50: return SAGE_KEY_DOWN;
+        case 0x4D: return SAGE_KEY_RIGHT;
+        case 0x4B: return SAGE_KEY_LEFT;
+        case 0x47: return SAGE_KEY_HOME;
+        case 0x4F: return SAGE_KEY_END;
+        case 0x53: return SAGE_KEY_DELETE;
+        default: return -1;
+        }
+    }
+    if (ev->ascii) return (int)(unsigned char)ev->ascii;
+    return -1;
+}
 
 static int bridge_read_char(void) {
     KeyEvent ev;
@@ -95,13 +125,28 @@ static MetalValue n_read_char(MetalVM *vm, MetalValue *a, int c) {
     (void)vm; (void)a; (void)c;
     return mv_dbl((double)bridge_read_char());
 }
+static MetalValue n_read_key(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm; (void)a; (void)c;
+    KeyEvent ev;
+    for (;;) {
+        if (!keyboard_wait_event(&ev)) return mv_dbl(-1.0);
+        int code = key_event_code(&ev);
+        if (code >= 0) return mv_dbl((double)code);
+    }
+}
 static MetalValue n_poll_char(MetalVM *vm, MetalValue *a, int c) {
     (void)vm; (void)a; (void)c;
     KeyEvent ev;
-    if (keyboard_poll_event(&ev) && ev.pressed && ev.ascii) {
+    if (keyboard_poll_any_event(&ev) && ev.pressed && ev.ascii) {
         return mv_dbl((double)(unsigned char)ev.ascii);
     }
     return mv_dbl(-1.0);
+}
+static MetalValue n_poll_key(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm; (void)a; (void)c;
+    KeyEvent ev;
+    if (!keyboard_poll_any_event(&ev)) return mv_dbl(-1.0);
+    return mv_dbl((double)key_event_code(&ev));
 }
 
 /* --- Color --- */
@@ -121,6 +166,98 @@ static MetalValue n_console_clear(MetalVM *vm, MetalValue *a, int c) {
 }
 static MetalValue n_cursor_home(MetalVM *vm, MetalValue *a, int c) {
     (void)vm; (void)a; (void)c; console_set_cursor(0,0); return mv_nil();
+}
+
+static void serial_raw(const char *s) {
+    while (*s) serial_putc(*s++);
+}
+
+static void serial_dec(uint32_t v) {
+    char tmp[12];
+    int n = 0;
+    if (v == 0) {
+        serial_putc('0');
+        return;
+    }
+    while (v && n < (int)sizeof(tmp)) {
+        tmp[n++] = (char)('0' + (v % 10));
+        v /= 10;
+    }
+    while (n > 0) serial_putc(tmp[--n]);
+}
+
+static int c_strlen(const char *s) {
+    int n = 0;
+    while (s && s[n]) n++;
+    return n;
+}
+
+static int c_starts_with(const char *text, const char *prefix) {
+    if (!text || !prefix) return 0;
+    while (*prefix) {
+        if (*text != *prefix) return 0;
+        text++;
+        prefix++;
+    }
+    return 1;
+}
+
+static void serial_prompt_line(const char *line, int pos, const char *hint) {
+    serial_putc('\r');
+    serial_raw("\033[0K");
+    serial_raw(SAGE_PROMPT);
+    serial_raw(line);
+    if (hint && *hint && c_starts_with(hint, line)) {
+        serial_raw("\033[90m");
+        serial_raw(hint + c_strlen(line));
+        serial_raw("\033[0m");
+    }
+    serial_putc('\r');
+    serial_raw("\033[");
+    serial_dec((uint32_t)(c_strlen(SAGE_PROMPT) + pos + 1));
+    serial_putc('G');
+}
+
+static MetalValue n_input_begin(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm; (void)a; (void)c;
+    console_get_cursor(&g_input_start_row, &g_input_start_col);
+    return mv_nil();
+}
+
+static MetalValue n_line_redraw(MetalVM *vm, MetalValue *a, int c) {
+    const char *line = arg_str(vm, a, c, 0);
+    int pos = (int)arg_num(a, c, 1);
+    int erase_len = (int)arg_num(a, c, 2);
+    const char *hint = arg_str(vm, a, c, 3);
+    int line_len = c_strlen(line);
+    int hint_len = (hint && *hint && c_starts_with(hint, line)) ? c_strlen(hint) : 0;
+    int visible_len = hint_len > line_len ? hint_len : line_len;
+    if (pos < 0) pos = 0;
+    if (pos > line_len) pos = line_len;
+
+    int saved_serial_echo = console_get_serial_echo();
+    console_set_serial_echo(0);
+
+    console_set_cursor(g_input_start_row, g_input_start_col);
+    console_write(line);
+
+    if (hint_len > line_len) {
+        uint32_t old = console_get_fg();
+        console_set_fg(0x606060);
+        console_write(hint + line_len);
+        console_set_fg(old);
+    }
+
+    if (erase_len > visible_len) {
+        for (int i = 0; i < erase_len - visible_len; i++) console_putc(' ');
+    }
+
+    uint32_t off = g_input_start_col + (uint32_t)pos;
+    console_set_cursor(g_input_start_row + off / console_cols(), off % console_cols());
+
+    console_set_serial_echo(saved_serial_echo);
+    serial_prompt_line(line, pos, hint);
+    return mv_nil();
 }
 
 /* --- String utilities exposed to Sage --- */
@@ -406,6 +543,26 @@ static MetalValue n_shell_exec(MetalVM *vm, MetalValue *a, int c) {
     shell_exec_command(arg_str(vm, a, c, 0));
     return mv_nil();
 }
+static MetalValue n_shell_completion_count(MetalVM *vm, MetalValue *a, int c) {
+    return mv_dbl((double)shell_completion_count(arg_str(vm, a, c, 0)));
+}
+static MetalValue n_shell_completion_at(MetalVM *vm, MetalValue *a, int c) {
+    const char *s = shell_completion_at(arg_str(vm, a, c, 0), (int)arg_num(a, c, 1));
+    return mv_str_lit(vm, s);
+}
+static MetalValue n_shell_completion_common(MetalVM *vm, MetalValue *a, int c) {
+    const char *s = shell_completion_common_prefix(arg_str(vm, a, c, 0));
+    return mv_str_lit(vm, s);
+}
+static MetalValue n_shell_suggestion(MetalVM *vm, MetalValue *a, int c) {
+    const char *s = shell_suggestion(arg_str(vm, a, c, 0));
+    return mv_str_lit(vm, s);
+}
+static MetalValue n_shell_print_completions(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;
+    shell_print_completions(arg_str(vm, a, c, 0));
+    return mv_nil();
+}
 static MetalValue n_keydebug(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; keyboard_keydebug(); return mv_nil();
 }
@@ -489,7 +646,9 @@ static void register_natives(MetalVM *vm) {
     REG("os_write_str",     n_write_str);
     /* Input */
     REG("os_read_char",     n_read_char);
+    REG("os_read_key",      n_read_key);
     REG("os_poll_char",     n_poll_char);
+    REG("os_poll_key",      n_poll_key);
     /* Color */
     REG("os_set_color_hex", n_set_color_hex);
     REG("os_set_color",     n_set_color);
@@ -497,6 +656,8 @@ static void register_natives(MetalVM *vm) {
     /* Console */
     REG("os_console_clear", n_console_clear);
     REG("os_cursor_home",   n_cursor_home);
+    REG("os_input_begin",   n_input_begin);
+    REG("os_line_redraw",   n_line_redraw);
     /* String utils */
     REG("len",              n_len);
     REG("os_strlen",        n_strlen);
@@ -536,6 +697,11 @@ static void register_natives(MetalVM *vm) {
     REG("os_write",         n_write);
     REG("os_execelf",       n_execelf);
     REG("os_shell_exec",    n_shell_exec);
+    REG("os_shell_completion_count",  n_shell_completion_count);
+    REG("os_shell_completion_at",     n_shell_completion_at);
+    REG("os_shell_completion_common", n_shell_completion_common);
+    REG("os_shell_suggestion",        n_shell_suggestion);
+    REG("os_shell_print_completions", n_shell_print_completions);
     REG("os_keydebug",      n_keydebug);
     REG("os_dmesg_dump",    n_dmesg_dump);
     REG("os_status_print",  n_status_print);

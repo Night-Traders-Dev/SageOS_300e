@@ -404,6 +404,28 @@ int keyboard_poll_event(KeyEvent *ev) {
     return 1;
 }
 
+int keyboard_poll_any_event(KeyEvent *ev) {
+    char serial_c;
+    int firmware_mode = firmware_input_available();
+
+    if (firmware_poll_key(ev)) return 1;
+
+    if (serial_poll_char(&serial_c)) {
+        if (serial_c == 27) return parse_serial_escape(ev);
+        ev->scancode = 0;
+        ev->pressed  = 1;
+        ev->extended = 0;
+        ev->ascii    = (serial_c == '\r') ? '\n' : serial_c;
+        return 1;
+    }
+
+    if (!firmware_mode || firmware_i8042_fallback_enabled()) {
+        return keyboard_poll_event(ev);
+    }
+
+    return 0;
+}
+
 void keyboard_keydebug(void) {
     console_write("\nKEYDEBUG MODE");
     console_write("\nPress ESC to exit.");
@@ -412,7 +434,7 @@ void keyboard_keydebug(void) {
     for (;;) {
         KeyEvent ev;
         timer_poll();
-        if (!keyboard_poll_event(&ev)) {
+        if (!keyboard_poll_any_event(&ev)) {
             status_tick_poll();
             cpu_hlt();
             continue;
@@ -441,37 +463,10 @@ void keyboard_keydebug(void) {
  *   3. Native i8042 PS/2 polling.
  */
 int keyboard_wait_event(KeyEvent *ev) {
-    char serial_c;
-
     for (;;) {
         int firmware_mode = firmware_input_available();
 
-        /* 1. UEFI ConIn — now returns extended keys too */
-        if (firmware_poll_key(ev)) return 1;
-
-        /* 2. Serial / VT100 */
-        if (serial_poll_char(&serial_c)) {
-            if (serial_c == 27) return parse_serial_escape(ev);
-            ev->scancode = 0;
-            ev->pressed  = 1;
-            ev->extended = 0;
-            ev->ascii    = (serial_c == '\r') ? '\n' : serial_c;
-            return 1;
-        }
-
-        /*
-         * 3. Native i8042.
-         *
-         * When UEFI boot services are still active, firmware owns the text
-         * input path. Polling port 0x60 at the same time has produced
-         * spurious printable bytes on the Lenovo 300e. Keep i8042 active for
-         * the strict native path, or for explicit diagnostic fallback builds.
-         */
-        if (!firmware_mode || firmware_i8042_fallback_enabled()) {
-            if (keyboard_poll_event(ev)) {
-                if (ev->pressed) return 1;
-            }
-        }
+        if (keyboard_poll_any_event(ev) && ev->pressed) return 1;
 
         status_tick_poll();
         timer_poll(); /* Ensure we account for this loop in CPU% */

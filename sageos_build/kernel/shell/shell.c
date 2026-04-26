@@ -56,9 +56,10 @@ static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
     "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
     "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
-    "mkdir", "neofetch", "pci", "poweroff", "reboot", "rm", "sage", "sageshell",
-    "sdhci", "shutdown", "smp", "smp start", "stat", "status", "stop", "suspend",
-    "sysinfo", "timer", "touch", "uname", "version", "write",
+    "mkdir", "nano", "neofetch", "pci", "poweroff", "q", "reboot", "rm", "sage",
+    "sageshell", "sdhci", "sh", "shutdown", "smp", "smp start", "source", "stat",
+    "status", "stop", "suspend", "sysinfo", "timer", "touch", "uname", "version",
+    "write",
 };
 
 #define SHELL_CMD_COUNT (sizeof(shell_commands) / sizeof(shell_commands[0]))
@@ -66,6 +67,71 @@ static const char *const shell_commands[] = {
 static int starts_with(const char *text, const char *prefix) {
     while (*prefix) { if (*text != *prefix) return 0; text++; prefix++; }
     return 1;
+}
+
+int shell_completion_count(const char *prefix) {
+    int count = 0;
+    if (!prefix) prefix = "";
+    for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
+        if (starts_with(shell_commands[i], prefix)) count++;
+    }
+    return count;
+}
+
+const char *shell_completion_at(const char *prefix, int index) {
+    if (!prefix) prefix = "";
+    for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
+        if (!starts_with(shell_commands[i], prefix)) continue;
+        if (index == 0) return shell_commands[i];
+        index--;
+    }
+    return "";
+}
+
+const char *shell_completion_common_prefix(const char *prefix) {
+    static char common[SHELL_LINE_MAX];
+    const char *first = shell_completion_at(prefix, 0);
+    if (!first || !*first) return "";
+
+    size_t len = 0;
+    while (first[len] && len + 1 < sizeof(common)) {
+        common[len] = first[len];
+        len++;
+    }
+    common[len] = 0;
+
+    for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
+        const char *cand = shell_commands[i];
+        if (!starts_with(cand, prefix)) continue;
+        size_t j = 0;
+        while (j < len && common[j] && cand[j] == common[j]) j++;
+        len = j;
+        common[len] = 0;
+    }
+
+    return common;
+}
+
+const char *shell_suggestion(const char *line) {
+    if (!line) line = "";
+    if (!*line) return "";
+    if (shell_completion_count(line) <= 0) return "";
+    const char *match = shell_completion_at(line, 0);
+    if (!match || !*match || streq(match, line)) return "";
+    return match;
+}
+
+void shell_print_completions(const char *prefix) {
+    int count = 0;
+    if (!prefix) prefix = "";
+    console_write("\n");
+    for (size_t i = 0; i < SHELL_CMD_COUNT; i++) {
+        if (!starts_with(shell_commands[i], prefix)) continue;
+        console_write(shell_commands[i]);
+        console_write("  ");
+        count++;
+    }
+    if (count == 0) console_write("(no completions)");
 }
 
 static void *shell_memmove(void *dest, const void *src, size_t n) {
@@ -309,6 +375,9 @@ static void help(void) {
     console_write("\n  rm <path>         remove a file or empty directory");
     console_write("\n  stat <path>       show file/directory info");
     console_write("\n  write <path> <text>  write text to a file");
+    console_write("\n  nano <path>       edit a text file");
+    console_write("\n  sh <path>         run a shell script");
+    console_write("\n  source <path>     run a shell script");
     console_write("\n  execelf <path>    execute ELF binary");
     console_write("\n  sage              interactive SageLang REPL");
     console_write("\n  sage <code>       execute one Sage statement");
@@ -474,6 +543,24 @@ void shell_exec_command(const char *cmd) {
         uint64_t file_size = ramfs_find_size(path, &file_data);
         if (!file_data) { console_write("\nexecelf: no such file: "); console_write(path); return; }
         elf_exec(file_data, file_size);
+        return;
+    }
+    if (starts_word(cmd, "nano")) {
+        const char *path = arg_after(cmd, "nano");
+        if (!*path) { console_write("\nusage: nano <path>"); return; }
+        cmd_nano(path);
+        return;
+    }
+    if (starts_word(cmd, "source")) {
+        const char *path = arg_after(cmd, "source");
+        if (!*path) { console_write("\nusage: source <path>"); return; }
+        cmd_source(path);
+        return;
+    }
+    if (starts_word(cmd, "sh")) {
+        const char *path = arg_after(cmd, "sh");
+        if (!*path) { console_write("\nusage: sh <path>"); return; }
+        cmd_source(path);
         return;
     }
     if (starts_with(cmd, "sageshell")) { sage_shell_run(); return; }

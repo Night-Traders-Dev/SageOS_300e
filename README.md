@@ -8,6 +8,7 @@ Recent updates:
 - **Centralized Versioning**: Versioning is now managed through a single `VERSION` file in the root directory, with automatic header generation during the build process.
 - **Status Bar**: Fixed missing `%` glyph in the framebuffer console; battery, CPU, and RAM metrics now display correctly.
 - **ELF & SageLang**: Added foundational ELF loading/execution support and integrated SageLang as a git submodule for future modular development.
+- **SageShell Default**: The kernel shell is now fully implemented in SageLang (`SageShell`) running on the MetalVM bytecode interpreter, with full access to kernel native callbacks. The legacy C shell remains as a fallback.
 - **Battery:** Correct CrOS EC identity check (`'E','C'` at `EC_MEMMAP_ID + 0x20`), `BATT_FLAG` validity gate before reading capacity, removed false 50% fallback.
 - **Shell line editing (QEMU):** Fixed backspace ghost character, history Up/Down screen update, and fish-style dim-grey tab completion hint. Multi-match Tab now correctly updates the prompt anchor row so subsequent edits land in the right place.
 - **Keyboard (UEFI path):** Arrow/special keys no longer silently dropped — UEFI scan codes are now mapped to PS/2-style extended scancodes unified across both input backends.
@@ -37,8 +38,8 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | PE/COFF BOOTX64.EFI | Working |
 | Kernel loading | Working |
 | GOP framebuffer console | Working |
-| Kernel shell | Working |
-| Shell line editing | Working — insert, delete, cursor move, history, tab complete with hint |
+| Kernel shell | Working — **SageShell** (SageLang-based) is now the default REPL |
+| Shell line editing | Working — insert, delete, cursor move, history in SageShell |
 | Unified build/flash tool | Working |
 | Modular kernel tree | Working |
 | IDT installation | Working |
@@ -59,7 +60,7 @@ CPU:    AMD x86_64, multi-core SMP enabled
 
 The current hardware bring-up path intentionally uses a freestanding C/ASM kernel instead of the Sage AOT kernel path. The older Sage AOT path hit backend/runtime issues such as unsupported codegen statements and missing Sage runtime symbols during kernel linking.
 
-Once the Sage compiler backend can reliably emit freestanding procedures/imports/runtime-free code, parts of the kernel can migrate back into Sage modules.
+However, we are actively migrating high-level logic (like the **SageShell**) to run on top of our bare-metal **MetalVM** interpreter, bridging SageLang to C kernel APIs via a native dispatch table. Once the Sage compiler backend can reliably emit freestanding procedures/imports/runtime-free AOT code, lower-level parts of the kernel can migrate back into Sage modules.
 
 ## Directory Layout
 
@@ -337,6 +338,7 @@ ls
 cat <path>
 execelf <path>
 sage <module>
+sageshell
 echo <text>
 color <white|green|amber|blue|red>dmesg
 shutdown
@@ -346,7 +348,7 @@ halt
 reboot
 ```
 
-### Shell Line Editing
+### SageShell Line Editing
 
 | Key | Action |
 |---|---|

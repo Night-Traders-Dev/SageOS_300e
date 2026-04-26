@@ -198,14 +198,16 @@ build_image() {
       "$OBJ/uefi_loader.obj"
 
     # Compile SageLang shell sources -> bytecode -> C header
-    echo "--- Compiling SageLang shell sources (sage-sh) ---"
+    echo "--- Compiling SageLang shell sources (SageShell) ---"
     if command -v sage > /dev/null 2>&1; then
         bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
+    elif [ -x "$BUILD/sage_lang/sage" ]; then
+        bash "$BUILD/scripts/compile_sage_shell.sh" "$BUILD/sage_lang/sage" "$KERNEL/shell"
     else
-        echo "WARN: 'sage' not found on PATH — skipping sage-sh bytecode compile."
+        echo "WARN: 'sage' not found on PATH and submodule not built — skipping SageShell bytecode compile."
         echo "      If sage_shell_bytecode.h is missing, the build will fail."
-        echo "      Install SageLang or run: bash sageos_build/scripts/compile_sage_shell.sh /path/to/sage"
-        # Emit a stub header so the build succeeds with a no-op sage-sh
+        echo "      Install SageLang or compile it in sageos_build/sage_lang/"
+        # Emit a stub header so the build succeeds with a no-op SageShell
         cat > "$KERNEL/shell/sage_shell_bytecode.h" <<'STUBEOF'
 /* Stub: sage compiler not available at build time. sage-sh will be a no-op. */
 #pragma once
@@ -417,6 +419,8 @@ case "$cmd" in
         if [ ! -f "$KERNEL/shell/sage_shell_bytecode.h" ]; then
             if command -v sage > /dev/null 2>&1; then
                 bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
+            elif [ -x "$BUILD/sage_lang/sage" ]; then
+                bash "$BUILD/scripts/compile_sage_shell.sh" "$BUILD/sage_lang/sage" "$KERNEL/shell"
             else
                 echo "WARN: sage not found — generating stub sage_shell_bytecode.h"
                 cat > "$KERNEL/shell/sage_shell_bytecode.h" <<'STUBEOF'

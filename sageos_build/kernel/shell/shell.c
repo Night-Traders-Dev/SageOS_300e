@@ -55,7 +55,7 @@ static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
     "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
     "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
-    "neofetch", "pci", "poweroff", "reboot", "sage", "sage-sh", "sdhci",
+    "neofetch", "pci", "poweroff", "reboot", "sage", "sageshell", "sdhci",
     "shutdown", "smp", "smp start", "status", "stop", "suspend", "sysinfo",
     "timer", "uname", "version",
 };
@@ -314,7 +314,7 @@ static void help(void) {
     console_write("\n  execelf <path>    execute ELF binary");
     console_write("\n  sage              interactive SageLang REPL");
     console_write("\n  sage <module>     execute SageLang module");
-    console_write("\n  sage-sh           launch SageLang shell (experimental)");
+    console_write("\n  sageshell         launch SageShell (experimental)");
     console_write("\n  echo <text>       print text");
     console_write("\n  color <name>      white green amber blue red");
     console_write("\n  dmesg             early log");
@@ -405,7 +405,7 @@ static void exec(const char *cmd) {
         elf_exec(file_data, file_size);
         return;
     }
-    if (starts_with(cmd, "sage-sh")) { sage_shell_run(); return; }
+    if (starts_with(cmd, "sageshell")) { sage_shell_run(); return; }
     if (starts_with(cmd, "sage")) {
         const char *mod = arg_after(cmd, "sage");
         extern void sage_execute(const char *module_name);

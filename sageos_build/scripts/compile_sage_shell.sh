@@ -17,7 +17,7 @@ SAGE="${1:-sage}"
 OUT_DIR="${2:-kernel/shell}"
 OUT_H="${OUT_DIR}/sage_shell_bytecode.h"
 
-SAGE_SHELL_DIR="kernel/shell/sage_shell"
+SAGE_SHELL_DIR="${OUT_DIR}/sage_shell"
 INPUT="${SAGE_SHELL_DIR}/input.sage"
 COMMANDS="${SAGE_SHELL_DIR}/commands.sage"
 SHELL_MAIN="${SAGE_SHELL_DIR}/shell.sage"
@@ -29,7 +29,7 @@ cat "${INPUT}" "${COMMANDS}" "${SHELL_MAIN}" > "${COMBINED}"
 
 echo "[sage-shell] Compiling to bytecode..."
 # sage --compile-bytecode outputs a raw binary bytecode file
-"${SAGE}" --compile-bytecode "${COMBINED}" -o "${BYTECODE}"
+"${SAGE}" --emit-bytecode "${COMBINED}" -o "${BYTECODE}"
 
 echo "[sage-shell] Generating C header: ${OUT_H}..."
 python3 - "${BYTECODE}" "${OUT_H}" <<'PYEOF'

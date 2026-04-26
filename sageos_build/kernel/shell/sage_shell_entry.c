@@ -451,7 +451,7 @@ static void register_natives(MetalVM *vm) {
 }
 
 /* -----------------------------------------------------------------------
- * sage_shell_run — public entry point called from shell.c "sage-sh" command
+ * sage_shell_run — public entry point called from shell.c "sageshell" command
  * --------------------------------------------------------------------- */
 void sage_shell_run(void) {
     if (!g_sage_shell_init) {
@@ -480,7 +480,7 @@ void sage_shell_run(void) {
 
     int result = metal_vm_run(&g_sage_shell_vm);
     if (result < 0) {
-        console_write("\nsage-sh: runtime error: ");
+        console_write("\nsageshell: runtime error: ");
         console_write(g_sage_shell_vm.error_msg
                       ? g_sage_shell_vm.error_msg : "unknown");
         console_write("\n");

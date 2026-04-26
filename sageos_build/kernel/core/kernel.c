@@ -3,6 +3,7 @@
 #include "console.h"
 #include "keyboard.h"
 #include "shell.h"
+#include "../shell/sage_shell_entry.h"
 #include "status.h"
 #include "timer.h"
 #include "acpi.h"
@@ -102,6 +103,6 @@ void kmain(SageOSBootInfo *info) {
     dmesg_log("shell starting");
     for (;;) {
         timer_poll();
-        shell_run();
+        sage_shell_run();
     }
 }

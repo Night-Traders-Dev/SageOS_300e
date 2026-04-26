@@ -338,7 +338,7 @@ proc cmd_neofetch():
     os_set_color_hex(0x79FFB0)
     _print("Shell: ")
     os_set_color_hex(0xE8E8E8)
-    _println("sage-sh (SageLang)")
+    _println("SageShell")
 
     os_set_color_hex(0x79FFB0)
     _print(logo6)
@@ -371,7 +371,7 @@ proc cmd_btop():
     while running == 1:
         os_cursor_home()
         os_set_color_hex(0x80C8FF)
-        _println("=== SageOS BTOP (sage-sh) - Press q to exit ===")
+        _println("=== SageOS BTOP (SageShell) - Press q to exit ===")
         os_set_color_hex(0xE8E8E8)
 
         _print("Uptime: ")
@@ -418,7 +418,7 @@ proc cmd_btop():
         _println("  PID  NAME          STATUS")
         _println("  0    kernel        running")
         _println("  1    idle          waiting")
-        _println("  2    sage-sh       active")
+        _println("  2    sageshell     active")
         _println("  3    timer         active")
         _println("  4    status_bar    active")
 

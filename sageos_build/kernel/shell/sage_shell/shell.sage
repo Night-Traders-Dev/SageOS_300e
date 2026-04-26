@@ -136,6 +136,9 @@ proc shell_dispatch(line):
     if streq(cmd, "keydebug"):
         cmd_keydebug()
         return nil
+    if streq(cmd, "dmesg"):
+        cmd_dmesg()
+        return nil
     if streq(cmd, "pci"):
         cmd_pci()
         return nil

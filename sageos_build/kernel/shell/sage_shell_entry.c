@@ -46,9 +46,10 @@ static void bridge_write_char(char c) { console_putc(c); }
 
 static int bridge_read_char(void) {
     KeyEvent ev;
-    if (!keyboard_wait_event(&ev)) return -1;
-    if (!ev.pressed) return -1;
-    return (int)(unsigned char)ev.ascii;
+    for (;;) {
+        if (!keyboard_wait_event(&ev)) return -1;
+        if (ev.pressed && ev.ascii) return (int)(unsigned char)ev.ascii;
+    }
 }
 
 /* -----------------------------------------------------------------------
@@ -95,7 +96,9 @@ static MetalValue n_read_char(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_poll_char(MetalVM *vm, MetalValue *a, int c) {
     (void)vm; (void)a; (void)c;
     KeyEvent ev;
-    if (keyboard_poll_event(&ev) && ev.pressed) return mv_dbl((double)(unsigned char)ev.ascii);
+    if (keyboard_poll_event(&ev) && ev.pressed && ev.ascii) {
+        return mv_dbl((double)(unsigned char)ev.ascii);
+    }
     return mv_dbl(-1.0);
 }
 

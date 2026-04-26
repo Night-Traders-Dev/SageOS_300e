@@ -55,6 +55,10 @@ struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
 
 #define SCANCODE_QUEUE_SIZE 64
 
+#ifndef SAGEOS_FIRMWARE_I8042_FALLBACK
+#define SAGEOS_FIRMWARE_I8042_FALLBACK 0
+#endif
+
 static const char keymap[128] = {
     0,   27,  '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 8,
     9,   'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 10,  0,
@@ -90,10 +94,15 @@ static int firmware_input_available(void) {
            b->con_in;
 }
 
+static int firmware_i8042_fallback_enabled(void) {
+    return SAGEOS_FIRMWARE_I8042_FALLBACK != 0;
+}
+
 const char *keyboard_backend(void) {
-    return firmware_input_available()
+    if (!firmware_input_available()) return "i8042-irq+poll+serial";
+    return firmware_i8042_fallback_enabled()
         ? "uefi-conin+i8042-poll+serial"
-        : "i8042-irq+poll+serial";
+        : "uefi-conin+serial";
 }
 
 static int queue_next(int idx) {
@@ -169,7 +178,7 @@ void keyboard_init(void) {
     caps_lock = 0;
     extended_prefix = 0;
 
-    if (firmware_input_available()) return;
+    if (firmware_input_available() && !firmware_i8042_fallback_enabled()) return;
 
     command(0xAD);
     command(0xA7);
@@ -435,6 +444,8 @@ int keyboard_wait_event(KeyEvent *ev) {
     char serial_c;
 
     for (;;) {
+        int firmware_mode = firmware_input_available();
+
         /* 1. UEFI ConIn — now returns extended keys too */
         if (firmware_poll_key(ev)) return 1;
 
@@ -448,15 +459,24 @@ int keyboard_wait_event(KeyEvent *ev) {
             return 1;
         }
 
-        /* 3. Native i8042 */
-        if (keyboard_poll_event(ev)) {
-            if (ev->pressed) return 1;
+        /*
+         * 3. Native i8042.
+         *
+         * When UEFI boot services are still active, firmware owns the text
+         * input path. Polling port 0x60 at the same time has produced
+         * spurious printable bytes on the Lenovo 300e. Keep i8042 active for
+         * the strict native path, or for explicit diagnostic fallback builds.
+         */
+        if (!firmware_mode || firmware_i8042_fallback_enabled()) {
+            if (keyboard_poll_event(ev)) {
+                if (ev->pressed) return 1;
+            }
         }
 
         status_tick_poll();
         timer_poll(); /* Ensure we account for this loop in CPU% */
 
-        if (firmware_input_available()) {
+        if (firmware_mode) {
             timer_delay_ms(1); /* 1ms delay for better responsiveness/lower CPU in firmware mode */
             timer_idle_poll();
         } else {

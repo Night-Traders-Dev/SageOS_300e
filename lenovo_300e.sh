@@ -110,6 +110,7 @@ build_kernel() {
           -DMETAL_HEAP_SIZE=32768 \
           -DMETAL_CONST_POOL=256 \
           -DMETAL_NATIVE_MAX=64 \
+          -DSAGEOS_FIRMWARE_I8042_FALLBACK="${SAGEOS_FIRMWARE_I8042_FALLBACK:-0}" \
           -c "$src" \
           -o "$obj"
 
@@ -173,7 +174,8 @@ build_image() {
     # hardware path (keyboard reverts to native-only; ConIn no longer works).
     if [ "${SAGEOS_EXIT_BOOT_SERVICES:-0}" = "0" ]; then
         echo "WARN: SAGEOS_EXIT_BOOT_SERVICES=0 — UEFI boot services remain active."
-        echo "      Native i8042/PIT IRQ0 may conflict with firmware IRQ ownership."
+        echo "      Firmware ConIn is primary; i8042 fallback is disabled by default."
+        echo "      Set SAGEOS_FIRMWARE_I8042_FALLBACK=1 only for input diagnostics."
         echo "      Build with SAGEOS_EXIT_BOOT_SERVICES=1 for the strict native path."
     fi
     echo "--- Building UEFI loader: MS ABI PE/COFF + GOP handoff ---"

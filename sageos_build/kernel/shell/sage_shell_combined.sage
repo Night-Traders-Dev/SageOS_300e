@@ -349,18 +349,44 @@ proc cmd_sdhci():
 # ---------------------------------------------------------------------------
 # cmd_ls
 # ---------------------------------------------------------------------------
-proc cmd_ls():
-    os_ls()
+proc cmd_ls(path):
+    os_ls(path)
 
 # ---------------------------------------------------------------------------
 # cmd_cat
 # ---------------------------------------------------------------------------
 proc cmd_cat(path):
-    if os_strlen(path) == 0:
-        _nl()
-        _println("usage: cat <path>")
-        return nil
     os_cat(path)
+
+# ---------------------------------------------------------------------------
+# cmd_mkdir
+# ---------------------------------------------------------------------------
+proc cmd_mkdir(path):
+    os_mkdir(path)
+
+# ---------------------------------------------------------------------------
+# cmd_touch
+# ---------------------------------------------------------------------------
+proc cmd_touch(path):
+    os_touch(path)
+
+# ---------------------------------------------------------------------------
+# cmd_rm
+# ---------------------------------------------------------------------------
+proc cmd_rm(path):
+    os_rm(path)
+
+# ---------------------------------------------------------------------------
+# cmd_stat
+# ---------------------------------------------------------------------------
+proc cmd_stat(path):
+    os_stat(path)
+
+# ---------------------------------------------------------------------------
+# cmd_write
+# ---------------------------------------------------------------------------
+proc cmd_write(path, content):
+    os_write(path, content)
 
 # ---------------------------------------------------------------------------
 # cmd_keydebug
@@ -372,10 +398,6 @@ proc cmd_keydebug():
 # cmd_execelf
 # ---------------------------------------------------------------------------
 proc cmd_execelf(path):
-    if os_strlen(path) == 0:
-        _nl()
-        _println("usage: execelf <path>")
-        return nil
     os_execelf(path)
 
 # ---------------------------------------------------------------------------
@@ -708,31 +730,6 @@ proc shell_dispatch(line):
     if streq(cmd, "sdhci"):
         cmd_sdhci()
         return nil
-    if streq(cmd, "ls"):
-        cmd_ls()
-        return nil
-    if streq(cmd, "dmesg"):
-        cmd_dmesg()
-        return nil
-    if streq(cmd, "shutdown"):
-        cmd_shutdown()
-        return nil
-    if streq(cmd, "poweroff"):
-        cmd_shutdown()
-        return nil
-    if streq(cmd, "suspend"):
-        cmd_suspend()
-        return nil
-    if streq(cmd, "halt"):
-        cmd_halt()
-        return nil
-    if streq(cmd, "reboot"):
-        cmd_reboot()
-        return nil
-    if streq(cmd, "exit"):
-        cmd_exit()
-        return nil
-
     # Commands with arguments
     if starts_with(cmd, "echo "):
         cmd_echo(arg_after(cmd, "echo"))
@@ -745,6 +742,39 @@ proc shell_dispatch(line):
         return nil
     if starts_with(cmd, "cat "):
         cmd_cat(arg_after(cmd, "cat"))
+        return nil
+    if starts_with(cmd, "mkdir "):
+        cmd_mkdir(arg_after(cmd, "mkdir"))
+        return nil
+    if starts_with(cmd, "touch "):
+        cmd_touch(arg_after(cmd, "touch"))
+        return nil
+    if starts_with(cmd, "rm "):
+        cmd_rm(arg_after(cmd, "rm"))
+        return nil
+    if starts_with(cmd, "stat "):
+        cmd_stat(arg_after(cmd, "stat"))
+        return nil
+    if starts_with(cmd, "ls "):
+        cmd_ls(arg_after(cmd, "ls"))
+        return nil
+    if streq(cmd, "ls"):
+        cmd_ls("")
+        return nil
+    if starts_with(cmd, "write "):
+        let rest = arg_after(cmd, "write")
+        # Split path and content at the first space
+        let i = 0
+        let rlen = os_strlen(rest)
+        while i < rlen:
+            if os_char_at(rest, i) == 32:
+                let path = os_substr(rest, 0, i)
+                let content = os_substr(rest, i + 1, rlen)
+                cmd_write(path, content)
+                return nil
+            i = i + 1
+        # No space found, treat as path with empty content
+        cmd_write(rest, "")
         return nil
     if starts_with(cmd, "execelf "):
         cmd_execelf(arg_after(cmd, "execelf"))

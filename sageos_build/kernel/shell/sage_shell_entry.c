@@ -303,22 +303,85 @@ static MetalValue n_delay_ms(MetalVM *vm, MetalValue *a, int c) {
 
 /* --- Kernel commands --- */
 static MetalValue n_ls(MetalVM *vm, MetalValue *a, int c) {
-    (void)vm;(void)a;(void)c;
-    if (fat32_is_available()) fat32_ls(); ramfs_ls(); return mv_nil();
-}
-static MetalValue n_cat(MetalVM *vm, MetalValue *a, int c) {
-    const char *path = arg_str(vm,a,c,0);
-    if (fat32_is_available() && fat32_cat(path)) return mv_nil();
-    const char *data = ramfs_find(path);
-    if (!data) { console_write("\ncat: no such file: "); console_write(path); }
-    else { console_write("\n"); console_write(data); }
+    const char *path = arg_str(vm, a, c, 0);
+    if (!*path) path = "/";
+    vfs_ls(path);
     return mv_nil();
 }
+
+static MetalValue n_cat(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    if (!*path) { console_write("\nusage: cat <path>"); return mv_nil(); }
+    char buf[513];
+    uint64_t off = 0;
+    int first = 1;
+    while (1) {
+        int n = vfs_read(path, off, buf, 512);
+        if (n < 0) {
+            if (first) { console_write("\ncat: "); console_write(path); console_write(": "); console_write(vfs_strerror(n)); }
+            break;
+        }
+        if (n == 0) break;
+        if (first) { console_write("\n"); first = 0; }
+        buf[n] = 0;
+        console_write(buf);
+        off += (uint64_t)n;
+    }
+    return mv_nil();
+}
+
+static MetalValue n_mkdir(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    if (!*path) { console_write("\nusage: mkdir <path>"); return mv_nil(); }
+    int r = vfs_mkdir(path);
+    if (r < 0) { console_write("\nmkdir: "); console_write(vfs_strerror(r)); }
+    return mv_nil();
+}
+
+static MetalValue n_touch(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    if (!*path) { console_write("\nusage: touch <path>"); return mv_nil(); }
+    int r = vfs_create(path);
+    if (r < 0 && r != VFS_EEXIST) { console_write("\ntouch: "); console_write(vfs_strerror(r)); }
+    return mv_nil();
+}
+
+static MetalValue n_rm(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    if (!*path) { console_write("\nusage: rm <path>"); return mv_nil(); }
+    int r = vfs_unlink(path);
+    if (r < 0) { console_write("\nrm: "); console_write(vfs_strerror(r)); }
+    return mv_nil();
+}
+
+static MetalValue n_stat(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    if (!*path) { console_write("\nusage: stat <path>"); return mv_nil(); }
+    VfsStat st;
+    int r = vfs_stat(path, &st);
+    if (r < 0) { console_write("\nstat: "); console_write(path); console_write(": "); console_write(vfs_strerror(r)); return mv_nil(); }
+    console_write("\n  File: "); console_write(st.name);
+    console_write("\n  Type: "); console_write(st.type == VFS_DIRECTORY ? "directory" : (st.type == VFS_SYMLINK ? "symlink" : "file"));
+    console_write("\n  Size: "); console_u32((uint32_t)st.size); console_write(" B");
+    return mv_nil();
+}
+
+static MetalValue n_write(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    const char *content = arg_str(vm, a, c, 1);
+    if (!*path) { console_write("\nusage: write <path> <content>"); return mv_nil(); }
+    vfs_create(path);
+    int clen = 0; const char *p = content; while (*p) { clen++; p++; }
+    int r = vfs_write(path, 0, content, (size_t)clen);
+    if (r < 0) { console_write("\nwrite: "); console_write(vfs_strerror(r)); }
+    return mv_nil();
+}
+
 static MetalValue n_execelf(MetalVM *vm, MetalValue *a, int c) {
-    const char *path = arg_str(vm,a,c,0);
-    const char *fd; uint64_t sz = ramfs_find_size(path,&fd);
+    const char *path = arg_str(vm, a, c, 0);
+    const char *fd; uint64_t sz = ramfs_find_size(path, &fd);
     if (!fd) { console_write("\nexecelf: no such file: "); console_write(path); return mv_nil(); }
-    elf_exec(fd,sz); return mv_nil();
+    elf_exec(fd, sz); return mv_nil();
 }
 static MetalValue n_keydebug(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; keyboard_keydebug(); return mv_nil();
@@ -442,6 +505,11 @@ static void register_natives(MetalVM *vm) {
     /* Kernel commands */
     REG("os_ls",            n_ls);
     REG("os_cat",           n_cat);
+    REG("os_mkdir",         n_mkdir);
+    REG("os_touch",         n_touch);
+    REG("os_rm",            n_rm);
+    REG("os_stat",          n_stat);
+    REG("os_write",         n_write);
     REG("os_execelf",       n_execelf);
     REG("os_keydebug",      n_keydebug);
     REG("os_dmesg_dump",    n_dmesg_dump);

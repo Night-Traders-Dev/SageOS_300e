@@ -1,0 +1,35 @@
+#!/usr/bin/expect -f
+set timeout 15
+spawn bash lenovo_300e.sh qemu
+
+expect "root@sageos:/# "
+send "ls\r"
+
+expect "root@sageos:/# "
+send "ls /etc\r"
+
+expect "root@sageos:/# "
+send "mkdir /mydir\r"
+
+expect "root@sageos:/# "
+send "ls /\r"
+
+expect "root@sageos:/# "
+send "touch /mydir/test.txt\r"
+
+expect "root@sageos:/# "
+send "write /mydir/test.txt Hello from SageOS VFS\r"
+
+expect "root@sageos:/# "
+send "cat /mydir/test.txt\r"
+
+expect "root@sageos:/# "
+send "stat /mydir/test.txt\r"
+
+expect "root@sageos:/# "
+send "ls /fat32\r"
+
+expect "root@sageos:/# "
+send "exit\r"
+
+expect eof

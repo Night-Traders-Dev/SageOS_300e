@@ -1,9 +1,6 @@
 #ifndef SAGE_METAL_VM_H
 #define SAGE_METAL_VM_H
 
-// Forward declaration for native function type
-struct MetalVM;
-
 // ============================================================================
 // SageMetal VM — Freestanding Bytecode Virtual Machine
 // ============================================================================
@@ -23,24 +20,6 @@ extern "C" {
 // ============================================================================
 // Configuration — tune for your target's memory constraints
 // ============================================================================
-
-// ============================================================================
-// Native Function Dispatch — allows Sage code to call C kernel functions
-// ============================================================================
-
-#ifndef METAL_NATIVE_MAX
-#define METAL_NATIVE_MAX  64     // Maximum registered native functions
-#endif
-
-// Signature for all native callbacks: receives VM, args array, arg count;
-// returns a MetalValue result (use mv_nil() for void-returning functions).
-typedef struct MetalVM MetalVM_t;
-typedef MetalValue (*MetalNativeFn)(MetalVM_t* vm, MetalValue* args, int argc);
-
-typedef struct {
-    unsigned int name_hash;   // FNV-1a of function name (for O(1) lookup)
-    MetalNativeFn fn;
-} MetalNativeEntry;
 
 #ifndef METAL_STACK_SIZE
 #define METAL_STACK_SIZE      512     // Value stack depth
@@ -99,6 +78,26 @@ typedef struct {
 } MetalValue;
 
 // ============================================================================
+// Native Function Dispatch — allows Sage code to call C kernel functions
+// ============================================================================
+
+#ifndef METAL_NATIVE_MAX
+#define METAL_NATIVE_MAX  64     // Maximum registered native functions
+#endif
+
+// Forward-declare MetalVM as a typedef so callbacks use the same type.
+typedef struct MetalVM MetalVM;
+
+// Signature for all native callbacks: receives VM, args array, arg count;
+// returns a MetalValue result (use mv_nil() for void-returning functions).
+typedef MetalValue (*MetalNativeFn)(MetalVM* vm, MetalValue* args, int argc);
+
+typedef struct {
+    unsigned int name_hash;   // FNV-1a of function name (for O(1) lookup)
+    MetalNativeFn fn;
+} MetalNativeEntry;
+
+// ============================================================================
 // Metal Array — fixed-capacity array in pool
 // ============================================================================
 
@@ -148,7 +147,7 @@ typedef struct {
 // Metal VM State — all static, zero dynamic allocation
 // ============================================================================
 
-typedef struct MetalVM {
+struct MetalVM {
     // Value stack
     MetalValue stack[METAL_STACK_SIZE];
     int sp;                                  // Stack pointer
@@ -199,7 +198,7 @@ typedef struct MetalVM {
     // Native function dispatch table (for Sage->C kernel callbacks)
     MetalNativeEntry natives[METAL_NATIVE_MAX];
     int native_count;
-} MetalVM;
+};
 
 // ============================================================================
 // Public API

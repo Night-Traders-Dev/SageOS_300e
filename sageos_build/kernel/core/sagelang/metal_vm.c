@@ -6,6 +6,7 @@
 // ============================================================================
 
 #include "metal_vm.h"
+#include <stdint.h>
 
 // Bare-metal libc stubs (from bare_metal.c or provided by host)
 extern void* memset(void* s, int c, unsigned long n);
@@ -161,6 +162,72 @@ void metal_vm_load(MetalVM* vm, const unsigned char* code, int length) {
     vm->code = code;
     vm->code_length = length;
     vm->ip = 0;
+}
+
+static int read_u32_le(const unsigned char* p, int* pos) {
+    int v = (p[*pos]) | (p[*pos + 1] << 8) | (p[*pos + 2] << 16) | (p[*pos + 3] << 24);
+    *pos += 4;
+    return v;
+}
+
+static int read_u16_le(const unsigned char* p, int* pos) {
+    int v = (p[*pos]) | (p[*pos + 1] << 8);
+    *pos += 2;
+    return v;
+}
+
+int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
+    int pos = 0;
+    if (length < 8) return 0;
+    
+    // Magic "SGVM"
+    if (data[0] != 'S' || data[1] != 'G' || data[2] != 'V' || data[3] != 'M')
+        return 0;
+    pos = 4;
+    
+    // Constant Count
+    int const_count = read_u16_le(data, &pos);
+    for (int i = 0; i < const_count; i++) {
+        int type = data[pos++];
+        if (type == 1) { // Num
+            uint64_t bits;
+            memcpy(&bits, &data[pos], 8);
+            pos += 8;
+            metal_vm_add_constant(vm, mv_num(bits));
+        } else if (type == 2) { // Str
+            int slen = read_u16_le(data, &pos);
+            metal_vm_add_constant(vm, mv_str(vm, (const char*)&data[pos], slen));
+            pos += slen;
+        }
+    }
+    
+    // Function Count
+    int fn_count = read_u16_le(data, &pos);
+    vm->fn_count = fn_count;
+    
+    // We'll read the offsets first, then adjust them after we know where the code pool is.
+    int* temp_offsets = (int*)&vm->heap[vm->heap_used];
+    if (vm->heap_used + fn_count * 4 > METAL_HEAP_SIZE) return 0;
+    
+    for (int i = 0; i < fn_count; i++) {
+        temp_offsets[i] = read_u32_le(data, &pos);
+        vm->functions[i].code_length = read_u32_le(data, &pos);
+        vm->functions[i].param_count = data[pos++];
+    }
+    
+    // Main Code
+    int main_len = read_u32_le(data, &pos);
+    vm->code = &data[pos];
+    vm->code_length = main_len;
+    vm->ip = 0;
+    
+    // The code pool for functions starts after main code
+    const unsigned char* pool_base = &data[pos + main_len];
+    for (int i = 0; i < fn_count; i++) {
+        vm->functions[i].code = &pool_base[temp_offsets[i]];
+    }
+    
+    return 1;
 }
 
 int metal_vm_add_constant(MetalVM* vm, MetalValue value) {
@@ -481,6 +548,19 @@ int metal_vm_step(MetalVM* vm) {
             break;
         }
 
+        case OP_DEFINE_FN: {
+            int name_idx = read_u16(vm->code, &vm->ip);
+            int fn_idx = read_u16(vm->code, &vm->ip);
+            const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
+            unsigned int hash = fnv1a_hash(name, (int)strlen(name));
+            
+            MetalValue val;
+            val.type = MV_FN;
+            val.as.fn_idx = fn_idx;
+            scope_define(vm, hash, val);
+            break;
+        }
+
         // Arithmetic / String Concatenation
         case OP_ADD: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
@@ -666,32 +746,50 @@ int metal_vm_step(MetalVM* vm) {
             break;
         }
 
-        // Function calls — checks native dispatch table first, then built-in fns
         case OP_CALL: {
             int argc = read_u8(vm->code, &vm->ip);
-            // The callee is just below the arguments on the stack.
-            // For native calls: callee is a string value (function name).
-            // Stack layout: [callee] [arg0] ... [argN-1]
             MetalValue callee = vm->stack[vm->sp - argc - 1];
             if (callee.type == MV_STR) {
                 const char* name = metal_string_get(vm, callee.as.str_idx);
                 unsigned int hash = metal_fnv1a(name);
                 MetalNativeFn nfn = metal_vm_find_native(vm, hash);
                 if (nfn) {
-                    // Collect args
                     MetalValue args[16];
                     int nargs = argc < 16 ? argc : 16;
                     for (int i = 0; i < nargs; i++)
                         args[i] = vm->stack[vm->sp - argc + i];
-                    // Remove callee + args from stack
                     vm->sp -= argc + 1;
-                    // Call native and push result
                     MetalValue result = nfn(vm, args, nargs);
                     metal_vm_push(vm, result);
                     break;
                 }
+            } else if (callee.type == MV_FN) {
+                int fn_idx = callee.as.fn_idx;
+                if (fn_idx >= 0 && fn_idx < vm->fn_count) {
+                    if (vm->frame_count >= METAL_CALL_STACK) {
+                        vm->error = 1;
+                        vm->error_msg = "Metal VM: call stack overflow";
+                        return 0;
+                    }
+                    
+                    MetalFunction* fn = &vm->functions[fn_idx];
+                    MetalFrame* frame = &vm->call_stack[vm->frame_count++];
+                    frame->ip = vm->ip;
+                    frame->code = vm->code;
+                    frame->code_length = vm->code_length;
+                    frame->sp_base = vm->sp - argc - 1;
+                    
+                    vm->code = fn->code;
+                    vm->code_length = fn->code_length;
+                    vm->ip = 0;
+                    
+                    if (vm->scope_depth < METAL_ENV_DEPTH - 1) {
+                        vm->scope_depth++;
+                        vm->scopes[vm->scope_depth].count = 0;
+                    }
+                    return 1;
+                }
             }
-            // Fallthrough: unsupported call type for bare-metal VM
             vm->error = 1;
             vm->error_msg = "Metal VM: unsupported call target";
             return 0;
@@ -769,10 +867,26 @@ int metal_vm_step(MetalVM* vm) {
             break;
         }
 
-        case OP_RETURN:
-            // For bare-metal, return pops the current function's result
-            // The calling convention is handled by the compiler
-            return 0; // Signal return to caller
+        case OP_RETURN: {
+            MetalValue result = metal_vm_pop(vm);
+            if (vm->frame_count > 0) {
+                // Pop scope
+                if (vm->scope_depth > 0) vm->scope_depth--;
+                
+                // Restore frame
+                MetalFrame* frame = &vm->call_stack[--vm->frame_count];
+                vm->ip = frame->ip;
+                vm->code = frame->code;
+                vm->code_length = frame->code_length;
+                vm->sp = frame->sp_base; // Clean up arguments and callee
+                
+                metal_vm_push(vm, result);
+                break;
+            } else {
+                vm->halted = 1;
+                return 0;
+            }
+        }
 
         default:
             // Unknown opcode

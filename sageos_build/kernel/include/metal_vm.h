@@ -127,7 +127,7 @@ typedef struct {
 // ============================================================================
 
 typedef struct {
-    int code_offset;    // Offset into bytecode stream
+    const unsigned char* code;    // Pointer to function bytecode
     int code_length;    // Length of function bytecode
     int param_count;    // Number of parameters
     int scope_depth;    // Scope depth at definition
@@ -144,6 +144,21 @@ typedef struct {
 } MetalScope;
 
 // ============================================================================
+// Metal Call Frame — for non-native function calls
+// ============================================================================
+
+typedef struct {
+    const unsigned char* code;
+    int code_length;
+    int ip;
+    int sp_base;        // Where the stack was before arguments
+} MetalFrame;
+
+#ifndef METAL_CALL_STACK
+#define METAL_CALL_STACK 32
+#endif
+
+// ============================================================================
 // Metal VM State — all static, zero dynamic allocation
 // ============================================================================
 
@@ -152,7 +167,11 @@ struct MetalVM {
     MetalValue stack[METAL_STACK_SIZE];
     int sp;                                  // Stack pointer
 
-    // Bytecode
+    // Call stack
+    MetalFrame call_stack[METAL_CALL_STACK];
+    int frame_count;
+
+    // Bytecode (current frame)
     const unsigned char* code;               // Bytecode stream
     int code_length;
     int ip;                                  // Instruction pointer
@@ -214,8 +233,11 @@ MetalNativeFn metal_vm_find_native(MetalVM* vm, unsigned int hash);
 // Initialize VM state (zeroes all pools)
 void metal_vm_init(MetalVM* vm);
 
-// Load bytecode into VM
+// Load raw bytecode into VM
 void metal_vm_load(MetalVM* vm, const unsigned char* code, int length);
+
+// Load binary SGVM artifact into VM
+int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length);
 
 // Add a constant to the constant pool
 int metal_vm_add_constant(MetalVM* vm, MetalValue value);

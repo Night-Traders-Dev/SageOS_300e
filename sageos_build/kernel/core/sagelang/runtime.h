@@ -11,6 +11,9 @@ void sage_repl_init(void);
 // Execute a single line of SageLang code
 void sage_repl_step(const char* line);
 
+// Execute inline Sage code or enter the interactive REPL
+void sage_execute(const char* line);
+
 // Run a .sage or .sagec file
 void sage_run_file(const char* path);
 

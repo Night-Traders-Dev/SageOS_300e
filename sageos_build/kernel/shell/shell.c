@@ -313,7 +313,7 @@ static void help(void) {
     console_write("\n  cat <path>        print RAMFS or FAT32 file");
     console_write("\n  execelf <path>    execute ELF binary");
     console_write("\n  sage              interactive SageLang REPL");
-    console_write("\n  sage <module>     execute SageLang module");
+    console_write("\n  sage <code>       execute one Sage statement");
     console_write("\n  sageshell         launch SageShell (experimental)");
     console_write("\n  echo <text>       print text");
     console_write("\n  color <name>      white green amber blue red");

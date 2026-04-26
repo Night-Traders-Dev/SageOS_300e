@@ -702,27 +702,33 @@ int bytecode_compile_statement_with_functions(BytecodeChunk* chunk, Stmt* stmt, 
                                               BytecodeBuildFunctionFn build_function,
                                               void* build_function_data,
                                               char* error, size_t error_size) {
-    BytecodeCompiler compiler;
-    memset(&compiler, 0, sizeof(compiler));
-    compiler.chunk = chunk;
-    compiler.mode = mode;
-    compiler.build_function = build_function;
-    compiler.build_function_data = build_function_data;
-    compiler.allow_return = 0;
-    compiler.error = error;
-    compiler.error_size = error_size;
+    BytecodeCompiler* compiler = SAGE_ALLOC(sizeof(BytecodeCompiler));
+    if (compiler == NULL) {
+        if (error != NULL && error_size > 0) {
+            snprintf(error, error_size, "out of memory allocating bytecode compiler");
+        }
+        return 0;
+    }
+    memset(compiler, 0, sizeof(*compiler));
+    compiler->chunk = chunk;
+    compiler->mode = mode;
+    compiler->build_function = build_function;
+    compiler->build_function_data = build_function_data;
+    compiler->allow_return = 0;
+    compiler->error = error;
+    compiler->error_size = error_size;
     if (error != NULL && error_size > 0) {
         error[0] = '\0';
     }
 
-    if (!compile_stmt(&compiler, stmt, 1)) {
+    if (!compile_stmt(compiler, stmt, 1)) {
         if (error != NULL && error[0] == '\0') {
             snprintf(error, error_size, "failed to compile statement");
         }
         return 0;
     }
 
-    if (!emit_op(&compiler, BC_OP_RETURN, 0, 0)) {
+    if (!emit_op(compiler, BC_OP_RETURN, 0, 0)) {
         return 0;
     }
     return 1;
@@ -732,28 +738,34 @@ int bytecode_compile_function_body(BytecodeChunk* chunk, Stmt* body,
                                    BytecodeBuildFunctionFn build_function,
                                    void* build_function_data,
                                    char* error, size_t error_size) {
-    BytecodeCompiler compiler;
-    memset(&compiler, 0, sizeof(compiler));
-    compiler.chunk = chunk;
-    compiler.mode = BYTECODE_COMPILE_STRICT;
-    compiler.build_function = build_function;
-    compiler.build_function_data = build_function_data;
-    compiler.allow_return = 1;
-    compiler.error = error;
-    compiler.error_size = error_size;
+    BytecodeCompiler* compiler = SAGE_ALLOC(sizeof(BytecodeCompiler));
+    if (compiler == NULL) {
+        if (error != NULL && error_size > 0) {
+            snprintf(error, error_size, "out of memory allocating function compiler");
+        }
+        return 0;
+    }
+    memset(compiler, 0, sizeof(*compiler));
+    compiler->chunk = chunk;
+    compiler->mode = BYTECODE_COMPILE_STRICT;
+    compiler->build_function = build_function;
+    compiler->build_function_data = build_function_data;
+    compiler->allow_return = 1;
+    compiler->error = error;
+    compiler->error_size = error_size;
     if (error != NULL && error_size > 0) {
         error[0] = '\0';
     }
 
-    if (!compile_stmt(&compiler, body, 0)) {
+    if (!compile_stmt(compiler, body, 0)) {
         if (error != NULL && error_size > 0 && error[0] == '\0') {
             snprintf(error, error_size, "failed to compile function body");
         }
         return 0;
     }
 
-    if (!emit_op(&compiler, BC_OP_NIL, 0, 0) ||
-        !emit_op(&compiler, BC_OP_RETURN, 0, 0)) {
+    if (!emit_op(compiler, BC_OP_NIL, 0, 0) ||
+        !emit_op(compiler, BC_OP_RETURN, 0, 0)) {
         return 0;
     }
     return 1;

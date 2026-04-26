@@ -1,11 +1,19 @@
 #include "runtime.h"
+
+#include "compiler/bytecode.h"
 #include "compiler/lexer.h"
 #include "compiler/parser.h"
-#include "compiler/bytecode.h"
-#include "metal_vm.h"
 #include "console.h"
+#include "keyboard.h"
+#include "metal_vm.h"
+#include "sage_alloc.h"
+
 #include <stdio.h>
 #include <string.h>
+
+#define SAGE_REPL_LINE_MAX   256
+#define SAGE_REPL_BLOCK_MAX  2048
+#define SAGE_REPL_PARAM_MAX  8
 
 // Persistent REPL VM
 static MetalVM g_repl_vm;
@@ -15,99 +23,473 @@ static void metal_vm_write_char_bridge(char c) {
     console_putc(c);
 }
 
-void sage_repl_init() {
-    if (!g_repl_vm_inited) {
-        metal_vm_init(&g_repl_vm);
-        g_repl_vm.write_char = metal_vm_write_char_bridge;
-        g_repl_vm_inited = 1;
+static void sage_clear_exit_state(void) {
+    sage_exit_flag = 0;
+    sage_exit_code = 0;
+}
+
+static MetalValue mv_dbl(double d) {
+    union { double d; uint64_t u; } v;
+    v.d = d;
+    return mv_num(v.u);
+}
+
+static MetalValue metal_value_from_host(MetalVM* vm, Value value) {
+    switch (value.type) {
+        case VAL_NUMBER:
+            return mv_num(value.as.number);
+        case VAL_BOOL:
+            return mv_bool(value.as.boolean);
+        case VAL_NIL:
+            return mv_nil();
+        case VAL_STRING:
+            return mv_str(vm, value.as.string, (int)strlen(value.as.string));
+        default:
+            return mv_nil();
     }
 }
 
-void sage_repl_step(const char* line) {
-    sage_repl_init();
-    
-    // 1. Lexer & Parser
-    init_lexer(line, "<repl>");
-    parser_init();
-    
-    Stmt* stmt = parse();
-    if (!stmt) return;
-    
-    // 2. Bytecode Compiler
-    BytecodeChunk chunk;
-    bytecode_chunk_init(&chunk);
-    
-    char error[256];
-    if (!bytecode_compile_statement(&chunk, stmt, error, sizeof(error))) {
-        printf("Compile error: %s\n", error);
-        bytecode_chunk_free(&chunk);
-        return;
+static unsigned int fnv1a_bytes(const char* s, int len) {
+    unsigned int hash = 2166136261u;
+    for (int i = 0; i < len; i++) {
+        hash ^= (unsigned char)s[i];
+        hash *= 16777619u;
     }
-    
-    // 3. Load constants into VM
-    int const_offset = g_repl_vm.const_count;
-    for (int i = 0; i < chunk.constant_count; i++) {
-        Value v = chunk.constants[i];
-        MetalValue mv;
-        
-        switch (v.type) {
-            case VAL_NUMBER: mv = mv_num(v.as.number); break;
-            case VAL_BOOL:   mv = mv_bool(v.as.boolean); break;
-            case VAL_NIL:    mv = mv_nil(); break;
-            case VAL_STRING: mv = mv_str(&g_repl_vm, v.as.string, (int)strlen(v.as.string)); break;
-            default:         mv = mv_nil(); break;
+    return hash;
+}
+
+static MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1) return mv_dbl(0.0);
+
+    if (args[0].type == MV_STR) {
+        const char* s = metal_string_get(vm, args[0].as.str_idx);
+        return mv_dbl((double)strlen(s));
+    }
+
+    if (args[0].type == MV_ARR) {
+        return mv_dbl((double)metal_array_len(vm, args[0].as.arr_idx));
+    }
+
+    if (args[0].type == MV_DICT) {
+        int idx = args[0].as.dict_idx;
+        int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
+        if (idx >= 0 && idx < max) {
+            return mv_dbl((double)vm->dicts[idx].count);
         }
-        
-        metal_vm_add_constant(&g_repl_vm, mv);
     }
-    
-    // 4. Patch constant/name indices in bytecode
-    for (int i = 0; i < chunk.code_count; i++) {
-        uint8_t op = chunk.code[i];
+
+    return mv_dbl(0.0);
+}
+
+static void sage_register_repl_natives(MetalVM* vm) {
+    metal_vm_register_native(vm, "len", n_len);
+}
+
+static void sage_repl_reset_vm(void) {
+    metal_vm_init(&g_repl_vm);
+    g_repl_vm.write_char = metal_vm_write_char_bridge;
+    sage_register_repl_natives(&g_repl_vm);
+    g_repl_vm_inited = 1;
+}
+
+void sage_repl_init(void) {
+    if (!g_repl_vm_inited) {
+        sage_repl_reset_vm();
+    }
+}
+
+static int line_starts_block(const char* line) {
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == ' ' || line[len - 1] == '\t' ||
+                       line[len - 1] == '\r' || line[len - 1] == '\n')) {
+        len--;
+    }
+    return len > 0 && line[len - 1] == ':';
+}
+
+static int sage_repl_readline(const char* prompt, char* out, size_t cap) {
+    size_t len = 0;
+
+    console_write(prompt);
+    out[0] = '\0';
+
+    for (;;) {
+        KeyEvent ev;
+        if (!keyboard_wait_event(&ev) || !ev.pressed) continue;
+        if (ev.extended) continue;
+
+        char c = ev.ascii;
+
+        if (c == '\r' || c == '\n') {
+            console_putc('\n');
+            out[len] = '\0';
+            return 1;
+        }
+
+        if (c == 4) {
+            if (len == 0) {
+                console_putc('\n');
+                out[0] = '\0';
+                return 0;
+            }
+            continue;
+        }
+
+        if (c == 3) {
+            console_write("^C\n");
+            out[0] = '\0';
+            return 1;
+        }
+
+        if (c == 21) {
+            while (len > 0) {
+                console_putc('\b');
+                console_putc(' ');
+                console_putc('\b');
+                len--;
+            }
+            out[0] = '\0';
+            continue;
+        }
+
+        if (c == 8 || c == 127) {
+            if (len > 0) {
+                len--;
+                console_putc('\b');
+                console_putc(' ');
+                console_putc('\b');
+                out[len] = '\0';
+            }
+            continue;
+        }
+
+        if (c >= 32 && len + 1 < cap) {
+            out[len++] = c;
+            out[len] = '\0';
+            console_putc(c);
+        }
+    }
+}
+
+static void sage_repl_print_help(void) {
+    console_write("Sage REPL Commands:\n");
+    console_write("  :help   show this help\n");
+    console_write("  :quit   exit the Sage REPL\n");
+    console_write("  :exit   exit the Sage REPL\n");
+    console_write("  :reset  reset the Sage REPL session\n");
+    console_write("  :clear  clear the console\n");
+    console_write("\n");
+    console_write("Blocks ending with ':' continue on the next prompt.\n");
+    console_write("Submit an empty continuation line to run the block.\n");
+}
+
+static void sage_prepare_vm_for_step(MetalVM* vm) {
+    vm->sp = 0;
+    vm->frame_count = 0;
+    vm->constants = vm->main_constants;
+    vm->const_count = vm->main_const_count;
+    vm->scope_depth = 0;
+    vm->halted = 0;
+    vm->error = 0;
+    vm->error_msg = 0;
+}
+
+static int sage_import_chunk_constants(MetalVM* vm, BytecodeChunk* chunk,
+                                       char* error, size_t error_size,
+                                       int* const_offset_out) {
+    int const_offset = vm->const_count;
+    for (int i = 0; i < chunk->constant_count; i++) {
+        MetalValue mv = metal_value_from_host(vm, chunk->constants[i]);
+        if (metal_vm_add_constant(vm, mv) < 0) {
+            snprintf(error, error_size, "REPL constant pool exhausted");
+            return 0;
+        }
+    }
+    *const_offset_out = const_offset;
+    return 1;
+}
+
+static void sage_patch_main_chunk_indices(BytecodeChunk* chunk, int const_offset) {
+    for (int i = 0; i < chunk->code_count; i++) {
+        uint8_t op = chunk->code[i];
         int operands = 0;
-        
-        if (op == BC_OP_CONSTANT || 
+
+        if (op == BC_OP_CONSTANT ||
             op == BC_OP_GET_GLOBAL || op == BC_OP_DEFINE_GLOBAL || op == BC_OP_SET_GLOBAL ||
             op == BC_OP_GET_PROPERTY || op == BC_OP_SET_PROPERTY ||
-            op == BC_OP_CALL_METHOD || op == BC_OP_ARRAY || op == BC_OP_TUPLE || op == BC_OP_DICT) {
-            
-            uint16_t idx = (uint16_t)((chunk.code[i+1] << 8) | chunk.code[i+2]);
+            op == BC_OP_CALL_METHOD) {
+
+            uint16_t idx = (uint16_t)((chunk->code[i + 1] << 8) | chunk->code[i + 2]);
             idx += (uint16_t)const_offset;
-            chunk.code[i+1] = (uint8_t)((idx >> 8) & 0xff);
-            chunk.code[i+2] = (uint8_t)(idx & 0xff);
+            chunk->code[i + 1] = (uint8_t)((idx >> 8) & 0xff);
+            chunk->code[i + 2] = (uint8_t)(idx & 0xff);
             operands = 2;
         } else if (op == BC_OP_DEFINE_FUNCTION) {
-            uint16_t name_idx = (uint16_t)((chunk.code[i+1] << 8) | chunk.code[i+2]);
+            uint16_t name_idx = (uint16_t)((chunk->code[i + 1] << 8) | chunk->code[i + 2]);
             name_idx += (uint16_t)const_offset;
-            chunk.code[i+1] = (uint8_t)((name_idx >> 8) & 0xff);
-            chunk.code[i+2] = (uint8_t)(name_idx & 0xff);
+            chunk->code[i + 1] = (uint8_t)((name_idx >> 8) & 0xff);
+            chunk->code[i + 2] = (uint8_t)(name_idx & 0xff);
             operands = 4;
         } else if (op == BC_OP_JUMP || op == BC_OP_JUMP_IF_FALSE || op == BC_OP_LOOP_BACK) {
             operands = 2;
         } else if (op == BC_OP_CALL || op == BC_OP_DUP) {
             operands = 1;
         }
-        
+
         i += operands;
     }
-    
-    // 5. Run in MetalVM
+}
+
+static int sage_wrap_expression_for_print(BytecodeChunk* chunk,
+                                          char* error, size_t error_size) {
+    if (chunk->code_count <= 0 || chunk->code[chunk->code_count - 1] != BC_OP_RETURN) {
+        return 1;
+    }
+
+    uint8_t* code = realloc(chunk->code, (size_t)chunk->code_count + 2u);
+    if (!code) {
+        snprintf(error, error_size, "out of memory while expanding REPL expression");
+        return 0;
+    }
+
+    chunk->code = code;
+    chunk->code[chunk->code_count - 1] = BC_OP_PRINT;
+    chunk->code[chunk->code_count] = BC_OP_NIL;
+    chunk->code[chunk->code_count + 1] = BC_OP_RETURN;
+    chunk->code_count += 2;
+    return 1;
+}
+
+static int sage_repl_build_function(void* data, ProcStmt* proc,
+                                    char* error, size_t error_size,
+                                    int* function_index_out) {
+    MetalVM* vm = (MetalVM*)data;
+    BytecodeChunk chunk;
+    MetalFunction* fn;
+    unsigned char* heap_ptr;
+    int fn_idx;
+    int const_bytes;
+    int code_bytes;
+
+    if (proc->param_count > SAGE_REPL_PARAM_MAX) {
+        snprintf(error, error_size, "REPL functions support at most %d parameters",
+                 SAGE_REPL_PARAM_MAX);
+        return 0;
+    }
+
+    if (vm->fn_count >= (int)(sizeof(vm->functions) / sizeof(vm->functions[0]))) {
+        snprintf(error, error_size, "REPL function table exhausted");
+        return 0;
+    }
+
+    bytecode_chunk_init(&chunk);
+    if (!bytecode_compile_function_body(&chunk, proc->body,
+                                        sage_repl_build_function, data,
+                                        error, error_size)) {
+        bytecode_chunk_free(&chunk);
+        return 0;
+    }
+
+    fn_idx = vm->fn_count++;
+    fn = &vm->functions[fn_idx];
+    memset(fn, 0, sizeof(*fn));
+    fn->param_count = proc->param_count;
+    for (int i = 0; i < proc->param_count; i++) {
+        fn->param_name_hashes[i] = fnv1a_bytes(proc->params[i].start, proc->params[i].length);
+    }
+
+    const_bytes = chunk.constant_count * (int)sizeof(MetalValue);
+    if (vm->heap_used + const_bytes > METAL_HEAP_SIZE) {
+        snprintf(error, error_size, "REPL VM heap exhausted by function constants");
+        vm->fn_count--;
+        bytecode_chunk_free(&chunk);
+        return 0;
+    }
+    if (const_bytes > 0) {
+        MetalValue* pool = (MetalValue*)&vm->heap[vm->heap_used];
+        for (int i = 0; i < chunk.constant_count; i++) {
+            pool[i] = metal_value_from_host(vm, chunk.constants[i]);
+        }
+        fn->constants = pool;
+        fn->const_count = chunk.constant_count;
+        vm->heap_used += const_bytes;
+    }
+
+    code_bytes = chunk.code_count;
+    if (vm->heap_used + code_bytes > METAL_HEAP_SIZE) {
+        snprintf(error, error_size, "REPL VM heap exhausted by function bytecode");
+        vm->fn_count--;
+        bytecode_chunk_free(&chunk);
+        return 0;
+    }
+    heap_ptr = &vm->heap[vm->heap_used];
+    memcpy(heap_ptr, chunk.code, (size_t)code_bytes);
+    fn->code = heap_ptr;
+    fn->code_length = code_bytes;
+    vm->heap_used += code_bytes;
+
+    *function_index_out = fn_idx;
+    bytecode_chunk_free(&chunk);
+    return 1;
+}
+
+void sage_repl_step(const char* line) {
+    BytecodeChunk chunk;
+    Stmt* stmt;
+    char error[256];
+    int const_offset = 0;
+    int is_expression = 0;
+
+    if (!line || !*line) return;
+
+    sage_repl_init();
+    sage_clear_exit_state();
+    sage_arena_reset();
+
+    init_lexer(line, "<repl>");
+    parser_init();
+
+    stmt = parse();
+    if (sage_exit_flag || stmt == NULL) {
+        sage_clear_exit_state();
+        return;
+    }
+
+    bytecode_chunk_init(&chunk);
+    if (!bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_STRICT,
+                                                   sage_repl_build_function, &g_repl_vm,
+                                                   error, sizeof(error))) {
+        if (!sage_exit_flag) {
+            printf("Compile error: %s\n", error);
+        }
+        bytecode_chunk_free(&chunk);
+        sage_clear_exit_state();
+        return;
+    }
+
+    is_expression = (stmt->type == STMT_EXPRESSION);
+    if (is_expression &&
+        !sage_wrap_expression_for_print(&chunk, error, sizeof(error))) {
+        printf("Compile error: %s\n", error);
+        bytecode_chunk_free(&chunk);
+        sage_clear_exit_state();
+        return;
+    }
+
+    if (!sage_import_chunk_constants(&g_repl_vm, &chunk, error, sizeof(error), &const_offset)) {
+        printf("Compile error: %s\n", error);
+        bytecode_chunk_free(&chunk);
+        sage_clear_exit_state();
+        return;
+    }
+    sage_patch_main_chunk_indices(&chunk, const_offset);
+
+    sage_prepare_vm_for_step(&g_repl_vm);
     metal_vm_load(&g_repl_vm, chunk.code, chunk.code_count);
     metal_vm_run(&g_repl_vm);
-    
+
     if (g_repl_vm.error) {
-        printf("Runtime error: %s\n", g_repl_vm.error_msg);
+        printf("Runtime error: %s\n", g_repl_vm.error_msg ? g_repl_vm.error_msg : "unknown");
         g_repl_vm.error = 0;
+        g_repl_vm.error_msg = 0;
     }
-    
+
     bytecode_chunk_free(&chunk);
+    sage_clear_exit_state();
+}
+
+static void sage_repl_run(void) {
+    char line[SAGE_REPL_LINE_MAX];
+    char block[SAGE_REPL_BLOCK_MAX];
+
+    sage_repl_init();
+
+    console_write("\nSage REPL\n");
+    console_write("Type :help for help, :quit to exit.\n");
+
+    for (;;) {
+        size_t block_len = 0;
+
+        if (!sage_repl_readline("sage> ", line, sizeof(line))) {
+            break;
+        }
+
+        if (line[0] == '\0') {
+            continue;
+        }
+
+        if (strcmp(line, ":quit") == 0 || strcmp(line, ":exit") == 0) {
+            break;
+        }
+
+        if (strcmp(line, ":help") == 0) {
+            sage_repl_print_help();
+            continue;
+        }
+
+        if (strcmp(line, ":reset") == 0) {
+            sage_repl_reset_vm();
+            sage_clear_exit_state();
+            console_write("Sage REPL session reset.\n");
+            continue;
+        }
+
+        if (strcmp(line, ":clear") == 0) {
+            console_clear();
+            continue;
+        }
+
+        block[0] = '\0';
+        block_len = strlen(line);
+        if (block_len + 1 >= sizeof(block)) {
+            console_write("sage: input line too long\n");
+            continue;
+        }
+        memcpy(block, line, block_len);
+        block[block_len++] = '\n';
+        block[block_len] = '\0';
+
+        if (line_starts_block(line)) {
+            for (;;) {
+                char cont[SAGE_REPL_LINE_MAX];
+                size_t cont_len;
+
+                if (!sage_repl_readline("...   ", cont, sizeof(cont))) {
+                    break;
+                }
+                if (cont[0] == '\0') {
+                    break;
+                }
+
+                cont_len = strlen(cont);
+                if (block_len + cont_len + 1 >= sizeof(block)) {
+                    console_write("sage: block too large\n");
+                    block[0] = '\0';
+                    break;
+                }
+                memcpy(block + block_len, cont, cont_len);
+                block_len += cont_len;
+                block[block_len++] = '\n';
+                block[block_len] = '\0';
+            }
+            if (block[0] == '\0') {
+                continue;
+            }
+        }
+
+        sage_repl_step(block);
+    }
+
+    sage_clear_exit_state();
 }
 
 void sage_execute(const char* line) {
-    if (!line || !*line) {
-        printf("Sage REPL: Use 'sage <code>' to execute Sage code.\n");
+    if (line == NULL || line[0] == '\0' || strcmp(line, "--repl") == 0) {
+        sage_repl_run();
         return;
     }
+
+    console_putc('\n');
     sage_repl_step(line);
 }
 

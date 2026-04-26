@@ -299,7 +299,10 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
 int metal_vm_add_constant(MetalVM* vm, MetalValue value) {
     if (vm->main_const_count >= METAL_CONST_POOL) return -1;
     vm->main_constants[vm->main_const_count] = value;
-    return vm->main_const_count++;
+    vm->main_const_count++;
+    vm->constants = vm->main_constants;
+    vm->const_count = vm->main_const_count;
+    return vm->main_const_count - 1;
 }
 
 // ============================================================================
@@ -600,7 +603,11 @@ int metal_vm_step(MetalVM* vm) {
         case OP_TRUE:  metal_vm_push(vm, mv_bool(1)); break;
         case OP_FALSE: metal_vm_push(vm, mv_bool(0)); break;
         case OP_POP:   metal_vm_pop(vm); break;
-        case OP_DUP:   metal_vm_push(vm, metal_vm_peek(vm, 0)); break;
+        case OP_DUP: {
+            int distance = read_u8(vm->code, &vm->ip);
+            metal_vm_push(vm, metal_vm_peek(vm, distance));
+            break;
+        }
 
         case OP_DEFINE_GLOBAL: {
             int name_idx = read_u16(vm->code, &vm->ip);
@@ -917,8 +924,9 @@ int metal_vm_step(MetalVM* vm) {
         }
 
         // Arrays
-        case OP_ARRAY: {
-            int count = read_u8(vm->code, &vm->ip);
+        case OP_ARRAY:
+        case OP_TUPLE: {
+            int count = read_u16(vm->code, &vm->ip);
             int arr = metal_array_new(vm);
             // Elements are on stack in reverse order
             for (int i = count - 1; i >= 0; i--) {

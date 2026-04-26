@@ -840,6 +840,14 @@ int metal_vm_step(MetalVM* vm) {
                     return 1;
                 }
             }
+            if (callee.type != MV_STR && callee.type != MV_FN) {
+                console_write("OP_CALL: unsupported target type ");
+                console_u32(callee.type);
+                console_write("\n");
+                vm->error = 1;
+                vm->error_msg = "Metal VM: unsupported call target";
+                return 0;
+            }
             vm->error = 1;
             vm->error_msg = "Metal VM: unsupported call target";
             return 0;

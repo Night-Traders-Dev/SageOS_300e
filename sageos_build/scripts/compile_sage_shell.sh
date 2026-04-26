@@ -61,8 +61,7 @@ def parse_sagebc(path):
                 i += 1
                 params = []
                 for _ in range(params_count):
-                    # param <len> \n <hex>
-                    i += 2 # skip param names for now
+                    i += 2 # skip param names
                 
                 # constants
                 consts = []
@@ -96,7 +95,6 @@ def parse_sagebc(path):
             for _ in range(count):
                 if lines[i] != "chunk": raise ValueError("Expected chunk")
                 i += 1
-                # constants
                 consts = []
                 if not lines[i].startswith("constants "): raise ValueError("Expected constants")
                 c_count = int(lines[i].split()[1])
@@ -111,7 +109,6 @@ def parse_sagebc(path):
                         sdata = bytes.fromhex(lines[i])
                         consts.append(('str', sdata))
                         i += 1
-                # code
                 if not lines[i].startswith("code "): raise ValueError("Expected code")
                 code_len = int(lines[i].split()[1])
                 i += 1
@@ -130,16 +127,6 @@ except Exception as e:
     print(f"Error parsing bytecode: {e}")
     sys.exit(1)
 
-# Construct Binary Blob (SGVM)
-# Format:
-# MAGIC "SGVM" (4)
-# MAIN_CONST_COUNT (u16)
-# MAIN_CONSTS... [Type(u8), Data]
-# MAIN_CODE_LEN (u32)
-# MAIN_CODE_BYTES...
-# FUNCTION_COUNT (u16)
-# FUNCTIONS... [const_count(u16), consts, code_len(u32), code_bytes]
-
 blob = bytearray(b"SGVM")
 
 def pack_consts(consts):
@@ -154,20 +141,70 @@ def pack_consts(consts):
             res += cv
     return res
 
-# Main chunk
-main_chunk = chunks[-1] if chunks else {'consts': [], 'code': b''}
-blob += pack_consts(main_chunk['consts'])
-blob += struct.pack("<I", len(main_chunk['code']))
-blob += main_chunk['code']
+# Main chunk (concatenate all chunks and merge constants)
+main_consts = []
+main_code = bytearray()
 
-# Functions
+for chunk in chunks:
+    base = len(main_consts)
+    main_consts.extend(chunk['consts'])
+    
+    code = bytearray(chunk['code'])
+    if code and code[-1] == 43: # BC_OP_RETURN
+        code = code[:-1]
+    
+    pc = 0
+    while pc < len(code):
+        op = code[pc]
+        # Opcodes with u16 constant/name indices
+        if op in [0, 5, 6, 7, 9, 10, 42, 61, 63]:
+            if pc + 2 >= len(code): break
+            idx = (code[pc+1] << 8) | code[pc+2]
+            new_idx = idx + base
+            code[pc+1] = (new_idx >> 8) & 0xff
+            code[pc+2] = new_idx & 0xff
+            pc += 3
+        elif op == 8: # DEFINE_FN
+            if pc + 4 >= len(code): break
+            idx = (code[pc+1] << 8) | code[pc+2]
+            new_idx = idx + base
+            code[pc+1] = (new_idx >> 8) & 0xff
+            code[pc+2] = new_idx & 0xff
+            pc += 5
+        elif op == 37: # CALL_METHOD
+            if pc + 3 >= len(code): break
+            idx = (code[pc+1] << 8) | code[pc+2]
+            new_idx = idx + base
+            code[pc+1] = (new_idx >> 8) & 0xff
+            code[pc+2] = new_idx & 0xff
+            pc += 4
+        elif op == 62: # CLASS
+            if pc + 5 >= len(code): break
+            idx = (code[pc+1] << 8) | code[pc+2]
+            new_idx = idx + base
+            code[pc+1] = (new_idx >> 8) & 0xff
+            code[pc+2] = new_idx & 0xff
+            pc += 6
+        elif op in [34, 35, 38, 39, 40, 60, 65]:
+            pc += 3
+        elif op in [36, 46, 48, 49, 50, 56]:
+            pc += 2
+        else:
+            pc += 1
+    main_code += code
+
+main_code.append(43) # End with RETURN
+
+blob += pack_consts(main_consts)
+blob += struct.pack("<I", len(main_code))
+blob += main_code
+
 blob += struct.pack("<H", len(functions))
 for fn in functions:
     blob += pack_consts(fn['consts'])
     blob += struct.pack("<I", len(fn['code']))
     blob += fn['code']
 
-# Write C header
 size = len(blob)
 with open(dest, "w") as f:
     f.write("/* Auto-generated binary SGVM artifact — DO NOT EDIT */\n")

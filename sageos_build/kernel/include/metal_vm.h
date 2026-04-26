@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_HEAP_SIZE
-#define METAL_HEAP_SIZE       65536   // General heap bytes (bump allocator)
+#define METAL_HEAP_SIZE       524288  // General heap bytes (bump allocator)
 #endif
 
 #ifndef METAL_CONST_POOL

@@ -217,18 +217,18 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     vm->code = &data[pos];
     vm->code_length = main_len;
     vm->ip = 0;
+    pos += main_len;
     
     // Functions
+    if (pos + 2 > length) return 1; // No functions? That's okay.
     int fn_count = read_u16_le(data, &pos);
     vm->fn_count = fn_count;
     for (int i = 0; i < fn_count; i++) {
         // Load function's constants onto heap
-        if (vm->heap_used + 256 * sizeof(MetalValue) > METAL_HEAP_SIZE) return 0;
+        int c_count_peek = (data[pos] | (data[pos+1] << 8));
+        if (vm->heap_used + c_count_peek * sizeof(MetalValue) > METAL_HEAP_SIZE) return 0;
         MetalValue* pool = (MetalValue*)&vm->heap[vm->heap_used];
-        int c_count = read_u16_le(data, &pos);
-        // Rewind pos to re-parse with load_const_pool or just inline it
-        pos -= 2; 
-        int actual_count = load_const_pool(vm, data, &pos, pool, 256);
+        int actual_count = load_const_pool(vm, data, &pos, pool, c_count_peek);
         vm->functions[i].constants = pool;
         vm->functions[i].const_count = actual_count;
         vm->heap_used += actual_count * sizeof(MetalValue);

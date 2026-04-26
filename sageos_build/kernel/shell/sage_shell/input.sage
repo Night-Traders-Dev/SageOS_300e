@@ -52,50 +52,48 @@ proc read_line():
     let done = 0
     while done == 0:
         let c = os_read_char()
-        if c < 0:
-            # No char available — tight poll (bare-metal)
-            continue
-        if c == 10:
-            # Newline / Enter
-            os_write_char(10)
-            done = 1
-        elif c == 13:
-            # Carriage return (some keyboards)
-            os_write_char(10)
-            done = 1
-        elif c == 3:
-            # Ctrl-C — cancel line
-            os_write_str("^C")
-            os_write_char(10)
-            return ""
-        elif c == 21:
-            # Ctrl-U — clear line (erase displayed chars)
-            let llen = os_strlen(line)
-            let i = 0
-            while i < llen:
-                os_write_char(8)
-                os_write_char(32)
-                os_write_char(8)
-                i = i + 1
-            line = ""
-        elif c == 8:
-            # Backspace
-            let llen = os_strlen(line)
-            if llen > 0:
-                line = os_str_chop(line)
-                os_write_char(8)
-                os_write_char(32)
-                os_write_char(8)
-        elif c == 127:
-            # Delete (some terminals send this for backspace)
-            let llen = os_strlen(line)
-            if llen > 0:
-                line = os_str_chop(line)
-                os_write_char(8)
-                os_write_char(32)
-                os_write_char(8)
-        elif c >= 32:
-            # Printable character
-            line = line + os_chr(c)
-            os_write_char(c)
+        if c >= 0:
+            if c == 10:
+                # Newline / Enter
+                os_write_char(10)
+                done = 1
+            elif c == 13:
+                # Carriage return (some keyboards)
+                os_write_char(10)
+                done = 1
+            elif c == 3:
+                # Ctrl-C — cancel line
+                os_write_str("^C")
+                os_write_char(10)
+                return ""
+            elif c == 21:
+                # Ctrl-U — clear line (erase displayed chars)
+                let llen = os_strlen(line)
+                let i = 0
+                while i < llen:
+                    os_write_char(8)
+                    os_write_char(32)
+                    os_write_char(8)
+                    i = i + 1
+                line = ""
+            elif c == 8:
+                # Backspace
+                let llen = os_strlen(line)
+                if llen > 0:
+                    line = os_str_chop(line)
+                    os_write_char(8)
+                    os_write_char(32)
+                    os_write_char(8)
+            elif c == 127:
+                # Delete (some terminals send this for backspace)
+                let llen = os_strlen(line)
+                if llen > 0:
+                    line = os_str_chop(line)
+                    os_write_char(8)
+                    os_write_char(32)
+                    os_write_char(8)
+            elif c >= 32:
+                # Printable character
+                line = line + os_chr(c)
+                os_write_char(c)
     return line

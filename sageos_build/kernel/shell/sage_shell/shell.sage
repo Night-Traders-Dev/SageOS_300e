@@ -168,6 +168,12 @@ proc shell_dispatch(line):
         return nil
     if starts_with(cmd, "rm "):
         let arg = arg_after(cmd, "rm")
+        if starts_with(arg, "-rf "):
+            arg = arg_after(arg, "-rf")
+        if starts_with(arg, "-r "):
+            arg = arg_after(arg, "-r")
+        if starts_with(arg, "-f "):
+            arg = arg_after(arg, "-f")
         cmd_rm(arg)
         return nil
     if starts_with(cmd, "stat "):
@@ -199,6 +205,9 @@ proc shell_dispatch(line):
     if starts_with(cmd, "execelf "):
         let arg = arg_after(cmd, "execelf")
         cmd_execelf(arg)
+        return nil
+    if streq(cmd, "exit") or streq(cmd, "shutdown"):
+        cmd_exit()
         return nil
     if starts_with(cmd, "sage "):
         let arg = arg_after(cmd, "sage")

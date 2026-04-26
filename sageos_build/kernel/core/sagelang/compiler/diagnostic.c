@@ -96,6 +96,14 @@ const char* sage_token_type_name(TokenType type) {
         case TOKEN_DEDENT: return "DEDENT";
         case TOKEN_NEWLINE: return "NEWLINE";
         case TOKEN_EOF: return "EOF";
+        case TOKEN_SUPER: return "SUPER";
+        case TOKEN_STRUCT: return "STRUCT";
+        case TOKEN_ENUM: return "ENUM";
+        case TOKEN_TRAIT: return "TRAIT";
+        case TOKEN_UNSAFE: return "UNSAFE";
+        case TOKEN_END: return "END";
+        case TOKEN_ARROW: return "ARROW";
+        case TOKEN_DOC_COMMENT: return "DOC_COMMENT";
         case TOKEN_ERROR: return "ERROR";
     }
     return "UNKNOWN";

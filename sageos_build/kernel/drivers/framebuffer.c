@@ -120,29 +120,7 @@ static void my_memset32(void *dest, uint32_t val, size_t count) {
     while (count--) *p++ = val;
 }
 
-static void my_memcpy32(void *dest, const void *src, size_t count) {
-    uint32_t *d = (uint32_t *)dest;
-    const uint32_t *s = (const uint32_t *)src;
-    while (count--) *d++ = *s++;
-}
 
-static void fb_putpixel(uint32_t x, uint32_t y, uint32_t rgb) {
-    if (!g_have_fb || !g_info) return;
-    if (x >= g_info->width || y >= g_info->height) return;
-    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
-    fb[(uint64_t)y * g_info->pixels_per_scanline + x] = pack_rgb(rgb);
-}
-
-static void fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t rgb) {
-    if (!g_have_fb || !g_info) return;
-    uint32_t packed = pack_rgb(rgb);
-    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
-    uint32_t pitch = g_info->pixels_per_scanline;
-
-    for (uint32_t yy = 0; yy < h; yy++) {
-        my_memset32((void *)(fb + (uint64_t)(y + yy) * pitch + x), packed, w);
-    }
-}
 
 static const uint8_t *glyph(char ch) {
     static const uint8_t SPACE[7] = {0,0,0,0,0,0,0};

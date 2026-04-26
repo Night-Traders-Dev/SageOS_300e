@@ -562,6 +562,7 @@ void free_expr(Expr* expr) {
         case EXPR_BOOL:
         case EXPR_NIL:
         case EXPR_VARIABLE:
+        case EXPR_SUPER:
             break;
     }
 

@@ -439,6 +439,12 @@ static int compile_expr(BytecodeCompiler* compiler, Expr* expr) {
         case EXPR_AWAIT:
             set_error(compiler, "await expressions are not compiled to bytecode yet.");
             return 0;
+        case EXPR_SUPER:
+            set_error(compiler, "super expressions are not compiled to bytecode yet.");
+            return 0;
+        case EXPR_COMPTIME:
+            set_error(compiler, "comptime expressions are not compiled to bytecode yet.");
+            return 0;
     }
 
     set_error(compiler, "Unsupported expression in bytecode mode.");

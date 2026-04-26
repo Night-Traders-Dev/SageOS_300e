@@ -68,15 +68,6 @@ static int starts_with(const char *text, const char *prefix) {
     return 1;
 }
 
-static int cmd_matches_word(const char *line, const char *word) {
-    size_t len = 0;
-    while (word[len]) {
-        if (line[len] != word[len]) return 0;
-        len++;
-    }
-    return line[len] == '\0' || line[len] == ' ';
-}
-
 static void *shell_memmove(void *dest, const void *src, size_t n) {
     unsigned char *d = dest;
     const unsigned char *s = src;
@@ -84,6 +75,7 @@ static void *shell_memmove(void *dest, const void *src, size_t n) {
     else if (d > s) for (size_t i = n; i > 0; i--)     d[i-1] = s[i-1];
     return dest;
 }
+
 
 static int history_physical_index(int logical) {
     return (shell_history_head - 1 - logical + SHELL_HISTORY_SIZE * 2) % SHELL_HISTORY_SIZE;

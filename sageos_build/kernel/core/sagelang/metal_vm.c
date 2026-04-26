@@ -186,11 +186,6 @@ static int read_u16_be(const unsigned char* p, int* pos) {
     return v;
 }
 
-static int read_u32_be(const unsigned char* p, int* pos) {
-    int v = (p[*pos] << 24) | (p[*pos + 1] << 16) | (p[*pos + 2] << 8) | (p[*pos + 3]);
-    *pos += 4;
-    return v;
-}
 
 static int load_const_pool(MetalVM* vm, const unsigned char* data, int* pos, MetalValue* pool, int max) {
     int count = read_u16_le(data, pos);

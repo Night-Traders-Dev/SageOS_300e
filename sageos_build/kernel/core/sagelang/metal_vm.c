@@ -33,37 +33,37 @@ extern int strcmp(const char* s1, const char* s2);
 #define OP_MUL            16
 #define OP_DIV            17
 #define OP_MOD            18
-#define OP_NEGATE         29
-#define OP_EQUAL          30
-#define OP_NOT_EQUAL      31
-#define OP_GREATER        32
-#define OP_GREATER_EQ     33
-#define OP_LESS           34
-#define OP_LESS_EQ        35
-#define OP_BIT_AND        36
-#define OP_BIT_OR         37
-#define OP_BIT_XOR        38
-#define OP_BIT_NOT        39
-#define OP_SHIFT_LEFT     40
-#define OP_SHIFT_RIGHT    41
-#define OP_NOT            42
-#define OP_TRUTHY         43
-#define OP_JUMP           44
-#define OP_JUMP_IF_FALSE  45
-#define OP_CALL           46
-#define OP_CALL_METHOD    47
-#define OP_ARRAY          48
-#define OP_TUPLE          49
-#define OP_DICT           50
-#define OP_PRINT          51
-#define OP_RETURN         53
-#define OP_PUSH_ENV       54
-#define OP_POP_ENV        55
-#define OP_DUP            56
-#define OP_ARRAY_LEN      57
-#define OP_BREAK          58
-#define OP_CONTINUE       59
-#define OP_LOOP_BACK      60
+#define OP_NEGATE         19
+#define OP_EQUAL          20
+#define OP_NOT_EQUAL      21
+#define OP_GREATER        22
+#define OP_GREATER_EQ     23
+#define OP_LESS           24
+#define OP_LESS_EQ        25
+#define OP_BIT_AND        26
+#define OP_BIT_OR         27
+#define OP_BIT_XOR        28
+#define OP_BIT_NOT        29
+#define OP_SHIFT_LEFT     30
+#define OP_SHIFT_RIGHT    31
+#define OP_NOT            32
+#define OP_TRUTHY         33
+#define OP_JUMP           34
+#define OP_JUMP_IF_FALSE  35
+#define OP_CALL           36
+#define OP_CALL_METHOD    37
+#define OP_ARRAY          38
+#define OP_TUPLE          39
+#define OP_DICT           40
+#define OP_PRINT          41
+#define OP_RETURN         43
+#define OP_PUSH_ENV       44
+#define OP_POP_ENV        45
+#define OP_DUP            46
+#define OP_ARRAY_LEN      47
+#define OP_BREAK          48
+#define OP_CONTINUE       49
+#define OP_LOOP_BACK      50
 #define OP_HALT           0xFF
 
 // ============================================================================
@@ -775,9 +775,24 @@ int metal_vm_step(MetalVM* vm) {
             return 0; // Signal return to caller
 
         default:
-            // Unknown opcode — halt
+            // Unknown opcode
             vm->error = 1;
-            vm->error_msg = "Metal VM: unknown opcode";
+            {
+                static char err_buf[64];
+                // basic itoa
+                int val = op;
+                char num[4];
+                num[0] = '0' + (val / 100) % 10;
+                num[1] = '0' + (val / 10) % 10;
+                num[2] = '0' + (val % 10);
+                num[3] = '\0';
+                int i = 0;
+                char* p = "unknown opcode: ";
+                while (*p) err_buf[i++] = *p++;
+                for (int j = 0; j < 3; j++) err_buf[i++] = num[j];
+                err_buf[i] = '\0';
+                vm->error_msg = err_buf;
+            }
             return 0;
     }
 

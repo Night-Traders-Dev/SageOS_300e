@@ -349,7 +349,7 @@ static void cmd_color(const char *name) {
     console_write("\nusage: color <white|green|amber|blue|red>");
 }
 
-static void exec(const char *cmd) {
+void shell_exec_command(const char *cmd) {
     cmd = skip_spaces(cmd);
     if (streq(cmd, "")) return;
     if (starts_word(cmd, "help"))         { help(); return; }
@@ -377,7 +377,7 @@ static void exec(const char *cmd) {
     if (starts_word(cmd, "keydebug"))     { keyboard_keydebug(); return; }
     if (starts_word(cmd, "pci"))          { pci_cmd_info(); return; }
     if (starts_word(cmd, "sdhci"))        { sdhci_cmd_info(); return; }
-    if (starts_word(cmd, "exit"))         { power_qemu_exit(); return; }
+    if (starts_word(cmd, "exit") || streq(cmd, "q")) { power_qemu_exit(); return; }
     if (starts_with(cmd, "ls")) {
         const char *path = arg_after(cmd, "ls");
         if (!*path) path = "/";
@@ -421,8 +421,18 @@ static void exec(const char *cmd) {
     }
     if (starts_with(cmd, "rm")) {
         const char *path = arg_after(cmd, "rm");
+        int recursive = 0;
+        if (starts_word(path, "-rf")) {
+            path = arg_after(path, "-rf");
+            recursive = 1;
+        } else if (starts_word(path, "-r")) {
+            path = arg_after(path, "-r");
+            recursive = 1;
+        } else if (starts_word(path, "-f")) {
+            path = arg_after(path, "-f");
+        }
         if (!*path) { console_write("\nusage: rm <path>"); return; }
-        int r = vfs_unlink(path);
+        int r = recursive ? vfs_rm_rf(path) : vfs_unlink(path);
         if (r < 0) { console_write("\nrm: "); console_write(vfs_strerror(r)); }
         return;
     }
@@ -577,7 +587,7 @@ void shell_run(void) {
             line[len] = 0;
             console_write("\n");
             if (len > 0) shell_save_history(line);
-            exec(line);
+            shell_exec_command(line);
             len = 0; pos = 0; line[0] = 0;
             displayed_len = 0;
             shell_history_nav = -1;

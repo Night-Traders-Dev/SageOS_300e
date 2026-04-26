@@ -24,6 +24,7 @@
 #include "serial.h"
 #include "pci.h"
 #include "sdhci.h"
+#include "shell.h"
 #include "elf.h"
 #include "version.h"
 #include "dmesg.h"
@@ -38,6 +39,7 @@
  * --------------------------------------------------------------------- */
 static MetalVM g_sage_shell_vm;
 static int     g_sage_shell_init = 0;
+static int     g_sage_shell_running = 0;
 
 /* -----------------------------------------------------------------------
  * I/O bridge
@@ -400,6 +402,10 @@ static MetalValue n_execelf(MetalVM *vm, MetalValue *a, int c) {
     if (!fd) { console_write("\nexecelf: no such file: "); console_write(path); return mv_nil(); }
     elf_exec(fd, sz); return mv_nil();
 }
+static MetalValue n_shell_exec(MetalVM *vm, MetalValue *a, int c) {
+    shell_exec_command(arg_str(vm, a, c, 0));
+    return mv_nil();
+}
 static MetalValue n_keydebug(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; keyboard_keydebug(); return mv_nil();
 }
@@ -529,6 +535,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_stat",          n_stat);
     REG("os_write",         n_write);
     REG("os_execelf",       n_execelf);
+    REG("os_shell_exec",    n_shell_exec);
     REG("os_keydebug",      n_keydebug);
     REG("os_dmesg_dump",    n_dmesg_dump);
     REG("os_status_print",  n_status_print);
@@ -559,6 +566,13 @@ static void register_natives(MetalVM *vm) {
  * sage_shell_run — public entry point called from shell.c "sageshell" command
  * --------------------------------------------------------------------- */
 void sage_shell_run(void) {
+    if (g_sage_shell_running) {
+        console_write("\nSageShell is already active.");
+        return;
+    }
+
+    g_sage_shell_running = 1;
+
     if (!g_sage_shell_init) {
         metal_vm_init(&g_sage_shell_vm);
         g_sage_shell_vm.write_char = bridge_write_char;
@@ -584,6 +598,7 @@ void sage_shell_run(void) {
                              sage_shell_bytecode,
                              (int)sage_shell_bytecode_len)) {
         console_write("\nsageshell: error loading bytecode artifact\n");
+        g_sage_shell_running = 0;
         return;
     }
 
@@ -594,4 +609,6 @@ void sage_shell_run(void) {
                       ? g_sage_shell_vm.error_msg : "unknown");
         console_write("\n");
     }
+
+    g_sage_shell_running = 0;
 }

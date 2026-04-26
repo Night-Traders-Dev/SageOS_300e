@@ -132,6 +132,7 @@ typedef struct {
     MetalValue* constants;       // Function-specific constant pool
     int const_count;
     int param_count;    // Number of parameters
+    unsigned int param_name_hashes[8];
     int scope_depth;    // Scope depth at definition
 } MetalFunction;
 

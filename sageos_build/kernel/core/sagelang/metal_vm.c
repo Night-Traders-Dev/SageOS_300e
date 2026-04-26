@@ -244,6 +244,24 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     int fn_count = read_u16_le(data, &pos);
     vm->fn_count = fn_count;
     for (int i = 0; i < fn_count; i++) {
+        int param_count = read_u16_le(data, &pos);
+        if (param_count > 8) {
+            console_write("load_binary: too many params at fn ");
+            console_u32(i);
+            console_write("\n");
+            return 0;
+        }
+        vm->functions[i].param_count = param_count;
+        for (int p = 0; p < param_count; p++) {
+            if (pos + 4 > length) {
+                console_write("load_binary: truncated param hash at fn ");
+                console_u32(i);
+                console_write("\n");
+                return 0;
+            }
+            vm->functions[i].param_name_hashes[p] = (unsigned int)read_u32_le(data, &pos);
+        }
+
         // Load function's constants onto heap
         int c_count_peek = (data[pos] | (data[pos+1] << 8));
         if (vm->heap_used + c_count_peek * sizeof(MetalValue) > METAL_HEAP_SIZE) {
@@ -857,6 +875,12 @@ int metal_vm_step(MetalVM* vm) {
                         vm->scope_depth++;
                         vm->scopes[vm->scope_depth].count = 0;
                     }
+                    for (int p = 0; p < fn->param_count; p++) {
+                        MetalValue arg = mv_nil();
+                        if (p < argc) arg = vm->stack[vm->sp - argc + p];
+                        scope_define(vm, fn->param_name_hashes[p], arg);
+                    }
+                    vm->sp = frame->sp_base;
                     return 1;
                 }
             }

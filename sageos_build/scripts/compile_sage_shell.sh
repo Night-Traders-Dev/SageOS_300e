@@ -61,7 +61,15 @@ def parse_sagebc(path):
                 i += 1
                 params = []
                 for _ in range(params_count):
-                    i += 2 # skip param names
+                    if not lines[i].startswith("param "):
+                        raise ValueError("Expected param")
+                    plen = int(lines[i].split()[1])
+                    i += 1
+                    pdata = bytes.fromhex(lines[i])
+                    if len(pdata) != plen:
+                        raise ValueError("Param length mismatch")
+                    params.append(pdata)
+                    i += 1
                 
                 # constants
                 consts = []
@@ -87,7 +95,7 @@ def parse_sagebc(path):
                 i += 1
                 if lines[i] != "endfunction": raise ValueError("Expected endfunction")
                 i += 1
-                functions.append({'params': params_count, 'consts': consts, 'code': code_data})
+                functions.append({'params': params, 'consts': consts, 'code': code_data})
         
         elif line.startswith("chunks "):
             count = int(line.split()[1])
@@ -128,6 +136,13 @@ except Exception as e:
     sys.exit(1)
 
 blob = bytearray(b"SGVM")
+
+def fnv1a(data):
+    h = 2166136261
+    for b in data:
+        h ^= b
+        h = (h * 16777619) & 0xffffffff
+    return h
 
 def pack_consts(consts):
     res = struct.pack("<H", len(consts))
@@ -201,6 +216,9 @@ blob += main_code
 
 blob += struct.pack("<H", len(functions))
 for fn in functions:
+    blob += struct.pack("<H", len(fn['params']))
+    for param in fn['params']:
+        blob += struct.pack("<I", fnv1a(param))
     blob += pack_consts(fn['consts'])
     blob += struct.pack("<I", len(fn['code']))
     blob += fn['code']

@@ -1458,8 +1458,8 @@ endfunction
 function
 params 0
 constants 1
-string 12
-6f735f71656d755f65786974
+string 7
+6f735f68616c74
 code 8
 050000240004012b
 endfunction

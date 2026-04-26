@@ -6,7 +6,9 @@ The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP fr
 
 Recent updates:
 - **SageShell & MetalVM**: The kernel shell has been fully ported to SageLang. It runs on the **MetalVM** bytecode interpreter, which now features a 32-level call stack, per-function constant pools, and a custom binary loading format (**SGVM**) for efficient execution.
-- **Unified VFS Architecture**: Implemented a dynamic Virtual Filesystem (VFS) with mount point support. It provides writable operations via a pooled dynamic RamFS and handles multi-backend routing for read/write shell commands.
+- **Unified VFS & Shell Integration**: The SageShell now communicates directly with the kernel's C-based VFS layer. Support for recursive directory removal (`rm -rf`), persistent directory creation (`mkdir`), and file creation (`touch`) is fully implemented.
+- **Recursive Directory Removal**: Added `vfs_rm_rf` to the kernel VFS, allowing recursive deletion of non-empty directory trees from the shell.
+- **Improved Power Management**: The `exit`, `shutdown`, `poweroff`, `halt`, `reboot`, and `suspend` commands are now fully wired from the SageShell to the kernel's power management backend.
 - **SGVM Binary Format**: Replaced raw text bytecode with a packed binary format that includes function metadata, constant pools, and remapped branch offsets, enabling complex multi-file SageLang applications to run on bare metal.
 - **Battery & EC**: Stabilized CrOS EC identity checks and `BATT_FLAG` validation. The status bar now provides real-time battery percentage with proper fallback handling.
 - **Line Editing**: Advanced fish-style completion, history navigation, and prompt anchoring are now fully implemented in SageLang.
@@ -309,17 +311,23 @@ acpi lid
 acpi battery
 battery
 ls
+mkdir <path>
+touch <path>
+rm [-rf] <path>
+stat <path>
 cat <path>
 execelf <path>
 sage <module>
 sageshell
 echo <text>
-color <white|green|amber|blue|red>dmesg
+color <white|green|amber|blue|red>
+dmesg
 shutdown
 poweroff
 suspend
 halt
 reboot
+exit
 ```
 
 ### SageShell Line Editing

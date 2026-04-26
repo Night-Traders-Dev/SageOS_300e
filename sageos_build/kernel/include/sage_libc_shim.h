@@ -32,6 +32,7 @@ size_t sage_strlen(const char *s);
 int    sage_strcmp(const char *a, const char *b);
 int    sage_strncmp(const char *a, const char *b, size_t n);
 char  *sage_strcpy(char *dest, const char *src);
+char  *sage_strcat(char *dest, const char *src);
 char  *sage_strncpy(char *dest, const char *src, size_t n);
 char  *sage_strchr(const char *s, int c);
 char  *sage_strstr(const char *h, const char *n);
@@ -40,6 +41,7 @@ char  *sage_strstr(const char *h, const char *n);
 #define strcmp(a,b)       sage_strcmp(a,b)
 #define strncmp(a,b,n)   sage_strncmp(a,b,n)
 #define strcpy(d,s)      sage_strcpy(d,s)
+#define strcat(d,s)      sage_strcat(d,s)
 #define strncpy(d,s,n)   sage_strncpy(d,s,n)
 #define strchr(s,c)      sage_strchr(s,c)
 #define strstr(h,n)      sage_strstr(h,n)

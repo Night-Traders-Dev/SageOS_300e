@@ -84,6 +84,10 @@ char *sage_strcpy(char *dest, const char *src) {
     char *d = dest; while (*src) *d++ = *src++; *d = '\0'; return dest;
 }
 
+char *sage_strcat(char *dest, const char *src) {
+    char *d = dest; while (*d) d++; while (*src) *d++ = *src++; *d = '\0'; return dest;
+}
+
 char *sage_strncpy(char *dest, const char *src, size_t n) {
     size_t i;
     for (i = 0; i < n && src[i]; i++) dest[i] = src[i];

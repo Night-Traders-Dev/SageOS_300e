@@ -21,6 +21,7 @@
 #include "version.h"
 #include "dmesg.h"
 #include "sage_shell_entry.h"
+#include "sage_libc_shim.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) { if (*a != *b) return 0; a++; b++; }
@@ -132,14 +133,6 @@ void shell_print_completions(const char *prefix) {
         count++;
     }
     if (count == 0) console_write("(no completions)");
-}
-
-static void *shell_memmove(void *dest, const void *src, size_t n) {
-    unsigned char *d = dest;
-    const unsigned char *s = src;
-    if (d < s)      for (size_t i = 0;   i < n; i++)   d[i]   = s[i];
-    else if (d > s) for (size_t i = n; i > 0; i--)     d[i-1] = s[i-1];
-    return dest;
 }
 
 
@@ -280,7 +273,7 @@ static void shell_tab_complete(
         if (fill_len > 0) {
             shell_draw_hint(first_match, token_start + token_len, *len, *pos, *start_row, *start_col);
             if (*len + fill_len >= SHELL_LINE_MAX - 1) fill_len = SHELL_LINE_MAX - 1 - *len;
-            shell_memmove(line + token_start + token_len + fill_len,
+            memmove(line + token_start + token_len + fill_len,
                           line + token_start + token_len,
                           *len - token_start - token_len + 1);
             for (size_t i = 0; i < fill_len; i++)
@@ -307,7 +300,7 @@ static void shell_tab_complete(
         size_t fill_len = lcp - token_len;
         if (*len + fill_len >= SHELL_LINE_MAX - 1) fill_len = SHELL_LINE_MAX - 1 - *len;
         if (fill_len > 0) {
-            shell_memmove(line + token_start + token_len + fill_len,
+            memmove(line + token_start + token_len + fill_len,
                           line + token_start + token_len,
                           *len - token_start - token_len + 1);
             for (size_t i = 0; i < fill_len; i++)
@@ -657,7 +650,7 @@ void shell_run(void) {
                 break;
             case 0x53: /* Delete */
                 if (pos < len) {
-                    shell_memmove(line + pos, line + pos + 1, len - pos);
+                    memmove(line + pos, line + pos + 1, len - pos);
                     len--; line[len] = 0;
                     shell_redraw_line(line, pos, start_row, start_col, displayed_len);
                     displayed_len = len;
@@ -698,7 +691,7 @@ void shell_run(void) {
         if (c == 8 || c == 127) {
             if (pos > 0) {
                 size_t erase = displayed_len > len ? displayed_len : len;
-                shell_memmove(line + pos - 1, line + pos, len - pos + 1);
+                memmove(line + pos - 1, line + pos, len - pos + 1);
                 pos--; len--;
                 shell_redraw_line(line, pos, start_row, start_col, erase);
                 displayed_len = len;
@@ -708,7 +701,7 @@ void shell_run(void) {
 
         if ((uint8_t)c >= 32 && (uint8_t)c <= 126 && len + 1 < sizeof(line)) {
             int append_at_end = (pos == len) && (displayed_len == len);
-            shell_memmove(line + pos + 1, line + pos, len - pos + 1);
+            memmove(line + pos + 1, line + pos, len - pos + 1);
             line[pos] = c;
             len++; pos++; line[len] = 0;
             if (append_at_end) {

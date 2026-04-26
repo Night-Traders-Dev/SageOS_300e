@@ -1,5 +1,6 @@
 #include "vfs.h"
 #include "console.h"
+#include "sage_libc_shim.h"
 #include <stddef.h>
 
 /* -----------------------------------------------------------------------
@@ -32,17 +33,6 @@ static int vfs_strncmp(const char *a, const char *b, int n) {
         if (a[i] == 0) return 0;
     }
     return 0;
-}
-
-static void vfs_strcpy(char *dst, const char *src) {
-    while (*src) *dst++ = *src++;
-    *dst = 0;
-}
-
-static void vfs_strcat(char *dst, const char *src) {
-    while (*dst) dst++;
-    while (*src) *dst++ = *src++;
-    *dst = 0;
 }
 
 static int vfs_strcmp(const char *a, const char *b) {
@@ -298,14 +288,14 @@ int vfs_rm_rf(const char *path) {
             if (vfs_strcmp(entries[i].name, ".") == 0 || vfs_strcmp(entries[i].name, "..") == 0) continue;
 
             char child_path[VFS_MAX_PATH];
-            vfs_strcpy(child_path, path);
+            sage_strcpy(child_path, path);
             int len = vfs_strlen(child_path);
             if (len > 0 && child_path[len-1] != '/') {
                 child_path[len] = '/';
                 child_path[len+1] = 0;
                 len++;
             }
-            vfs_strcat(child_path, entries[i].name);
+            sage_strcat(child_path, entries[i].name);
 
             res = vfs_rm_rf(child_path);
             if (res != VFS_OK) return res;

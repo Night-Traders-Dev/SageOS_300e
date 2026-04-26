@@ -11,6 +11,7 @@
 #include "shell.h"
 #include "serial.h"
 #include "vfs.h"
+#include "sage_libc_shim.h"
 
 extern void ata_read_sector(uint32_t lba, uint16_t *buffer);
 extern void ata_write_sector(uint32_t lba, const uint16_t *buffer);
@@ -35,14 +36,6 @@ static void draw_bar(uint32_t val, uint32_t max, uint32_t width) {
 static void print_mb(uint64_t bytes) {
     console_u32((uint32_t)(bytes / 1024 / 1024));
     console_write(" MB");
-}
-
-static void s_memmove(char *dst, const char *src, int n) {
-    if (dst < src) {
-        for (int i = 0; i < n; i++) dst[i] = src[i];
-    } else if (dst > src) {
-        for (int i = n - 1; i >= 0; i--) dst[i] = src[i];
-    }
 }
 
 static void serial_raw(const char *s) {
@@ -545,7 +538,7 @@ void cmd_nano(const char *path) {
             else if (ev.scancode == 0x47) pos = nano_line_start(buf, pos);
             else if (ev.scancode == 0x4F) pos = nano_line_end(buf, len, pos);
             else if (ev.scancode == 0x53 && pos < len) {
-                s_memmove(buf + pos, buf + pos + 1, len - pos);
+                memmove(buf + pos, buf + pos + 1, len - pos);
                 len--;
                 modified = 1;
             }
@@ -566,14 +559,14 @@ void cmd_nano(const char *path) {
             pos = nano_line_end(buf, len, pos);
         } else if (c == 8 || c == 127) {
             if (pos > 0) {
-                s_memmove(buf + pos - 1, buf + pos, len - pos + 1);
+                memmove(buf + pos - 1, buf + pos, len - pos + 1);
                 pos--;
                 len--;
                 modified = 1;
             }
         } else if (c == '\r' || c == '\n') {
             if (len + 1 < NANO_MAX_TEXT) {
-                s_memmove(buf + pos + 1, buf + pos, len - pos + 1);
+                memmove(buf + pos + 1, buf + pos, len - pos + 1);
                 buf[pos] = '\n';
                 pos++;
                 len++;
@@ -581,7 +574,7 @@ void cmd_nano(const char *path) {
             }
         } else if ((uint8_t)c >= 32 && (uint8_t)c <= 126) {
             if (len + 1 < NANO_MAX_TEXT) {
-                s_memmove(buf + pos + 1, buf + pos, len - pos + 1);
+                memmove(buf + pos + 1, buf + pos, len - pos + 1);
                 buf[pos] = c;
                 pos++;
                 len++;

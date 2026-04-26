@@ -12,6 +12,9 @@
 extern void* memset(void* s, int c, unsigned long n);
 extern void* memcpy(void* dest, const void* src, unsigned long n);
 extern unsigned long strlen(const char* s);
+
+extern void console_write(const char* s);
+extern void console_u32(uint32_t v);
 extern int strcmp(const char* s1, const char* s2);
 
 // Bytecode opcodes — subset matching src/vm/bytecode.h
@@ -200,11 +203,16 @@ static int load_const_pool(MetalVM* vm, const unsigned char* data, int* pos, Met
 
 int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     int pos = 0;
-    if (length < 8) return 0;
+    if (length < 8) {
+        console_write("load_binary: length < 8\n");
+        return 0;
+    }
     
     // Magic "SGVM"
-    if (data[0] != 'S' || data[1] != 'G' || data[2] != 'V' || data[3] != 'M')
+    if (data[0] != 'S' || data[1] != 'G' || data[2] != 'V' || data[3] != 'M') {
+        console_write("load_binary: magic mismatch\n");
         return 0;
+    }
     pos = 4;
     
     // Main Constants
@@ -226,7 +234,16 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     for (int i = 0; i < fn_count; i++) {
         // Load function's constants onto heap
         int c_count_peek = (data[pos] | (data[pos+1] << 8));
-        if (vm->heap_used + c_count_peek * sizeof(MetalValue) > METAL_HEAP_SIZE) return 0;
+        if (vm->heap_used + c_count_peek * sizeof(MetalValue) > METAL_HEAP_SIZE) {
+            console_write("load_binary: heap overflow at fn ");
+            console_u32(i);
+            console_write(" (need ");
+            console_u32(c_count_peek);
+            console_write(" consts, used ");
+            console_u32(vm->heap_used);
+            console_write(")\n");
+            return 0;
+        }
         MetalValue* pool = (MetalValue*)&vm->heap[vm->heap_used];
         int actual_count = load_const_pool(vm, data, &pos, pool, c_count_peek);
         vm->functions[i].constants = pool;
@@ -235,6 +252,12 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
         
         // Function Code
         int flen = read_u32_le(data, &pos);
+        if (pos + flen > length) {
+            console_write("load_binary: truncated function code at fn ");
+            console_u32(i);
+            console_write("\n");
+            return 0;
+        }
         vm->functions[i].code = &data[pos];
         vm->functions[i].code_length = flen;
         pos += flen;

@@ -467,6 +467,7 @@ void sage_shell_run(void) {
         g_sage_shell_vm.halted      = 0;
         g_sage_shell_vm.error       = 0;
         g_sage_shell_vm.error_msg   = 0;
+        g_sage_shell_vm.heap_used    = 0;
     }
 
     /*

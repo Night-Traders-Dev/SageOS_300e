@@ -1,6 +1,9 @@
 #ifndef SAGE_METAL_VM_H
 #define SAGE_METAL_VM_H
 
+// Forward declaration for native function type
+struct MetalVM;
+
 // ============================================================================
 // SageMetal VM — Freestanding Bytecode Virtual Machine
 // ============================================================================
@@ -20,6 +23,24 @@ extern "C" {
 // ============================================================================
 // Configuration — tune for your target's memory constraints
 // ============================================================================
+
+// ============================================================================
+// Native Function Dispatch — allows Sage code to call C kernel functions
+// ============================================================================
+
+#ifndef METAL_NATIVE_MAX
+#define METAL_NATIVE_MAX  64     // Maximum registered native functions
+#endif
+
+// Signature for all native callbacks: receives VM, args array, arg count;
+// returns a MetalValue result (use mv_nil() for void-returning functions).
+typedef struct MetalVM MetalVM_t;
+typedef MetalValue (*MetalNativeFn)(MetalVM_t* vm, MetalValue* args, int argc);
+
+typedef struct {
+    unsigned int name_hash;   // FNV-1a of function name (for O(1) lookup)
+    MetalNativeFn fn;
+} MetalNativeEntry;
 
 #ifndef METAL_STACK_SIZE
 #define METAL_STACK_SIZE      512     // Value stack depth
@@ -127,7 +148,7 @@ typedef struct {
 // Metal VM State — all static, zero dynamic allocation
 // ============================================================================
 
-typedef struct {
+typedef struct MetalVM {
     // Value stack
     MetalValue stack[METAL_STACK_SIZE];
     int sp;                                  // Stack pointer
@@ -174,11 +195,22 @@ typedef struct {
     void (*write_port)(int port, int val);   // Port I/O (x86)
     int  (*read_port)(int port);             // Port I/O (x86)
     void* (*map_mmio)(unsigned long phys, unsigned long size); // MMIO mapping
+
+    // Native function dispatch table (for Sage->C kernel callbacks)
+    MetalNativeEntry natives[METAL_NATIVE_MAX];
+    int native_count;
 } MetalVM;
 
 // ============================================================================
 // Public API
 // ============================================================================
+
+// Register a native C function callable from Sage as fn_name(...)
+// Returns 1 on success, 0 if the native table is full.
+int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn);
+
+// Look up a native function by FNV-1a hash (used internally by OP_CALL dispatch)
+MetalNativeFn metal_vm_find_native(MetalVM* vm, unsigned int hash);
 
 // Initialize VM state (zeroes all pools)
 void metal_vm_init(MetalVM* vm);
@@ -216,6 +248,10 @@ int metal_array_new(MetalVM* vm);
 void metal_array_push(MetalVM* vm, int arr_idx, MetalValue val);
 MetalValue metal_array_get(MetalVM* vm, int arr_idx, int index);
 int metal_array_len(MetalVM* vm, int arr_idx);
+
+// String utilities (useful for native callbacks building return strings)
+void metal_string_concat(MetalVM* vm, int idx_a, int idx_b, int* out_idx);
+void metal_num_to_str(MetalVM* vm, long long n, int* out_idx);
 
 // Print (uses write_char callback)
 void metal_print_value(MetalVM* vm, MetalValue value);

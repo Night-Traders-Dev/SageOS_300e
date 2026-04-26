@@ -109,6 +109,7 @@ build_kernel() {
           -DMETAL_STRING_POOL=16384 \
           -DMETAL_HEAP_SIZE=32768 \
           -DMETAL_CONST_POOL=256 \
+          -DMETAL_NATIVE_MAX=64 \
           -c "$src" \
           -o "$obj"
 
@@ -195,6 +196,24 @@ build_image() {
       /nodefaultlib \
       /out:"$BUILD/BOOTX64.EFI" \
       "$OBJ/uefi_loader.obj"
+
+    # Compile SageLang shell sources -> bytecode -> C header
+    echo "--- Compiling SageLang shell sources (sage-sh) ---"
+    if command -v sage > /dev/null 2>&1; then
+        bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
+    else
+        echo "WARN: 'sage' not found on PATH — skipping sage-sh bytecode compile."
+        echo "      If sage_shell_bytecode.h is missing, the build will fail."
+        echo "      Install SageLang or run: bash sageos_build/scripts/compile_sage_shell.sh /path/to/sage"
+        # Emit a stub header so the build succeeds with a no-op sage-sh
+        cat > "$KERNEL/shell/sage_shell_bytecode.h" <<'STUBEOF'
+/* Stub: sage compiler not available at build time. sage-sh will be a no-op. */
+#pragma once
+#include <stdint.h>
+static const uint8_t sage_shell_bytecode[] = { 0xFF }; /* OP_HALT */
+static const int sage_shell_bytecode_len = 1;
+STUBEOF
+    fi
 
     build_kernel
 
@@ -394,6 +413,21 @@ case "$cmd" in
         ;;
     build-kernel)
         check_tools
+        # Generate bytecode header if not already present
+        if [ ! -f "$KERNEL/shell/sage_shell_bytecode.h" ]; then
+            if command -v sage > /dev/null 2>&1; then
+                bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
+            else
+                echo "WARN: sage not found — generating stub sage_shell_bytecode.h"
+                cat > "$KERNEL/shell/sage_shell_bytecode.h" <<'STUBEOF'
+/* Stub: sage compiler not available at build time. */
+#pragma once
+#include <stdint.h>
+static const uint8_t sage_shell_bytecode[] = { 0xFF };
+static const int sage_shell_bytecode_len = 1;
+STUBEOF
+            fi
+        fi
         build_kernel
         ;;
     qemu)

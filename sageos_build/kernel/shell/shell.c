@@ -19,6 +19,7 @@
 #include "elf.h"
 #include "version.h"
 #include "dmesg.h"
+#include "sage_shell_entry.h"
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) { if (*a != *b) return 0; a++; b++; }
@@ -54,9 +55,9 @@ static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
     "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
     "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
-    "neofetch", "pci", "poweroff", "reboot", "sage", "sdhci", "shutdown", "smp",
-    "smp start", "status", "stop", "suspend", "sysinfo", "timer",
-    "uname", "version",
+    "neofetch", "pci", "poweroff", "reboot", "sage", "sage-sh", "sdhci",
+    "shutdown", "smp", "smp start", "status", "stop", "suspend", "sysinfo",
+    "timer", "uname", "version",
 };
 
 #define SHELL_CMD_COUNT (sizeof(shell_commands) / sizeof(shell_commands[0]))
@@ -313,6 +314,7 @@ static void help(void) {
     console_write("\n  execelf <path>    execute ELF binary");
     console_write("\n  sage              interactive SageLang REPL");
     console_write("\n  sage <module>     execute SageLang module");
+    console_write("\n  sage-sh           launch SageLang shell (experimental)");
     console_write("\n  echo <text>       print text");
     console_write("\n  color <name>      white green amber blue red");
     console_write("\n  dmesg             early log");
@@ -403,6 +405,7 @@ static void exec(const char *cmd) {
         elf_exec(file_data, file_size);
         return;
     }
+    if (starts_with(cmd, "sage-sh")) { sage_shell_run(); return; }
     if (starts_with(cmd, "sage")) {
         const char *mod = arg_after(cmd, "sage");
         extern void sage_execute(const char *module_name);

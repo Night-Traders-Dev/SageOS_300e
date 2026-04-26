@@ -227,6 +227,66 @@ const char* metal_string_get(MetalVM* vm, int idx) {
 }
 
 // ============================================================================
+// String Utilities for Native Callbacks
+// ============================================================================
+
+void metal_string_concat(MetalVM* vm, int idx_a, int idx_b, int* out_idx) {
+    const char* a = metal_string_get(vm, idx_a);
+    const char* b = metal_string_get(vm, idx_b);
+    int la = (int)strlen(a);
+    int lb = (int)strlen(b);
+    int total = la + lb;
+    if (vm->string_used + total + 1 > METAL_STRING_POOL) { *out_idx = -1; return; }
+    char* dest = &vm->strings[vm->string_used];
+    memcpy(dest, a, (unsigned long)la);
+    memcpy(dest + la, b, (unsigned long)lb);
+    dest[total] = '\0';
+    *out_idx = vm->string_used;
+    vm->string_used += total + 1;
+}
+
+void metal_num_to_str(MetalVM* vm, long long n, int* out_idx) {
+    char buf[24];
+    int i = 0;
+    int neg = (n < 0);
+    if (neg) { buf[i++] = '-'; n = -n; }
+    if (n == 0) { buf[i++] = '0'; }
+    else {
+        char tmp[20]; int j = 0;
+        while (n > 0) { tmp[j++] = '0' + (int)(n % 10); n /= 10; }
+        while (j > 0) buf[i++] = tmp[--j];
+    }
+    buf[i] = '\0';
+    *out_idx = metal_string_intern(vm, buf, i);
+}
+
+// ============================================================================
+// Native Function Dispatch Table
+// ============================================================================
+
+static unsigned int metal_fnv1a(const char* s) {
+    unsigned int hash = 2166136261u;
+    while (*s) { hash ^= (unsigned char)(*s++); hash *= 16777619u; }
+    return hash;
+}
+
+int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
+    if (vm->native_count >= METAL_NATIVE_MAX) return 0;
+    vm->natives[vm->native_count].name_hash = metal_fnv1a(name);
+    vm->natives[vm->native_count].fn = fn;
+    vm->native_count++;
+    return 1;
+}
+
+MetalNativeFn metal_vm_find_native(MetalVM* vm, unsigned int hash) {
+    for (int i = 0; i < vm->native_count; i++) {
+        if (vm->natives[i].name_hash == hash)
+            return vm->natives[i].fn;
+    }
+    return (MetalNativeFn)0;
+}
+
+// ============================================================================
 // Array Pool
 // ============================================================================
 
@@ -419,13 +479,21 @@ int metal_vm_step(MetalVM* vm) {
             break;
         }
 
-        // Arithmetic
+        // Arithmetic / String Concatenation
         case OP_ADD: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = va.d + vb.d;
-            metal_vm_push(vm, mv_num(vr.u));
+            if (a.type == MV_STR && b.type == MV_STR) {
+                // String concatenation
+                int out_idx;
+                metal_string_concat(vm, a.as.str_idx, b.as.str_idx, &out_idx);
+                MetalValue sv; sv.type = MV_STR; sv.as.str_idx = out_idx;
+                metal_vm_push(vm, sv);
+            } else {
+                union { double d; uint64_t u; } va, vb, vr;
+                va.u = a.as.num_bits; vb.u = b.as.num_bits;
+                vr.d = va.d + vb.d;
+                metal_vm_push(vm, mv_num(vr.u));
+            }
             break;
         }
         case OP_SUB: {
@@ -594,6 +662,37 @@ int metal_vm_step(MetalVM* vm) {
             int offset = read_u16(vm->code, &vm->ip);
             vm->ip -= offset;
             break;
+        }
+
+        // Function calls — checks native dispatch table first, then built-in fns
+        case OP_CALL: {
+            int argc = read_u8(vm->code, &vm->ip);
+            // The callee is just below the arguments on the stack.
+            // For native calls: callee is a string value (function name).
+            // Stack layout: [callee] [arg0] ... [argN-1]
+            MetalValue callee = vm->stack[vm->sp - argc - 1];
+            if (callee.type == MV_STR) {
+                const char* name = metal_string_get(vm, callee.as.str_idx);
+                unsigned int hash = metal_fnv1a(name);
+                MetalNativeFn nfn = metal_vm_find_native(vm, hash);
+                if (nfn) {
+                    // Collect args
+                    MetalValue args[16];
+                    int nargs = argc < 16 ? argc : 16;
+                    for (int i = 0; i < nargs; i++)
+                        args[i] = vm->stack[vm->sp - argc + i];
+                    // Remove callee + args from stack
+                    vm->sp -= argc + 1;
+                    // Call native and push result
+                    MetalValue result = nfn(vm, args, nargs);
+                    metal_vm_push(vm, result);
+                    break;
+                }
+            }
+            // Fallthrough: unsupported call type for bare-metal VM
+            vm->error = 1;
+            vm->error_msg = "Metal VM: unsupported call target";
+            return 0;
         }
 
         // Scope

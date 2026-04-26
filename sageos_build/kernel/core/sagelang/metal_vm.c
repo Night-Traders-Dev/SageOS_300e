@@ -387,11 +387,20 @@ static unsigned int metal_fnv1a(const char* s) {
     return hash;
 }
 
+static void scope_define(MetalVM* vm, unsigned int hash, MetalValue value);
+
 int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
     if (vm->native_count >= METAL_NATIVE_MAX) return 0;
     vm->natives[vm->native_count].name_hash = metal_fnv1a(name);
     vm->natives[vm->native_count].fn = fn;
     vm->native_count++;
+
+    /*
+     * Native calls are compiled like normal global calls. Bind each native
+     * name into the current scope as a self-named string so OP_CALL can
+     * resolve the registered callback from the callee value.
+     */
+    scope_define(vm, metal_fnv1a(name), mv_str(vm, name, (int)strlen(name)));
     return 1;
 }
 
@@ -546,7 +555,6 @@ static int metal_truthy(MetalValue v) {
 int metal_vm_step(MetalVM* vm) {
     if (vm->halted || vm->error || vm->ip >= vm->code_length) return 0;
 
-    int current_ip = vm->ip;
     int op = read_u8(vm->code, &vm->ip);
     
     /*
@@ -610,13 +618,8 @@ int metal_vm_step(MetalVM* vm) {
             int name_idx = read_u16_be(vm->code, &vm->ip);
             int fn_idx = read_u16_be(vm->code, &vm->ip);
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            
-            console_write("OP_DEFINE_FN: ");
-            console_write(name);
-            console_write("\n");
-            
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
-            
+
             MetalValue val;
             val.type = MV_FN;
             val.as.fn_idx = fn_idx;

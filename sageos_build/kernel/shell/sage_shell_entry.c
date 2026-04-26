@@ -164,6 +164,24 @@ static MetalValue n_array_push(MetalVM *vm, MetalValue *a, int c) {
     if (c<2||a[0].type!=MV_ARR) return mv_nil();
     metal_array_push(vm, a[0].as.arr_idx, a[1]); return mv_nil();
 }
+static MetalValue n_len(MetalVM *vm, MetalValue *a, int c) {
+    if (!a || c < 1) return mv_dbl(0.0);
+    if (a[0].type == MV_STR) {
+        const char *s = arg_str(vm, a, 1, 0);
+        int n = 0;
+        while (s[n]) n++;
+        return mv_dbl((double)n);
+    }
+    if (a[0].type == MV_ARR) {
+        return mv_dbl((double)metal_array_len(vm, a[0].as.arr_idx));
+    }
+    if (a[0].type == MV_DICT) {
+        int idx = a[0].as.dict_idx;
+        int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
+        if (idx >= 0 && idx < max) return mv_dbl((double)vm->dicts[idx].count);
+    }
+    return mv_dbl(0.0);
+}
 
 /* --- Version / system info --- */
 static MetalValue n_version_string(MetalVM *vm, MetalValue *a, int c) {
@@ -394,6 +412,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_console_clear", n_console_clear);
     REG("os_cursor_home",   n_cursor_home);
     /* String utils */
+    REG("len",              n_len);
     REG("os_strlen",        n_strlen);
     REG("os_streq",         n_streq);
     REG("os_char_at",       n_char_at);

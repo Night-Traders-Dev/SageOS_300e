@@ -180,6 +180,18 @@ static int read_u16_le(const unsigned char* p, int* pos) {
     return v;
 }
 
+static int read_u16_be(const unsigned char* p, int* pos) {
+    int v = (p[*pos] << 8) | (p[*pos + 1]);
+    *pos += 2;
+    return v;
+}
+
+static int read_u32_be(const unsigned char* p, int* pos) {
+    int v = (p[*pos] << 24) | (p[*pos + 1] << 16) | (p[*pos + 2] << 8) | (p[*pos + 3]);
+    *pos += 4;
+    return v;
+}
+
 static int load_const_pool(MetalVM* vm, const unsigned char* data, int* pos, MetalValue* pool, int max) {
     int count = read_u16_le(data, pos);
     for (int i = 0; i < count; i++) {
@@ -595,9 +607,14 @@ int metal_vm_step(MetalVM* vm) {
         }
 
         case OP_DEFINE_FN: {
-            int name_idx = read_u16(vm->code, &vm->ip);
-            int fn_idx = read_u16(vm->code, &vm->ip);
+            int name_idx = read_u16_be(vm->code, &vm->ip);
+            int fn_idx = read_u16_be(vm->code, &vm->ip);
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
+            
+            console_write("OP_DEFINE_FN: ");
+            console_write(name);
+            console_write("\n");
+            
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
             
             MetalValue val;

@@ -5,13 +5,11 @@ SageOS is a small x86_64 UEFI operating system bring-up project targeting the **
 The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console, runs a kernel-resident shell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
 Recent updates:
-- **Centralized Versioning**: Versioning is now managed through a single `VERSION` file in the root directory, with automatic header generation during the build process.
-- **Status Bar**: Fixed missing `%` glyph in the framebuffer console; battery, CPU, and RAM metrics now display correctly.
-- **ELF & SageLang**: Added foundational ELF loading/execution support and integrated SageLang as a git submodule for future modular development.
-- **SageShell Default**: The kernel shell is now fully implemented in SageLang (`SageShell`) running on the MetalVM bytecode interpreter, with full access to kernel native callbacks. The legacy C shell remains as a fallback.
-- **Battery:** Correct CrOS EC identity check (`'E','C'` at `EC_MEMMAP_ID + 0x20`), `BATT_FLAG` validity gate before reading capacity, removed false 50% fallback.
-- **Shell line editing (QEMU):** Fixed backspace ghost character, history Up/Down screen update, and fish-style dim-grey tab completion hint. Multi-match Tab now correctly updates the prompt anchor row so subsequent edits land in the right place.
-- **Keyboard (UEFI path):** Arrow/special keys no longer silently dropped — UEFI scan codes are now mapped to PS/2-style extended scancodes unified across both input backends.
+- **SageShell & MetalVM**: The kernel shell has been fully ported to SageLang. It runs on the **MetalVM** bytecode interpreter, which now features a 32-level call stack, per-function constant pools, and a custom binary loading format (**SGVM**) for efficient execution.
+- **SGVM Binary Format**: Replaced raw text bytecode with a packed binary format that includes function metadata, constant pools, and remapped branch offsets, enabling complex multi-file SageLang applications to run on bare metal.
+- **Battery & EC**: Stabilized CrOS EC identity checks and `BATT_FLAG` validation. The status bar now provides real-time battery percentage with proper fallback handling.
+- **Line Editing**: Advanced fish-style completion, history navigation, and prompt anchoring are now fully implemented in SageLang.
+- **Keyboard & Input**: Unified UEFI and native i8042 scancode mapping for consistent arrow key and special character handling.
 
 ## Current Version
 
@@ -66,54 +64,29 @@ However, we are actively migrating high-level logic (like the **SageShell**) to 
 
 ```text
 SageOS_300e/
-├── lenovo_300e.sh
-├── sageos.img
+├── lenovo_300e.sh           # Unified build/flash/qemu script
 ├── README.md
 ├── VERSION
+├── VERSION.h                # Auto-generated from VERSION
 └── sageos_build/
-    ├── BOOTX64.EFI
-    ├── KERNEL.BIN
-    ├── kernel.elf
-    ├── esp.img
-    ├── boot/
-    │   └── uefi_loader.c
-    └── kernel/
-        ├── entry.S
-        ├── linker.ld
-        ├── include/
-        │   ├── acpi.h
-        │   ├── battery.h
-        │   ├── bootinfo.h
-        │   ├── console.h
-        │   ├── idt.h
-        │   ├── io.h
-        │   ├── keyboard.h
-        │   ├── power.h
-        │   ├── ramfs.h
-        │   ├── serial.h
-        │   ├── shell.h
-        │   ├── smp.h
-        │   ├── status.h
-        │   ├── timer.h
-        │   └── version.h
-        ├── core/
-        │   └── kernel.c
-        ├── drivers/
-        │   ├── acpi.c
-        │   ├── battery.c
-        │   ├── framebuffer.c
-        │   ├── idt.c
-        │   ├── keyboard.c
-        │   ├── power.c
-        │   ├── serial.c
-        │   ├── smp.c
-        │   ├── status.c
-        │   └── timer.c
-        ├── fs/
-        │   └── ramfs.c
-        └── shell/
-            ├── extra_cmds.c
-            └── shell.c
+    ├── sage_lang/           # SageLang toolchain (submodule)
+    ├── scripts/
+    │   └── compile_sage_shell.sh # Bytecode compiler & SGVM packer
+    ├── kernel/
+    │   ├── core/
+    │   │   ├── kernel.c
+    │   │   └── sagelang/    # MetalVM interpreter & Sage runtime
+    │   ├── drivers/         # ACPI, Battery, Framebuffer, IDT, etc.
+    │   ├── fs/              # VFS, FAT32, JSON, RamFS
+    │   ├── include/
+    │   │   └── metal_vm.h   # VM architecture definitions
+    │   └── shell/
+    │       ├── shell.c      # Legacy C shell & command dispatcher
+    │       ├── sage_shell/  # SageLang shell sources (.sage)
+    │       ├── sage_shell_entry.c # MetalVM bridge for SageShell
+    │       └── sage_shell_bytecode.h # Embedded SGVM binary artifact
+    ├── BOOTX64.EFI          # UEFI loader binary
+    └── KERNEL.BIN           # Kernel binary (merged with loader in img)
 ```
 
 ## Unified Build Tool
@@ -535,14 +508,22 @@ file-backed shell commands
 - file-backed shell commands
 ```
 
-### v0.1.5 — Sage Integration
+### v0.1.5 — Sage Evolution (Current)
 
-```text
-- Stabilize Sage bare-metal backend
-- procedure/import support
-- runtime-free Sage kernel modules
-- start migrating shell/ramfs/console logic to Sage
-```
+- [x] Port core shell logic to SageLang
+- [x] Implement MetalVM bytecode interpreter in the kernel
+- [x] Custom binary artifact format (SGVM) with function metadata
+- [x] Call stack support for non-native Sage functions
+- [/] Stabilize MetalVM heap and constant pool switching
+- [ ] Migrate RamFS and VFS logic to SageLang modules
+- [ ] Implement SageLang-based driver framework for non-critical peripherals
+
+### v0.1.6 — AOT & Performance
+
+- [ ] Optimize MetalVM execution (JIT-lite or threaded interpretation)
+- [ ] Restore Sage AOT path for performance-critical kernel paths
+- [ ] Dynamic linking of SageLang bytecode "executables" from FAT32
+- [ ] Sage-native ACPI AML parser extension
 
 ## Development Rules
 

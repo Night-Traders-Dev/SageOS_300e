@@ -28,6 +28,11 @@ static const uint32_t status_rows = 2;
 static uint32_t fg = 0xE8E8E8;
 static uint32_t bg = 0x05070A;
 
+#define MAX_COLS 256
+#define MAX_ROWS 128
+static char     g_screen_chars[MAX_ROWS][MAX_COLS];
+static uint32_t g_screen_fg[MAX_ROWS][MAX_COLS];
+
 /*
  * serial_echo: mirrors console output to serial.
  * Shell redraws disable this to avoid confusing the terminal when
@@ -235,37 +240,80 @@ static const uint8_t *glyph(char ch) {
     }
 }
 
-static void draw_cell(uint32_t cx, uint32_t cy, char ch) {
+/*
+ * draw_cell_fast: Internal helper that draws a glyph directly to the FB
+ * without updating the shadow buffer.
+ */
+static void draw_cell_fast(uint32_t cx, uint32_t cy, char ch, uint32_t color_rgb) {
+    if (!g_have_fb || !g_info) return;
+
     uint32_t px = cx * char_w;
     uint32_t py = cy * char_h;
-    fill_rect(px, py, char_w, char_h, bg);
+    uint32_t pitch = g_info->pixels_per_scanline;
+    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
+    uint32_t pfg = pack_rgb(color_rgb);
+    uint32_t pbg = pack_rgb(bg);
+
     const uint8_t *g = glyph(ch);
-    for (uint32_t gy = 0; gy < 7; gy++)
-        for (uint32_t gx = 0; gx < 5; gx++)
-            if (g[gy] & (1U << (4 - gx)))
-                fill_rect(px + gx * scale + scale, py + gy * scale + scale, scale, scale, fg);
+
+    /* 
+     * Row-based blitter: Each glyph is 5x7. We draw 8 rows of 6 units
+     * (where each unit is 'scale' pixels wide). This fills the 
+     * char_w x char_h cell exactly.
+     */
+    for (uint32_t gy = 0; gy < 8; gy++) {
+        uint8_t bits = (gy < 7) ? g[gy] : 0;
+        for (uint32_t sy = 0; sy < scale; sy++) {
+            volatile uint32_t *line = fb + (uint64_t)(py + gy * scale + sy) * pitch + px;
+            /* Left padding: 1 unit (scale pixels) */
+            for (uint32_t sx = 0; sx < scale; sx++) *line++ = pbg;
+            /* Glyph: 5 units */
+            for (uint32_t gx = 0; gx < 5; gx++) {
+                uint32_t c = (bits & (1U << (4 - gx))) ? pfg : pbg;
+                for (uint32_t sx = 0; sx < scale; sx++) *line++ = c;
+            }
+        }
+    }
+}
+
+static void draw_cell(uint32_t cx, uint32_t cy, char ch) {
+    if (cx < MAX_COLS && cy < MAX_ROWS) {
+        g_screen_chars[cy][cx] = ch;
+        g_screen_fg[cy][cx] = fg;
+    }
+    draw_cell_fast(cx, cy, ch, fg);
 }
 
 static void scroll(void) {
-    if (!g_have_fb || !g_info) return;
-    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
-    uint32_t pitch = g_info->pixels_per_scanline;
-    uint32_t h = g_info->height;
-    uint32_t w = g_info->width;
-    uint32_t status_height = status_rows * char_h;
-
-    for (uint32_t y = status_height + char_h; y < h; y++) {
-        my_memcpy32((void *)(fb + (uint64_t)(y - char_h) * pitch),
-                    (void *)(fb + (uint64_t)y * pitch),
-                    w);
+    /* 
+     * Update shadow buffer: Move every line from (status_rows + 1) to (rows - 1)
+     * up by one line.
+     */
+    for (uint32_t r = status_rows + 1; r < rows; r++) {
+        for (uint32_t c = 0; c < cols; c++) {
+            g_screen_chars[r - 1][c] = g_screen_chars[r][c];
+            g_screen_fg[r - 1][c] = g_screen_fg[r][c];
+        }
     }
-
-    uint32_t bg_packed = pack_rgb(bg);
-    for (uint32_t y = h - char_h; y < h; y++) {
-        my_memset32((void *)(fb + (uint64_t)y * pitch), bg_packed, w);
+    /* Clear the new bottom line in the shadow buffer */
+    for (uint32_t c = 0; c < cols; c++) {
+        g_screen_chars[rows - 1][c] = ' ';
+        g_screen_fg[rows - 1][c] = fg;
     }
 
     if (row > status_rows) row--;
+
+    /* 
+     * Redraw the active scroll area from the shadow buffer.
+     * This avoids reading from the slow UEFI framebuffer.
+     */
+    if (g_have_fb) {
+        for (uint32_t r = status_rows; r < rows; r++) {
+            for (uint32_t c = 0; c < cols; c++) {
+                draw_cell_fast(c, r, g_screen_chars[r][c], g_screen_fg[r][c]);
+            }
+        }
+    }
 }
 
 void console_clear(void) {
@@ -280,6 +328,13 @@ void console_clear(void) {
 
         for (uint32_t y = status_height; y < g_info->height; y++) {
             my_memset32((void *)(fb + (uint64_t)y * pitch), bg_packed, g_info->width);
+        }
+        /* Clear shadow buffer */
+        for (uint32_t r = 0; r < MAX_ROWS; r++) {
+            for (uint32_t c = 0; c < MAX_COLS; c++) {
+                g_screen_chars[r][c] = ' ';
+                g_screen_fg[r][c] = fg;
+            }
         }
     } else {
         // For VGA, clear from below status_rows

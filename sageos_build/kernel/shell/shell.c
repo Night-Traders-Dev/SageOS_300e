@@ -138,10 +138,15 @@ static void shell_redraw_line(
     if (console_has_fb()) console_set_serial_echo(0);
 
     console_set_cursor(start_row, start_col);
-    for (size_t i = 0; i <= erase_len; i++) console_putc(' ');
-
-    console_set_cursor(start_row, start_col);
     console_write(line);
+
+    size_t new_len = 0;
+    while (line[new_len]) new_len++;
+
+    /* Only erase the leftover tail if the new line is shorter than the old one */
+    if (erase_len > new_len) {
+        for (size_t i = 0; i < erase_len - new_len; i++) console_putc(' ');
+    }
 
     uint32_t cursor_offset = start_col + (uint32_t)pos;
     console_set_cursor(

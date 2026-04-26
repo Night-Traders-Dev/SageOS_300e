@@ -144,31 +144,39 @@ proc shell_dispatch(line):
         return nil
     # Commands with arguments
     if starts_with(cmd, "echo "):
-        cmd_echo(arg_after(cmd, "echo"))
+        let arg = arg_after(cmd, "echo")
+        cmd_echo(arg)
         return nil
     if starts_with(cmd, "echo"):
         cmd_echo("")
         return nil
     if starts_with(cmd, "color "):
-        cmd_color(arg_after(cmd, "color"))
+        let arg = arg_after(cmd, "color")
+        cmd_color(arg)
         return nil
     if starts_with(cmd, "cat "):
-        cmd_cat(arg_after(cmd, "cat"))
+        let arg = arg_after(cmd, "cat")
+        cmd_cat(arg)
         return nil
     if starts_with(cmd, "mkdir "):
-        cmd_mkdir(arg_after(cmd, "mkdir"))
+        let arg = arg_after(cmd, "mkdir")
+        cmd_mkdir(arg)
         return nil
     if starts_with(cmd, "touch "):
-        cmd_touch(arg_after(cmd, "touch"))
+        let arg = arg_after(cmd, "touch")
+        cmd_touch(arg)
         return nil
     if starts_with(cmd, "rm "):
-        cmd_rm(arg_after(cmd, "rm"))
+        let arg = arg_after(cmd, "rm")
+        cmd_rm(arg)
         return nil
     if starts_with(cmd, "stat "):
-        cmd_stat(arg_after(cmd, "stat"))
+        let arg = arg_after(cmd, "stat")
+        cmd_stat(arg)
         return nil
     if starts_with(cmd, "ls "):
-        cmd_ls(arg_after(cmd, "ls"))
+        let arg = arg_after(cmd, "ls")
+        cmd_ls(arg)
         return nil
     if streq(cmd, "ls"):
         cmd_ls("")
@@ -189,10 +197,12 @@ proc shell_dispatch(line):
         cmd_write(rest, "")
         return nil
     if starts_with(cmd, "execelf "):
-        cmd_execelf(arg_after(cmd, "execelf"))
+        let arg = arg_after(cmd, "execelf")
+        cmd_execelf(arg)
         return nil
     if starts_with(cmd, "sage "):
-        os_sage_exec(arg_after(cmd, "sage"))
+        let arg = arg_after(cmd, "sage")
+        os_sage_exec(arg)
         return nil
     if streq(cmd, "sage"):
         os_sage_exec("")

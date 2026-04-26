@@ -6,6 +6,7 @@ The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP fr
 
 Recent updates:
 - **SageShell & MetalVM**: The kernel shell has been fully ported to SageLang. It runs on the **MetalVM** bytecode interpreter, which now features a 32-level call stack, per-function constant pools, and a custom binary loading format (**SGVM**) for efficient execution.
+- **Unified VFS Architecture**: Implemented a dynamic Virtual Filesystem (VFS) with mount point support. It provides writable operations via a pooled dynamic RamFS and handles multi-backend routing for read/write shell commands.
 - **SGVM Binary Format**: Replaced raw text bytecode with a packed binary format that includes function metadata, constant pools, and remapped branch offsets, enabling complex multi-file SageLang applications to run on bare metal.
 - **Battery & EC**: Stabilized CrOS EC identity checks and `BATT_FLAG` validation. The status bar now provides real-time battery percentage with proper fallback handling.
 - **Line Editing**: Advanced fish-style completion, history navigation, and prompt anchoring are now fully implemented in SageLang.
@@ -49,7 +50,7 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
 | ACPI | Working — minimal AML parser, Battery (_BST) & Lid detection |
 | Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate; `--` shown when EC or data not confirmed |
-| VFS / FAT32 | Working — ATA PIO block driver, VFS layer, FAT32 mount |
+| VFS / FAT32 | Working — Unified VFS layer, dynamic RamFS backend (writable), and read-only FAT32 boot partition mount |
 | SageLang Backend | Working — bare-metal stabilized, runtime-free modules |
 | ELF Execution | Working — segment mapping, BSS, entry jump |
 | SageLang Toolchain | Working — compiler/runtime hooks |

@@ -400,11 +400,8 @@ proc cmd_keydebug():
 proc cmd_execelf(path):
     os_execelf(path)
 
-proc cmd_exit():
-    os_halt()
-
-proc cmd_shutdown():
-    os_halt()
+proc cmd_execelf(path):
+    os_execelf(path)
 
 # ---------------------------------------------------------------------------
 # cmd_neofetch — Sage-native implementation
@@ -760,15 +757,18 @@ proc shell_dispatch(line):
         let arg = arg_after(cmd, "touch")
         cmd_touch(arg)
         return nil
-    if starts_with(cmd, "rm "):
+    if starts_with(cmd, "rm ") or starts_with(cmd, "rm -rf ") or starts_with(cmd, "rm -r "):
         let arg = arg_after(cmd, "rm")
+        let recursive = 0
         if starts_with(arg, "-rf "):
             arg = arg_after(arg, "-rf")
-        if starts_with(arg, "-r "):
+            recursive = 1
+        elif starts_with(arg, "-r "):
             arg = arg_after(arg, "-r")
-        if starts_with(arg, "-f "):
+            recursive = 1
+        elif starts_with(arg, "-f "):
             arg = arg_after(arg, "-f")
-        cmd_rm(arg)
+        os_rm_recursive(arg, recursive)
         return nil
     if starts_with(cmd, "stat "):
         let arg = arg_after(cmd, "stat")
@@ -800,8 +800,20 @@ proc shell_dispatch(line):
         let arg = arg_after(cmd, "execelf")
         cmd_execelf(arg)
         return nil
-    if streq(cmd, "exit") or streq(cmd, "shutdown"):
+    if streq(cmd, "exit") or streq(cmd, "q"):
         cmd_exit()
+        return nil
+    if streq(cmd, "shutdown") or streq(cmd, "poweroff"):
+        cmd_shutdown()
+        return nil
+    if streq(cmd, "halt"):
+        cmd_halt()
+        return nil
+    if streq(cmd, "reboot"):
+        cmd_reboot()
+        return nil
+    if streq(cmd, "suspend"):
+        cmd_suspend()
         return nil
     if starts_with(cmd, "sage "):
         let arg = arg_after(cmd, "sage")

@@ -34,6 +34,22 @@ static int vfs_strncmp(const char *a, const char *b, int n) {
     return 0;
 }
 
+static void vfs_strcpy(char *dst, const char *src) {
+    while (*src) *dst++ = *src++;
+    *dst = 0;
+}
+
+static void vfs_strcat(char *dst, const char *src) {
+    while (*dst) dst++;
+    while (*src) *dst++ = *src++;
+    *dst = 0;
+}
+
+static int vfs_strcmp(const char *a, const char *b) {
+    while (*a && (*a == *b)) { a++; b++; }
+    return (unsigned char)*a - (unsigned char)*b;
+}
+
 
 
 /* -----------------------------------------------------------------------
@@ -266,6 +282,37 @@ int vfs_unlink(const char *path) {
     if (!m->backend->unlink) return VFS_EROFS;
 
     return m->backend->unlink(m->backend, rel);
+}
+
+int vfs_rm_rf(const char *path) {
+    VfsStat st;
+    int res = vfs_stat(path, &st);
+    if (res != VFS_OK) return res;
+
+    if (st.type == VFS_DIRECTORY) {
+        VfsDirEntry entries[VFS_DIRENT_MAX];
+        int count = vfs_readdir(path, entries, VFS_DIRENT_MAX);
+        if (count < 0) return count;
+
+        for (int i = 0; i < count; i++) {
+            if (vfs_strcmp(entries[i].name, ".") == 0 || vfs_strcmp(entries[i].name, "..") == 0) continue;
+
+            char child_path[VFS_MAX_PATH];
+            vfs_strcpy(child_path, path);
+            int len = vfs_strlen(child_path);
+            if (len > 0 && child_path[len-1] != '/') {
+                child_path[len] = '/';
+                child_path[len+1] = 0;
+                len++;
+            }
+            vfs_strcat(child_path, entries[i].name);
+
+            res = vfs_rm_rf(child_path);
+            if (res != VFS_OK) return res;
+        }
+    }
+
+    return vfs_unlink(path);
 }
 
 /* -----------------------------------------------------------------------

@@ -354,6 +354,20 @@ static MetalValue n_rm(MetalVM *vm, MetalValue *a, int c) {
     return mv_nil();
 }
 
+static MetalValue n_rm_recursive(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    int recursive = (int)arg_num(a, c, 1);
+    if (!*path) { console_write("\nusage: rm [-rf] <path>"); return mv_nil(); }
+    int r;
+    if (recursive) {
+        r = vfs_rm_rf(path);
+    } else {
+        r = vfs_unlink(path);
+    }
+    if (r < 0) { console_write("\nrm: "); console_write(vfs_strerror(r)); }
+    return mv_nil();
+}
+
 static MetalValue n_stat(MetalVM *vm, MetalValue *a, int c) {
     const char *path = arg_str(vm, a, c, 0);
     if (!*path) { console_write("\nusage: stat <path>"); return mv_nil(); }
@@ -508,6 +522,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_mkdir",         n_mkdir);
     REG("os_touch",         n_touch);
     REG("os_rm",            n_rm);
+    REG("os_rm_recursive",  n_rm_recursive);
     REG("os_stat",          n_stat);
     REG("os_write",         n_write);
     REG("os_execelf",       n_execelf);

@@ -299,11 +299,8 @@ proc cmd_keydebug():
 proc cmd_execelf(path):
     os_execelf(path)
 
-proc cmd_exit():
-    os_halt()
-
-proc cmd_shutdown():
-    os_halt()
+proc cmd_execelf(path):
+    os_execelf(path)
 
 # ---------------------------------------------------------------------------
 # cmd_neofetch — Sage-native implementation

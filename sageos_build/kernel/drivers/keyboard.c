@@ -298,7 +298,7 @@ static int firmware_poll_key(KeyEvent *ev) {
 }
 
 static int parse_serial_escape(KeyEvent *ev) {
-    char next;
+    char next = 0;
     int wait = 0;
 
     while (wait++ < 2000) {
@@ -437,6 +437,16 @@ int keyboard_poll_any_event(KeyEvent *ev) {
     return 0;
 }
 
+static int keyboard_poll_visible_event(KeyEvent *ev) {
+    for (int i = 0; i < 16; i++) {
+        if (!keyboard_poll_any_event(ev)) return 0;
+        if (!ev->pressed) continue;
+        if (ev->ascii || ev->extended) return 1;
+    }
+
+    return 0;
+}
+
 void keyboard_keydebug(void) {
     console_write("\nKEYDEBUG MODE");
     console_write("\nPress ESC to exit.");
@@ -478,7 +488,7 @@ int keyboard_wait_event(KeyEvent *ev) {
     for (;;) {
         int firmware_mode = firmware_input_available();
 
-        if (keyboard_poll_any_event(ev) && ev->pressed) return 1;
+        if (keyboard_poll_visible_event(ev)) return 1;
 
         status_tick_poll();
         timer_poll(); /* Ensure we account for this loop in CPU% */

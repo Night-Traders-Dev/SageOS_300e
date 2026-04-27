@@ -8,15 +8,13 @@
 #include "bootinfo.h"
 #include "version.h"
 #include "keyboard.h"
+#include "ata.h"
 #include "shell.h"
 #include "serial.h"
 #include "scheduler.h"
 #include "smp.h"
 #include "vfs.h"
 #include "sage_libc_shim.h"
-
-extern void ata_read_sector(uint32_t lba, uint16_t *buffer);
-extern void ata_write_sector(uint32_t lba, const uint16_t *buffer);
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -78,6 +76,13 @@ static void serial_bar(uint32_t val, uint32_t max, uint32_t width) {
 
 void cmd_install(void) {
     console_write("\n=== SageOS Local Drive Installer ===");
+
+    if (!ata_is_available()) {
+        console_write("\nNo ATA primary-master disk is available.");
+        console_write("\nInternal Lenovo 300e storage is eMMC/SDHCI; that write path is not implemented yet.");
+        return;
+    }
+
     console_write("\nWARNING: This will format the local drive (ATA Primary Master).");
     console_write("\nAll data will be lost. Type 'YES' to continue: ");
 
@@ -111,13 +116,21 @@ void cmd_install(void) {
             console_u32(lba);
             console_write("...");
         }
-        ata_write_sector(lba, zero_buf);
+        if (!ata_write_sector(lba, zero_buf)) {
+            console_write("\nWrite failed at LBA ");
+            console_u32(lba);
+            return;
+        }
     }
 
     console_write("\nVerifying sectors...");
     uint16_t read_buf[256];
     for (uint32_t lba = 0; lba < 10; lba++) {
-        ata_read_sector(lba, read_buf);
+        if (!ata_read_sector(lba, read_buf)) {
+            console_write("\nReadback failed at LBA ");
+            console_u32(lba);
+            return;
+        }
         for (int i = 0; i < 256; i++) {
             if (read_buf[i] != 0) {
                 console_write("\nVerification failed at LBA ");

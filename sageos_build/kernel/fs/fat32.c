@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "console.h"
+#include "ata.h"
 #include "fat32.h"
 
 #define FAT32_PARTITION_START_LBA 2048
@@ -74,8 +75,6 @@ static uint32_t fat32_fat_size;
 static uint32_t fat32_total_sectors;   /* from BPB total_sectors_32 */
 static uint16_t fat32_fsinfo_sector;   /* BPB fs_info field */
 static uint16_t fat32_bytes_per_sector;
-
-extern int ata_read_sector(uint32_t lba, uint16_t *buffer);
 
 static void fat32_print_name(const FAT32_DirEntry *entry) {
     char name[13];
@@ -231,6 +230,12 @@ static int fat32_find_root_entry(const char *path, FAT32_DirEntry *out_entry) {
 
 int fat32_init(void) {
     uint8_t buffer[512];
+
+    if (!ata_is_available()) {
+        fat32_available = 0;
+        return 0;
+    }
+
     if (!fat32_read_sector(FAT32_PARTITION_START_LBA, buffer)) {
         fat32_available = 0;
         return 0;
@@ -584,4 +589,3 @@ static VfsBackend g_fat32_backend = {
 VfsBackend *fat32_get_backend(void) {
     return &g_fat32_backend;
 }
-

@@ -403,10 +403,8 @@ void sage_repl_step(const char* line) {
 
     init_lexer(line, "<repl>");
     parser_init();
-    printf("sage: starting parse loop\n");
 
     while (!parser_is_at_end()) {
-        printf("sage: parsing stmt\n");
         Stmt* stmt = parse();
         if (sage_exit_flag || stmt == NULL) {
             sage_clear_exit_state();
@@ -556,43 +554,29 @@ void sage_execute(const char* line) {
 }
 
 void sage_run_file(const char* path) {
-    if (!path || !*path) {
-        printf("sage: no path specified\n");
-        return;
-    }
+    if (!path || !*path) return;
 
     VfsStat st;
     int r = vfs_stat(path, &st);
     if (r < 0) {
-        printf("sage: cannot stat %s: %s\n", path, vfs_strerror(r));
+        printf("sage: cannot access %s\n", path);
         return;
     }
 
-    if (st.type != VFS_FILE) {
-        printf("sage: %s is not a file\n", path);
-        return;
-    }
-
-    /* Limit script size to 1MB for now (we have plenty of RAM) */
-    if (st.size > 1024 * 1024) {
-        printf("sage: script too large (max 1MB)\n");
-        return;
-    }
-
-    /* Allocation from kernel space is tricky without a true malloc.
-       We'll use a temporary buffer from the sage_heap if it's large enough,
-       or just reuse a static buffer. */
-    static uint8_t script_buffer[65537]; /* 64KB + 1 for null terminator */
+    /* 
+     * We use a fixed-size buffer for scripts in kernel space.
+     * 64KB is plenty for most SageLang scripts.
+     */
+    static uint8_t script_buffer[65536];
     size_t to_read = (size_t)st.size;
-    if (to_read > 65536) to_read = 65536;
+    if (to_read > 65535) to_read = 65535;
 
     int n = vfs_read(path, 0, script_buffer, to_read);
-    if (n < 0) {
-        printf("sage: error reading %s: %s\n", path, vfs_strerror(n));
-        return;
-    }
+    if (n <= 0) return;
 
-    /* Check for SGVM magic if it's bytecode */
+    script_buffer[n] = '\0';
+
+    /* Check for bytecode magic */
     if (n >= 4 && script_buffer[0] == 'S' && script_buffer[1] == 'G' &&
         script_buffer[2] == 'V' && script_buffer[3] == 'M') {
         
@@ -607,12 +591,9 @@ void sage_run_file(const char* path) {
                 printf("Runtime error: %s\n", vm.error_msg ? vm.error_msg : "unknown");
             }
         } else {
-            printf("sage: invalid bytecode file %s\n", path);
+            printf("sage: invalid bytecode file\n");
         }
     } else {
-        /* Fallback to interpreting as source code */
-        script_buffer[n] = '\0';
-        printf("sage: executing source script (%d bytes)\n", n);
         sage_execute((const char*)script_buffer);
     }
 }

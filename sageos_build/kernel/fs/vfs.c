@@ -1,7 +1,9 @@
 #include "vfs.h"
 #include "console.h"
-#include "sage_libc_shim.h"
 #include <stddef.h>
+#include <string.h>
+#include "metal_vm.h"
+#include "vfs_bridge_bytecode.h"
 
 /* -----------------------------------------------------------------------
  * Mount table — static array, no dynamic allocation
@@ -16,6 +18,32 @@ typedef struct {
 
 static VfsMount g_mounts[VFS_MAX_MOUNTS];
 static int g_mount_count = 0;
+
+static MetalVM g_vfs_vm;
+static int g_vfs_vm_inited = 0;
+
+/* External natives from runtime.c (or we can re-register them) */
+extern int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn);
+extern MetalValue n_len(MetalVM* vm, MetalValue* args, int argc);
+extern MetalValue n_os_strlen(MetalVM* vm, MetalValue* args, int argc);
+extern MetalValue n_os_starts_with(MetalVM* vm, MetalValue* args, int argc);
+extern MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc);
+extern MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc);
+
+void vfs_bridge_init(void) {
+    if (g_vfs_vm_inited) return;
+    metal_vm_init(&g_vfs_vm);
+    
+    metal_vm_register_native(&g_vfs_vm, "len", n_len);
+    metal_vm_register_native(&g_vfs_vm, "os_strlen", n_os_strlen);
+    metal_vm_register_native(&g_vfs_vm, "os_starts_with", n_os_starts_with);
+    metal_vm_register_native(&g_vfs_vm, "os_array_len", n_os_array_len);
+    metal_vm_register_native(&g_vfs_vm, "os_stat", n_os_stat);
+
+    metal_vm_load(&g_vfs_vm, vfs_bridge_bytecode, vfs_bridge_bytecode_len);
+    metal_vm_run(&g_vfs_vm);
+    g_vfs_vm_inited = 1;
+}
 
 /* -----------------------------------------------------------------------
  * String helpers (freestanding — no libc)
@@ -378,4 +406,5 @@ void vfs_init(void) {
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         g_mounts[i].active = 0;
     }
+    vfs_bridge_init();
 }

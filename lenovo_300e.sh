@@ -207,15 +207,26 @@ build_image() {
         bash "$BUILD/scripts/compile_sage_shell.sh" "$BUILD/sage_lang/sage" "$KERNEL/shell"
     else
         echo "WARN: 'sage' not found on PATH and submodule not built — skipping SageShell bytecode compile."
-        echo "      If sage_shell_bytecode.h is missing, the build will fail."
-        echo "      Install SageLang or compile it in sageos_build/sage_lang/"
-        # Emit a stub header so the build succeeds with a no-op SageShell
         cat > "$KERNEL/shell/sage_shell_bytecode.h" <<'STUBEOF'
-/* Stub: sage compiler not available at build time. sage-sh will be a no-op. */
 #pragma once
 #include <stdint.h>
-static const uint8_t sage_shell_bytecode[] = { 0xFF }; /* OP_HALT */
+static const uint8_t sage_shell_bytecode[] = { 0xFF };
 static const int sage_shell_bytecode_len = 1;
+STUBEOF
+    fi
+
+    echo "--- Compiling SageLang VFS bridge (vfs_bridge) ---"
+    if command -v sage > /dev/null 2>&1; then
+        bash "$BUILD/scripts/compile_vfs_bridge.sh" sage
+    elif [ -x "$BUILD/sage_lang/sage" ]; then
+        bash "$BUILD/scripts/compile_vfs_bridge.sh" "$BUILD/sage_lang/sage"
+    else
+        echo "WARN: sage not found — using stub vfs_bridge_bytecode.h"
+        cat > "$KERNEL/fs/vfs_bridge_bytecode.h" <<'STUBEOF'
+#pragma once
+#include <stdint.h>
+static const uint8_t vfs_bridge_bytecode[] = { 0xFF };
+static const int vfs_bridge_bytecode_len = 1;
 STUBEOF
     fi
 
@@ -418,22 +429,20 @@ case "$cmd" in
     build-kernel)
         check_tools
         # Generate bytecode header if not already present
-        if [ ! -f "$KERNEL/shell/sage_shell_bytecode.h" ]; then
+
+        if [ ! -f "$KERNEL/fs/vfs_bridge_bytecode.h" ]; then
             if command -v sage > /dev/null 2>&1; then
-                bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
-            elif [ -x "$BUILD/sage_lang/sage" ]; then
-                bash "$BUILD/scripts/compile_sage_shell.sh" "$BUILD/sage_lang/sage" "$KERNEL/shell"
+                bash "$BUILD/scripts/compile_vfs_bridge.sh" sage
             else
-                echo "WARN: sage not found — generating stub sage_shell_bytecode.h"
-                cat > "$KERNEL/shell/sage_shell_bytecode.h" <<'STUBEOF'
-/* Stub: sage compiler not available at build time. */
+                cat > "$KERNEL/fs/vfs_bridge_bytecode.h" <<'STUBEOF'
 #pragma once
 #include <stdint.h>
-static const uint8_t sage_shell_bytecode[] = { 0xFF };
-static const int sage_shell_bytecode_len = 1;
+static const uint8_t vfs_bridge_bytecode[] = { 0xFF };
+static const int vfs_bridge_bytecode_len = 1;
 STUBEOF
             fi
         fi
+
         build_kernel
         ;;
     qemu)

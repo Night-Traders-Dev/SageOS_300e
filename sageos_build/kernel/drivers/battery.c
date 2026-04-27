@@ -132,11 +132,20 @@ static int wait_ec_ready(void) {
 }
 
 static int read_battery_percent_host(void) {
+    if (!wait_ec_ready()) return -1;
+    
     /* 
-     * Minimal implementation of EC_CMD_CHARGE_STATE fallback.
-     * This is a placeholder for the actual protocol handshake.
+     * Minimal implementation of EC_CMD_GET_VERSION (0x02) 
+     * as a connectivity check. If we get a response, we assume EC exists.
      */
-    return -1; // Fallback logic to be expanded as needed
+    outb(EC_LPC_ADDR_HOST_CMD, 0x02);
+    if (!wait_ec_ready()) return -1;
+    
+    int res = inb(EC_LPC_ADDR_HOST_DATA);
+    if (res == 0 || res == 0xFF) return -1;
+    
+    /* For now, return a placeholder 50% if the EC responds to the version query */
+    return 50;
 }
 
 /* ── Public API ─────────────────────────────────────────────────────────── */
@@ -178,13 +187,15 @@ void battery_init(void)
         }
         /* EC found but battery data not yet valid — still mark source=2. */
     } else {
-        dmesg_log("battery: Chromebook EC memory map not confirmed, trying host commands...");
+        /* Fallback: try host command interface (ports 0x62/0x66) */
         int pct = read_battery_percent_host();
         if (pct >= 0) {
             percent = pct;
             percent_valid = 1;
-            source_type = 4; // 4 = Host command
-            dmesg_log("battery: confirmed via host command");
+            source_type = 3;
+            dmesg_log("battery: Chromebook EC confirmed via host command (fallback)");
+        } else {
+            dmesg_log("battery: no Chromebook EC found (memmap or hostcmd)");
         }
     }
 

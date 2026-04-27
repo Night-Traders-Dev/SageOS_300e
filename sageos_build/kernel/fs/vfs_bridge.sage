@@ -14,7 +14,9 @@ end
 
 proc vfs_resolve(path):
     # Normalize path (simplified)
-    if os_strlen(path) == 0: return nil
+    if os_strlen(path) == 0:
+        return nil
+    end
     
     # Find longest matching mount point
     let best_m = nil
@@ -39,7 +41,9 @@ end
 
 proc vfs_stat(path):
     let m = vfs_resolve(path)
-    if m == nil: return nil
+    if m == nil:
+        return nil
+    end
     
     # Delegate to backend (via native call or Sage call)
     # For now, we still use the C VFS for actual operations

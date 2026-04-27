@@ -58,7 +58,45 @@ static unsigned int fnv1a_bytes(const char* s, int len) {
     return hash;
 }
 
-static MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) {
+MetalValue n_os_strlen(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_dbl(0.0);
+    const char* s = metal_string_get(vm, args[0].as.str_idx);
+    return mv_dbl((double)strlen(s));
+}
+
+MetalValue n_os_starts_with(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 2 || args[0].type != MV_STR || args[1].type != MV_STR) return mv_bool(0);
+    const char* s = metal_string_get(vm, args[0].as.str_idx);
+    const char* prefix = metal_string_get(vm, args[1].as.str_idx);
+    return mv_bool(strncmp(s, prefix, strlen(prefix)) == 0);
+}
+
+MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_ARR) return mv_dbl(0.0);
+    return mv_dbl((double)metal_array_len(vm, args[0].as.arr_idx));
+}
+
+#include "vfs.h"
+MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_nil();
+    const char* path = metal_string_get(vm, args[0].as.str_idx);
+    
+    VfsStat st;
+    if (vfs_stat(path, &st) == 0) {
+        int d_idx = metal_dict_new(vm);
+        if (d_idx < 0) return mv_nil();
+        
+        metal_dict_set(vm, d_idx, metal_string_intern(vm, "name", 4), mv_str(vm, st.name, (int)strlen(st.name)));
+        metal_dict_set(vm, d_idx, metal_string_intern(vm, "size", 4), mv_dbl((double)st.size));
+        metal_dict_set(vm, d_idx, metal_string_intern(vm, "type", 4), mv_dbl((double)st.type));
+        
+        MetalValue v; v.type = MV_DICT; v.as.dict_idx = d_idx;
+        return v;
+    }
+    return mv_nil();
+}
+
+MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) {
     if (argc < 1) return mv_dbl(0.0);
 
     if (args[0].type == MV_STR) {
@@ -83,6 +121,10 @@ static MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) {
 
 static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "len", n_len);
+    metal_vm_register_native(vm, "os_strlen", n_os_strlen);
+    metal_vm_register_native(vm, "os_starts_with", n_os_starts_with);
+    metal_vm_register_native(vm, "os_array_len", n_os_array_len);
+    metal_vm_register_native(vm, "os_stat", n_os_stat);
 }
 
 static void sage_repl_reset_vm(void) {

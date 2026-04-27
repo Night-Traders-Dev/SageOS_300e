@@ -122,30 +122,115 @@ static int read_battery_percent(void)
 #define EC_LPC_ADDR_HOST_DATA       0x62u
 #define EC_LPC_ADDR_HOST_CMD        0x66u
 #define EC_COMMAND_PROTOCOL_3       0xda
+
 #define EC_CMD_CHARGE_STATE         0x0011
+#define CHARGE_STATE_CMD_GET_STATE  0
+
+struct ec_host_request {
+    uint8_t struct_version;
+    uint8_t checksum;
+    uint16_t command;
+    uint8_t command_version;
+    uint8_t reserved;
+    uint16_t data_len;
+} __attribute__((packed));
+
+struct ec_host_response {
+    uint8_t struct_version;
+    uint8_t checksum;
+    uint16_t result;
+    uint16_t data_len;
+    uint16_t reserved;
+} __attribute__((packed));
+
+struct ec_params_charge_state {
+    uint8_t cmd;
+} __attribute__((packed));
+
+struct ec_response_charge_state {
+    uint32_t ac;
+    uint32_t chg_voltage;
+    uint32_t chg_current;
+    uint32_t chg_input_current;
+    struct {
+        uint32_t voltage;
+        uint32_t current;
+        uint32_t remaining_capacity;
+        uint32_t full_capacity;
+        uint32_t design_capacity;
+        uint16_t temperature;
+        uint16_t state_of_charge;
+        uint16_t status;
+    } batt;
+} __attribute__((packed));
 
 static int wait_ec_ready(void) {
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 1000000; i++) {
         if (!(inb(EC_LPC_ADDR_HOST_CMD) & 0x01)) return 1;
     }
     return 0;
 }
 
+static int ec_command_v3(uint16_t command, uint8_t version, 
+                         const void* out_data, int out_len,
+                         void* in_data, int in_len) {
+    struct ec_host_request req;
+    uint8_t checksum = 0;
+    const uint8_t* p;
+
+    req.struct_version = 3;
+    req.checksum = 0;
+    req.command = command;
+    req.command_version = version;
+    req.reserved = 0;
+    req.data_len = (uint16_t)out_len;
+
+    /* Calculate checksum */
+    p = (const uint8_t*)&req;
+    for (int i = 0; i < sizeof(req); i++) checksum += p[i];
+    p = (const uint8_t*)out_data;
+    for (int i = 0; i < out_len; i++) checksum += p[i];
+    req.checksum = (uint8_t)(-checksum);
+
+    if (!wait_ec_ready()) return -1;
+
+    /* Send magic and header */
+    outb(EC_LPC_ADDR_HOST_CMD, EC_COMMAND_PROTOCOL_3);
+    p = (const uint8_t*)&req;
+    for (int i = 0; i < sizeof(req); i++) outb(EC_LPC_ADDR_HOST_DATA, p[i]);
+    
+    /* Send data */
+    p = (const uint8_t*)out_data;
+    for (int i = 0; i < out_len; i++) outb(EC_LPC_ADDR_HOST_DATA, p[i]);
+
+    /* Wait for result */
+    if (!wait_ec_ready()) return -1;
+
+    /* Read response header */
+    struct ec_host_response res;
+    uint8_t* rp = (uint8_t*)&res;
+    for (int i = 0; i < sizeof(res); i++) rp[i] = inb(EC_LPC_ADDR_HOST_DATA);
+
+    if (res.result != 0) return -res.result;
+
+    /* Read response data */
+    int to_read = (res.data_len < in_len) ? res.data_len : in_len;
+    uint8_t* dp = (uint8_t*)in_data;
+    for (int i = 0; i < to_read; i++) dp[i] = inb(EC_LPC_ADDR_HOST_DATA);
+
+    return to_read;
+}
+
 static int read_battery_percent_host(void) {
-    if (!wait_ec_ready()) return -1;
+    struct ec_params_charge_state params;
+    struct ec_response_charge_state resp;
     
-    /* 
-     * Minimal implementation of EC_CMD_GET_VERSION (0x02) 
-     * as a connectivity check. If we get a response, we assume EC exists.
-     */
-    outb(EC_LPC_ADDR_HOST_CMD, 0x02);
-    if (!wait_ec_ready()) return -1;
+    params.cmd = CHARGE_STATE_CMD_GET_STATE;
     
-    int res = inb(EC_LPC_ADDR_HOST_DATA);
-    if (res == 0 || res == 0xFF) return -1;
+    int ret = ec_command_v3(EC_CMD_CHARGE_STATE, 0, &params, sizeof(params), &resp, sizeof(resp));
+    if (ret < 0) return -1;
     
-    /* For now, return a placeholder 50% if the EC responds to the version query */
-    return 50;
+    return resp.batt.state_of_charge;
 }
 
 /* ── Public API ─────────────────────────────────────────────────────────── */

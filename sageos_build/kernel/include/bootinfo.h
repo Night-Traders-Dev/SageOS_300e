@@ -32,6 +32,7 @@ typedef struct {
 
     uint64_t kernel_base;
     uint64_t kernel_size;
+    uint64_t backbuffer_address;
 } __attribute__((packed)) SageOSBootInfo;
 
 #endif

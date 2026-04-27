@@ -394,6 +394,7 @@ typedef struct {
 
     UINT64 kernel_base;
     UINT64 kernel_size;
+    UINT64 backbuffer_address;
 } __attribute__((packed)) SageOSBootInfo;
 
 #define SAGEOS_BOOT_MAGIC 0x534147454F534249ULL
@@ -798,6 +799,15 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
 
     gBootInfo.kernel_base = KERNEL_LOAD_ADDR;
     gBootInfo.kernel_size = kernel_size;
+
+    /* Allocate 8MB for backbuffer */
+    EFI_PHYSICAL_ADDRESS bb_addr = 0;
+    status = gBS->AllocatePages(AllocateAnyPages, EfiLoaderData, 2048, &bb_addr);
+    if (status == EFI_SUCCESS) {
+        gBootInfo.backbuffer_address = bb_addr;
+    } else {
+        gBootInfo.backbuffer_address = 0;
+    }
 
 #if SAGEOS_EXIT_BOOT_SERVICES
     print(L"Exiting boot services...\r\n");

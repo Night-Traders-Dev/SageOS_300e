@@ -403,8 +403,10 @@ void sage_repl_step(const char* line) {
 
     init_lexer(line, "<repl>");
     parser_init();
+    printf("sage: starting parse loop\n");
 
     while (!parser_is_at_end()) {
+        printf("sage: parsing stmt\n");
         Stmt* stmt = parse();
         if (sage_exit_flag || stmt == NULL) {
             sage_clear_exit_state();
@@ -580,9 +582,9 @@ void sage_run_file(const char* path) {
     /* Allocation from kernel space is tricky without a true malloc.
        We'll use a temporary buffer from the sage_heap if it's large enough,
        or just reuse a static buffer. */
-    static uint8_t script_buffer[65536]; /* 64KB static buffer for scripts */
+    static uint8_t script_buffer[65537]; /* 64KB + 1 for null terminator */
     size_t to_read = (size_t)st.size;
-    if (to_read > sizeof(script_buffer)) to_read = sizeof(script_buffer);
+    if (to_read > 65536) to_read = 65536;
 
     int n = vfs_read(path, 0, script_buffer, to_read);
     if (n < 0) {
@@ -610,6 +612,7 @@ void sage_run_file(const char* path) {
     } else {
         /* Fallback to interpreting as source code */
         script_buffer[n] = '\0';
+        printf("sage: executing source script (%d bytes)\n", n);
         sage_execute((const char*)script_buffer);
     }
 }

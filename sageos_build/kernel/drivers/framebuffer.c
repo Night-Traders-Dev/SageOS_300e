@@ -393,10 +393,9 @@ void console_init(SageOSBootInfo *info) {
         if (!rows) rows = 1;
 
         /* 
-         * Allocate back buffer from memory handoff.
-         * For now, we take a 8MB chunk at 16MB physical — very likely safe.
+         * Use backbuffer allocated by UEFI loader
          */
-        g_back_buffer = (uint32_t *)0x1000000ULL;
+        g_back_buffer = (uint32_t *)(uintptr_t)info->backbuffer_address;
     } else {
         cols = VGA_W;
         rows = VGA_H;

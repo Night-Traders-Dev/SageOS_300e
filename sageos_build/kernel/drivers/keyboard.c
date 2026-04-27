@@ -161,7 +161,7 @@ static uint8_t read_timeout(uint8_t fallback) {
 }
 
 static void drain_controller(void) {
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 32; i++) {  /* Increased from 16 to 32 */
         uint8_t status = inb(I8042_STATUS);
         if (!(status & I8042_OBF)) return;
         uint8_t sc = inb(I8042_DATA);
@@ -186,8 +186,9 @@ void keyboard_init(void) {
 
     command(0x20);
     uint8_t cfg = read_timeout(0);
-    cfg &= (uint8_t)~0x03;
-    cfg |= 0x40;
+    cfg &= (uint8_t)~0x03;  /* Disable keyboard and mouse interrupts */
+    cfg |= 0x10;           /* Disable mouse interface */
+    cfg |= 0x20;           /* Enable scancode translation */
 
     command(0x60);
     data(cfg);
@@ -195,14 +196,23 @@ void keyboard_init(void) {
     command(0xAE);
     flush_output();
 
+    /* Enable keyboard scanning */
     data(0xF4);
-    (void)read_timeout(0);
+    if (wait_read()) {
+        uint8_t ack = inb(I8042_DATA);
+        if (ack != 0xFA) {
+            /* Keyboard didn't acknowledge, try again */
+            data(0xF4);
+            (void)read_timeout(0);
+        }
+    }
 
     command(0x20);
     cfg = read_timeout(cfg);
-    cfg |= 0x01;
-    cfg |= 0x40;
-    cfg &= (uint8_t)~0x02;
+    cfg |= 0x01;           /* Enable keyboard interrupts */
+    cfg |= 0x10;           /* Disable mouse interface */
+    cfg |= 0x20;           /* Enable scancode translation */
+    cfg &= (uint8_t)~0x02; /* Disable mouse interrupts */
 
     command(0x60);
     data(cfg);

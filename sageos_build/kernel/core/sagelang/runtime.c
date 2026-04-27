@@ -61,6 +61,7 @@ static unsigned int fnv1a_bytes(const char* s, int len) {
 MetalValue n_os_strlen(MetalVM* vm, MetalValue* args, int argc) {
     if (argc < 1 || args[0].type != MV_STR) return mv_dbl(0.0);
     const char* s = metal_string_get(vm, args[0].as.str_idx);
+    if (!s) return mv_dbl(0.0);
     return mv_dbl((double)strlen(s));
 }
 
@@ -80,15 +81,22 @@ MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc) {
 MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc) {
     if (argc < 1 || args[0].type != MV_STR) return mv_nil();
     const char* path = metal_string_get(vm, args[0].as.str_idx);
+    if (!path || strlen(path) > 255) return mv_nil(); // Basic path length limit
     
     VfsStat st;
     if (vfs_stat(path, &st) == 0) {
         int d_idx = metal_dict_new(vm);
         if (d_idx < 0) return mv_nil();
         
-        metal_dict_set(vm, d_idx, metal_string_intern(vm, "name", 4), mv_str(vm, st.name, (int)strlen(st.name)));
-        metal_dict_set(vm, d_idx, metal_string_intern(vm, "size", 4), mv_dbl((double)st.size));
-        metal_dict_set(vm, d_idx, metal_string_intern(vm, "type", 4), mv_dbl((double)st.type));
+        int k_name = metal_string_intern(vm, "name", 4);
+        int k_size = metal_string_intern(vm, "size", 4);
+        int k_type = metal_string_intern(vm, "type", 4);
+        
+        if (k_name < 0 || k_size < 0 || k_type < 0) return mv_nil();
+
+        metal_dict_set(vm, d_idx, k_name, mv_str(vm, st.name, (int)strlen(st.name)));
+        metal_dict_set(vm, d_idx, k_size, mv_dbl((double)st.size));
+        metal_dict_set(vm, d_idx, k_type, mv_dbl((double)st.type));
         
         MetalValue v; v.type = MV_DICT; v.as.dict_idx = d_idx;
         return v;
@@ -341,6 +349,15 @@ static int sage_repl_build_function(void* data, ProcStmt* proc,
     }
 
     const_bytes = chunk.constant_count * (int)sizeof(MetalValue);
+    // Heap threshold warning (90%)
+    if (vm->heap_used > (METAL_HEAP_SIZE * 9 / 10)) {
+        console_write("WARNING: REPL VM heap usage is high (");
+        console_u32(vm->heap_used);
+        console_write("/");
+        console_u32(METAL_HEAP_SIZE);
+        console_write("). Consider calling :reset\n");
+    }
+
     if (vm->heap_used + const_bytes > METAL_HEAP_SIZE) {
         snprintf(error, error_size, "REPL VM heap exhausted by function constants");
         vm->fn_count--;

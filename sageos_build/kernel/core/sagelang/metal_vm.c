@@ -83,13 +83,23 @@ static unsigned int fnv1a_hash(const char* s, int len) {
     return hash;
 }
 
-static int read_u8(const unsigned char* code, int* ip) {
-    return code[(*ip)++];
+static int read_u8(MetalVM* vm) {
+    if (vm->ip >= vm->code_length) {
+        vm->error = 1;
+        vm->error_msg = "Metal VM: code read out of bounds";
+        return 0;
+    }
+    return vm->code[vm->ip++];
 }
 
-static int read_u16(const unsigned char* code, int* ip) {
-    int hi = code[(*ip)++];
-    int lo = code[(*ip)++];
+static int read_u16(MetalVM* vm) {
+    if (vm->ip + 1 >= vm->code_length) {
+        vm->error = 1;
+        vm->error_msg = "Metal VM: code read out of bounds";
+        return 0;
+    }
+    int hi = vm->code[vm->ip++];
+    int lo = vm->code[vm->ip++];
     return (hi << 8) | lo;
 }
 
@@ -180,24 +190,34 @@ static int read_u16_le(const unsigned char* p, int* pos) {
     return v;
 }
 
-static int read_u16_be(const unsigned char* p, int* pos) {
-    int v = (p[*pos] << 8) | (p[*pos + 1]);
-    *pos += 2;
-    return v;
+static int read_u16_be(MetalVM* vm) {
+    if (vm->ip + 1 >= vm->code_length) {
+        vm->error = 1;
+        vm->error_msg = "Metal VM: code read out of bounds";
+        return 0;
+    }
+    int hi = vm->code[vm->ip++];
+    int lo = vm->code[vm->ip++];
+    return (hi << 8) | lo;
 }
 
 
-static int load_const_pool(MetalVM* vm, const unsigned char* data, int* pos, MetalValue* pool, int max) {
+static int load_const_pool(MetalVM* vm, const unsigned char* data, int length, int* pos, MetalValue* pool, int max) {
+    if (*pos + 2 > length) return 0;
     int count = read_u16_le(data, pos);
     for (int i = 0; i < count; i++) {
+        if (*pos >= length) break;
         int type = data[(*pos)++];
         MetalValue v;
         if (type == 1) { // Num
+            if (*pos + 8 > length) break;
             memcpy(&v.as.num_bits, &data[*pos], 8);
             v.type = MV_NUM;
             *pos += 8;
         } else if (type == 2) { // Str
+            if (*pos + 2 > length) break;
             int slen = read_u16_le(data, pos);
+            if (*pos + slen > length) break;
             v = mv_str(vm, (const char*)&data[*pos], slen);
             *pos += slen;
         } else {
@@ -205,7 +225,7 @@ static int load_const_pool(MetalVM* vm, const unsigned char* data, int* pos, Met
         }
         if (i < max) pool[i] = v;
     }
-    return count;
+    return count < max ? count : max;
 }
 
 int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
@@ -223,12 +243,14 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     pos = 4;
     
     // Main Constants
-    vm->main_const_count = load_const_pool(vm, data, &pos, vm->main_constants, METAL_CONST_POOL);
+    vm->main_const_count = load_const_pool(vm, data, length, &pos, vm->main_constants, METAL_CONST_POOL);
     vm->constants = vm->main_constants;
     vm->const_count = vm->main_const_count;
     
     // Main Code
+    if (pos + 4 > length) return 0;
     int main_len = read_u32_le(data, &pos);
+    if (pos + main_len > length) return 0;
     vm->code = &data[pos];
     vm->code_length = main_len;
     vm->ip = 0;
@@ -237,52 +259,41 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     // Functions
     if (pos + 2 > length) return 1; // No functions? That's okay.
     int fn_count = read_u16_le(data, &pos);
+    if (fn_count < 0 || fn_count > (int)(sizeof(vm->functions)/sizeof(vm->functions[0]))) {
+        console_write("load_binary: too many functions\n");
+        return 0;
+    }
     vm->fn_count = fn_count;
     for (int i = 0; i < fn_count; i++) {
+        if (pos + 2 > length) return 0;
         int param_count = read_u16_le(data, &pos);
-        if (param_count > 8) {
-            console_write("load_binary: too many params at fn ");
-            console_u32(i);
-            console_write("\n");
+        if (param_count < 0 || param_count > 8) {
+            console_write("load_binary: too many params\n");
             return 0;
         }
         vm->functions[i].param_count = param_count;
         for (int p = 0; p < param_count; p++) {
-            if (pos + 4 > length) {
-                console_write("load_binary: truncated param hash at fn ");
-                console_u32(i);
-                console_write("\n");
-                return 0;
-            }
+            if (pos + 4 > length) return 0;
             vm->functions[i].param_name_hashes[p] = (unsigned int)read_u32_le(data, &pos);
         }
 
         // Load function's constants onto heap
+        if (pos + 2 > length) return 0;
         int c_count_peek = (data[pos] | (data[pos+1] << 8));
         if (vm->heap_used + c_count_peek * sizeof(MetalValue) > METAL_HEAP_SIZE) {
-            console_write("load_binary: heap overflow at fn ");
-            console_u32(i);
-            console_write(" (need ");
-            console_u32(c_count_peek);
-            console_write(" consts, used ");
-            console_u32(vm->heap_used);
-            console_write(")\n");
+            console_write("load_binary: heap overflow at fn constants\n");
             return 0;
         }
         MetalValue* pool = (MetalValue*)&vm->heap[vm->heap_used];
-        int actual_count = load_const_pool(vm, data, &pos, pool, c_count_peek);
+        int actual_count = load_const_pool(vm, data, length, &pos, pool, c_count_peek);
         vm->functions[i].constants = pool;
         vm->functions[i].const_count = actual_count;
         vm->heap_used += actual_count * sizeof(MetalValue);
         
         // Function Code
+        if (pos + 4 > length) return 0;
         int flen = read_u32_le(data, &pos);
-        if (pos + flen > length) {
-            console_write("load_binary: truncated function code at fn ");
-            console_u32(i);
-            console_write("\n");
-            return 0;
-        }
+        if (pos + flen > length) return 0;
         vm->functions[i].code = &data[pos];
         vm->functions[i].code_length = flen;
         pos += flen;
@@ -330,12 +341,13 @@ MetalValue metal_vm_peek(MetalVM* vm, int distance) {
 // ============================================================================
 
 int metal_string_intern(MetalVM* vm, const char* s, int len) {
+    if (len < 0) return -1;
     // Check if already interned
     int search = 0;
     while (search < vm->string_used) {
         const char* existing = &vm->strings[search];
         int existing_len = (int)strlen(existing);
-        if (existing_len == len && memcpy(0, 0, 0) == 0) { // memcmp substitute
+        if (existing_len == len) {
             int match = 1;
             for (int i = 0; i < len; i++) {
                 if (existing[i] != s[i]) { match = 0; break; }
@@ -346,7 +358,10 @@ int metal_string_intern(MetalVM* vm, const char* s, int len) {
     }
 
     // Allocate new
+    // Check for integer overflow in size calculation
+    if (len > 0x7FFFFFFF - 1) return -1; 
     if (vm->string_used + len + 1 > METAL_STRING_POOL) return -1;
+    
     int idx = vm->string_used;
     memcpy(&vm->strings[idx], s, (unsigned long)len);
     vm->strings[idx + len] = '\0';
@@ -368,7 +383,11 @@ void metal_string_concat(MetalVM* vm, int idx_a, int idx_b, int* out_idx) {
     const char* b = metal_string_get(vm, idx_b);
     int la = (int)strlen(a);
     int lb = (int)strlen(b);
+    
+    // Check for overflow
+    if (la < 0 || lb < 0 || la > 0x3FFFFFFF || lb > 0x3FFFFFFF) { *out_idx = -1; return; }
     int total = la + lb;
+    
     if (vm->string_used + total + 1 > METAL_STRING_POOL) { *out_idx = -1; return; }
     char* dest = &vm->strings[vm->string_used];
     memcpy(dest, a, (unsigned long)la);
@@ -631,7 +650,8 @@ static int metal_truthy(MetalValue v) {
 int metal_vm_step(MetalVM* vm) {
     if (vm->halted || vm->error || vm->ip >= vm->code_length) return 0;
 
-    int op = read_u8(vm->code, &vm->ip);
+    int op = read_u8(vm);
+    if (vm->error) return 0;
     
     /*
     static char debug_buf[128];
@@ -648,9 +668,15 @@ int metal_vm_step(MetalVM* vm) {
             return 0;
 
         case OP_CONSTANT: {
-            int idx = read_u16(vm->code, &vm->ip);
-            if (idx < vm->const_count)
+            int idx = read_u16(vm);
+            if (vm->error) return 0;
+            if (idx >= 0 && idx < vm->const_count)
                 metal_vm_push(vm, vm->constants[idx]);
+            else {
+                vm->error = 1;
+                vm->error_msg = "Metal VM: constant index out of bounds";
+                return 0;
+            }
             break;
         }
 
@@ -659,14 +685,17 @@ int metal_vm_step(MetalVM* vm) {
         case OP_FALSE: metal_vm_push(vm, mv_bool(0)); break;
         case OP_POP:   metal_vm_pop(vm); break;
         case OP_DUP: {
-            int distance = read_u8(vm->code, &vm->ip);
+            int distance = read_u8(vm);
+            if (vm->error) return 0;
             metal_vm_push(vm, metal_vm_peek(vm, distance));
             break;
         }
 
         case OP_DEFINE_GLOBAL: {
-            int name_idx = read_u16(vm->code, &vm->ip);
+            int name_idx = read_u16(vm);
+            if (vm->error) return 0;
             MetalValue val = metal_vm_pop(vm);
+            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_DEFINE_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
             scope_define(vm, hash, val);
@@ -674,7 +703,9 @@ int metal_vm_step(MetalVM* vm) {
         }
 
         case OP_GET_GLOBAL: {
-            int name_idx = read_u16(vm->code, &vm->ip);
+            int name_idx = read_u16(vm);
+            if (vm->error) return 0;
+            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_GET_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
             MetalValue val;
@@ -686,8 +717,10 @@ int metal_vm_step(MetalVM* vm) {
         }
 
         case OP_SET_GLOBAL: {
-            int name_idx = read_u16(vm->code, &vm->ip);
+            int name_idx = read_u16(vm);
+            if (vm->error) return 0;
             MetalValue val = metal_vm_pop(vm);
+            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_SET_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
             scope_assign(vm, hash, val);
@@ -695,8 +728,10 @@ int metal_vm_step(MetalVM* vm) {
         }
 
         case OP_DEFINE_FN: {
-            int name_idx = read_u16_be(vm->code, &vm->ip);
-            int fn_idx = read_u16_be(vm->code, &vm->ip);
+            int name_idx = read_u16_be(vm);
+            int fn_idx = read_u16_be(vm);
+            if (vm->error) return 0;
+            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_DEFINE_FN: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
 
@@ -876,34 +911,45 @@ int metal_vm_step(MetalVM* vm) {
 
         // Control flow
         case OP_JUMP: {
-            int offset = read_u16(vm->code, &vm->ip);
+            int offset = read_u16(vm);
+            if (vm->error) return 0;
             vm->ip = offset;
             break;
         }
         case OP_JUMP_IF_FALSE: {
-            int offset = read_u16(vm->code, &vm->ip);
+            int offset = read_u16(vm);
+            if (vm->error) return 0;
             MetalValue cond = metal_vm_pop(vm);
             if (!metal_truthy(cond)) vm->ip = offset;
             break;
         }
         case OP_LOOP_BACK: {
-            int offset = read_u16(vm->code, &vm->ip);
+            int offset = read_u16(vm);
+            if (vm->error) return 0;
             vm->ip -= offset;
             break;
         }
         case OP_BREAK: {
-            int offset = read_u16(vm->code, &vm->ip);
+            int offset = read_u16(vm);
+            if (vm->error) return 0;
             vm->ip = offset;
             break;
         }
         case OP_CONTINUE: {
-            int offset = read_u16(vm->code, &vm->ip);
+            int offset = read_u16(vm);
+            if (vm->error) return 0;
             vm->ip = offset;
             break;
         }
 
         case OP_CALL: {
-            int argc = read_u8(vm->code, &vm->ip);
+            int argc = read_u8(vm);
+            if (vm->error) return 0;
+            if (vm->sp < argc + 1) {
+                vm->error = 1;
+                vm->error_msg = "OP_CALL: stack underflow";
+                return 0;
+            }
             MetalValue callee = vm->stack[vm->sp - argc - 1];
             if (callee.type == MV_STR) {
                 const char* name = metal_string_get(vm, callee.as.str_idx);
@@ -991,8 +1037,19 @@ int metal_vm_step(MetalVM* vm) {
         // Arrays
         case OP_ARRAY:
         case OP_TUPLE: {
-            int count = read_u16(vm->code, &vm->ip);
+            int count = read_u16(vm);
+            if (vm->error) return 0;
+            if (vm->sp < count) {
+                vm->error = 1;
+                vm->error_msg = "OP_ARRAY: stack underflow";
+                return 0;
+            }
             int arr = metal_array_new(vm);
+            if (arr < 0) {
+                vm->error = 1;
+                vm->error_msg = "OP_ARRAY: array pool full";
+                return 0;
+            }
             // Elements are on stack in reverse order
             for (int i = count - 1; i >= 0; i--) {
                 MetalValue elem = vm->stack[vm->sp - count + i];
@@ -1004,8 +1061,19 @@ int metal_vm_step(MetalVM* vm) {
             break;
         }
         case OP_DICT: {
-            int count = read_u16(vm->code, &vm->ip);
+            int count = read_u16(vm);
+            if (vm->error) return 0;
+            if (vm->sp < count * 2) {
+                vm->error = 1;
+                vm->error_msg = "OP_DICT: stack underflow";
+                return 0;
+            }
             int dict = metal_dict_new(vm);
+            if (dict < 0) {
+                vm->error = 1;
+                vm->error_msg = "OP_DICT: dict pool full";
+                return 0;
+            }
             // Pairs (key, val) are on stack in reverse order: [..., k1, v1, k2, v2]
             // Wait, SageLang usually pushes k1, v1, k2, v2, so v2 is at top.
             for (int i = 0; i < count; i++) {

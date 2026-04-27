@@ -35,6 +35,10 @@ static void idt_set_gate(uint8_t vector, void *handler) {
     idt[vector].zero = 0;
 }
 
+void idt_set_interrupt_handler(uint8_t vector, void *handler) {
+    idt_set_gate(vector, handler);
+}
+
 static void lidt(IdtPtr *ptr) {
     __asm__ volatile ("lidt (%0)" : : "r"(ptr) : "memory");
 }
@@ -97,6 +101,7 @@ static void pic_remap(void) {
 void irq0_handler_c(void);
 void irq1_handler_c(void);
 void sci_handler_c(void);
+void ata_handler_c(void);
 
 __attribute__((naked)) void sci_stub(void) {
     __asm__ volatile (
@@ -116,6 +121,43 @@ __attribute__((naked)) void sci_stub(void) {
         "pushq %r14\n"
         "pushq %r15\n"
         "call sci_handler_c\n"
+        "popq %r15\n"
+        "popq %r14\n"
+        "popq %r13\n"
+        "popq %r12\n"
+        "popq %r11\n"
+        "popq %r10\n"
+        "popq %r9\n"
+        "popq %r8\n"
+        "popq %rbp\n"
+        "popq %rdi\n"
+        "popq %rsi\n"
+        "popq %rdx\n"
+        "popq %rcx\n"
+        "popq %rbx\n"
+        "popq %rax\n"
+        "iretq\n"
+    );
+}
+
+__attribute__((naked)) void ata_stub(void) {
+    __asm__ volatile (
+        "pushq %rax\n"
+        "pushq %rbx\n"
+        "pushq %rcx\n"
+        "pushq %rdx\n"
+        "pushq %rsi\n"
+        "pushq %rdi\n"
+        "pushq %rbp\n"
+        "pushq %r8\n"
+        "pushq %r9\n"
+        "pushq %r10\n"
+        "pushq %r11\n"
+        "pushq %r12\n"
+        "pushq %r13\n"
+        "pushq %r14\n"
+        "pushq %r15\n"
+        "call ata_handler_c\n"
         "popq %r15\n"
         "popq %r14\n"
         "popq %r13\n"
@@ -229,6 +271,27 @@ void sci_handler_c(void) {
     if (acpi) pic_send_eoi((uint8_t)acpi->sci_irq);
 }
 
+void ata_handler_c(void) {
+    extern void ata_irq_handler(void);
+    ata_irq_handler();
+}
+
+void pic_unmask_irq(uint8_t irq) {
+    if (irq < 8) {
+        uint8_t mask = inb(0x21);
+        mask &= (uint8_t)~(1 << irq);
+        outb(0x21, mask);
+    } else if (irq < 16) {
+        uint8_t mask = inb(0xA1);
+        mask &= (uint8_t)~(1 << (irq - 8));
+        outb(0xA1, mask);
+        /* Also unmask cascade IRQ2 */
+        mask = inb(0x21);
+        mask &= (uint8_t)~(1 << 2);
+        outb(0x21, mask);
+    }
+}
+
 void idt_init(void) {
     irq_disable();
 
@@ -238,6 +301,7 @@ void idt_init(void) {
 
     idt_set_gate(32, irq0_stub);
     idt_set_gate(33, irq1_stub);
+    idt_set_gate(46, ata_stub); /* IRQ 14 = 32 + 14 */
 
     const AcpiInfo *acpi = acpi_info();
     if (acpi && acpi->sci_irq > 0 && acpi->sci_irq < 16) {

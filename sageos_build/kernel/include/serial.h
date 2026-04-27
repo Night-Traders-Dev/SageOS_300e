@@ -5,5 +5,6 @@ void serial_init(void);
 void serial_putc(char c);
 void serial_write(const char *s);
 int serial_poll_char(char *out);
+void serial_process_tx_buffer(void);
 
 #endif

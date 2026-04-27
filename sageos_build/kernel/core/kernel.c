@@ -17,6 +17,7 @@
 #include "sdhci.h"
 #include "version.h"
 #include "dmesg.h"
+#include "ata.h"
 
 extern int fat32_init(void);
 
@@ -68,6 +69,8 @@ void kmain(SageOSBootInfo *info) {
     dmesg_log("timer initialized");
     idt_init();
     dmesg_log("IDT initialized");
+    ata_init();
+    dmesg_log("ATA initialized");
     irq_enable();
 
     battery_init();

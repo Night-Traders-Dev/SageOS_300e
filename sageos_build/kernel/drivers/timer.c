@@ -59,6 +59,14 @@ void timer_init(void) {
 void timer_irq(void) {
     ticks++;
 
+    /* Handle ATA timeouts */
+    extern void ata_timer_tick(void);
+    ata_timer_tick();
+
+    /* Process serial output buffer */
+    extern void serial_process_tx_buffer(void);
+    serial_process_tx_buffer();
+
     /* Periodically flip the framebuffer to update text output */
     flip_counter++;
     if (flip_counter >= 5) {  /* Flip every ~50ms (5 * 10ms) */

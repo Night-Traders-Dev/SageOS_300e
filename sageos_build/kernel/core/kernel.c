@@ -18,8 +18,20 @@
 #include "version.h"
 #include "dmesg.h"
 #include "ata.h"
+#include "scheduler.h"
 
 extern int fat32_init(void);
+
+static void shell_main_thread(void *arg) {
+    (void)arg;
+
+    dmesg_log("shell thread started");
+    for (;;) {
+        timer_poll();
+        sage_shell_run();
+        sched_yield();  /* Yield to allow other threads to run */
+    }
+}
 
 static void banner(void) {
     uint32_t old = console_get_fg();
@@ -100,6 +112,9 @@ void kmain(SageOSBootInfo *info) {
     status_init();
     dmesg_log("status bar initialized");
 
+    sched_init();
+    dmesg_log("scheduler initialized");
+
     banner();
 
     console_write("SageOS modular kernel v" SAGEOS_VERSION " entered.\n");
@@ -112,9 +127,16 @@ void kmain(SageOSBootInfo *info) {
     console_write("\n");
     console_write("Type help to list commands.\n");
 
-    dmesg_log("shell starting");
+    dmesg_log("creating main shell thread");
+
+    /* Create main shell thread */
+    sched_create_thread("shell-main", shell_main_thread, NULL, THREAD_PRIORITY_NORMAL);
+
+    /* Start scheduling - this will not return */
+    sched_start();
+
+    /* Should never reach here */
     for (;;) {
-        timer_poll();
-        sage_shell_run();
+        __asm__ volatile ("hlt");
     }
 }

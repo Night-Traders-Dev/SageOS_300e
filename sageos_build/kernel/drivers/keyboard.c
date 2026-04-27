@@ -4,6 +4,7 @@
 #include "serial.h"
 #include "status.h"
 #include "timer.h"
+#include "scheduler.h"
 #include <stdint.h>
 
 #if defined(__clang__) || defined(__GNUC__)
@@ -446,6 +447,7 @@ void keyboard_keydebug(void) {
         timer_poll();
         if (!keyboard_poll_any_event(&ev)) {
             status_tick_poll();
+            sched_yield();
             cpu_hlt();
             continue;
         }
@@ -490,6 +492,7 @@ int keyboard_wait_event(KeyEvent *ev) {
         } else {
             cpu_pause();
         }
+        sched_yield();
     }
 }
 

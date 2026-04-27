@@ -40,6 +40,7 @@ void smp_init(void);
 void smp_init_firmware_bsp(void);
 uint32_t smp_cpu_count(void);
 const CpuInfo *smp_cpu(uint32_t idx);
+uint32_t smp_current_cpu_index(void);
 void smp_cmd_info(void);
 void smp_boot_aps(void);
 

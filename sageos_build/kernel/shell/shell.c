@@ -20,6 +20,7 @@
 #include "elf.h"
 #include "version.h"
 #include "dmesg.h"
+#include "scheduler.h"
 #include "sage_shell_entry.h"
 #include "sage_libc_shim.h"
 
@@ -58,6 +59,7 @@ static const char *const shell_commands[] = {
     "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
     "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
     "mkdir", "nano", "neofetch", "pci", "poweroff", "q", "reboot", "rm", "sage",
+    "sched",
     "sageshell", "sdhci", "sh", "shutdown", "smp", "smp start", "source", "stat",
     "status", "stop", "suspend", "sysinfo", "timer", "touch", "uname", "version",
     "write",
@@ -352,6 +354,7 @@ static void help(void) {
     console_write("\n  install           install to local drive");
     console_write("\n  status            show top-bar metrics");
     console_write("\n  timer             show PIT timer info");
+    console_write("\n  sched             show scheduler queues and threads");
     console_write("\n  smp               show CPU/APIC discovery");
     console_write("\n  acpi              show ACPI summary");
     console_write("\n  acpi tables       list ACPI tables");
@@ -428,6 +431,7 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "status"))       { status_print(); return; }
     if (starts_word(cmd, "sysinfo"))      { sysinfo_cmd(); return; }
     if (starts_word(cmd, "timer"))        { timer_cmd_info(); return; }
+    if (starts_word(cmd, "sched"))        { sched_cmd_info(); return; }
     if (starts_word(cmd, "smp start"))    { smp_boot_aps(); return; }
     if (starts_word(cmd, "smp"))          { smp_cmd_info(); return; }
     if (starts_word(cmd, "battery"))      { battery_cmd_info(); return; }

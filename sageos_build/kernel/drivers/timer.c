@@ -2,6 +2,7 @@
 #include "io.h"
 #include "timer.h"
 #include "console.h"
+#include "scheduler.h"
 
 #define PIT_HZ 100
 #define PIT_BASE_HZ 1193182
@@ -66,6 +67,8 @@ void timer_irq(void) {
     /* Process serial output buffer */
     extern void serial_process_tx_buffer(void);
     serial_process_tx_buffer();
+
+    sched_timer_tick();
 
     /* Periodically flip the framebuffer to update text output */
     flip_counter++;

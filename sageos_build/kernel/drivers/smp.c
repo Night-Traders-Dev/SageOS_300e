@@ -6,6 +6,7 @@
 #include "timer.h"
 #include "io.h"
 #include "dmesg.h"
+#include "scheduler.h"
 
 static CpuInfo cpus[SAGEOS_MAX_CPUS];
 static uint32_t cpu_count;
@@ -46,6 +47,19 @@ uint32_t smp_cpu_count(void) {
 const CpuInfo *smp_cpu(uint32_t idx) {
     if (idx >= cpu_count) return 0;
     return &cpus[idx];
+}
+
+uint32_t smp_current_cpu_index(void) {
+    uint32_t apic_id;
+
+    if (!lapic_base || cpu_count == 0) return 0;
+
+    apic_id = (lapic_read(LAPIC_ID) >> 24) & 0xFF;
+    for (uint32_t i = 0; i < cpu_count; i++) {
+        if (cpus[i].apic_id == apic_id) return i;
+    }
+
+    return 0;
 }
 
 int smp_ap_start_supported(void) {
@@ -170,13 +184,13 @@ void ap_kernel_main(uint32_t apic_id) {
             msg[14] = 'i'; msg[15] = 'n'; msg[16] = 'e';
             msg[17] = 0;
             dmesg_log(msg);
+            sched_start_on_cpu(i);
             break;
         }
     }
 
-    /* AP idle loop */
     while (1) {
-        cpu_hlt();
+        cpu_pause();
     }
 }
 

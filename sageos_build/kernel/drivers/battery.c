@@ -118,6 +118,29 @@ static int read_battery_percent(void)
 
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
+/* ── CrOS EC LPC Host Command Interface ───────────────────────────────── */
+#define EC_LPC_ADDR_HOST_DATA       0x62u
+#define EC_LPC_ADDR_HOST_CMD        0x66u
+#define EC_COMMAND_PROTOCOL_3       0xda
+#define EC_CMD_CHARGE_STATE         0x0011
+
+static int wait_ec_ready(void) {
+    for (int i = 0; i < 10000; i++) {
+        if (!(inb(EC_LPC_ADDR_HOST_CMD) & 0x01)) return 1;
+    }
+    return 0;
+}
+
+static int read_battery_percent_host(void) {
+    /* 
+     * Minimal implementation of EC_CMD_CHARGE_STATE fallback.
+     * This is a placeholder for the actual protocol handshake.
+     */
+    return -1; // Fallback logic to be expanded as needed
+}
+
+/* ── Public API ─────────────────────────────────────────────────────────── */
+
 void battery_init(void)
 {
     /* Patch 3: Log every tried base so a serial capture reveals which
@@ -141,7 +164,7 @@ void battery_init(void)
         if (check_ec_id_at(candidates[i])) {
             ec_lpc_base = candidates[i];
             source_type = 2;
-            dmesg_log("battery: Chromebook EC confirmed");
+            dmesg_log("battery: Chromebook EC confirmed via memmap");
             break;
         }
     }
@@ -155,7 +178,14 @@ void battery_init(void)
         }
         /* EC found but battery data not yet valid — still mark source=2. */
     } else {
-        dmesg_log("battery: Chromebook EC memory map not confirmed");
+        dmesg_log("battery: Chromebook EC memory map not confirmed, trying host commands...");
+        int pct = read_battery_percent_host();
+        if (pct >= 0) {
+            percent = pct;
+            percent_valid = 1;
+            source_type = 4; // 4 = Host command
+            dmesg_log("battery: confirmed via host command");
+        }
     }
 
     /*
@@ -165,7 +195,7 @@ void battery_init(void)
      */
     if (!percent_valid) {
         if (ec_present) {
-            source_type   = 3;     /* EC detected, no valid ID/data yet */
+            if (source_type == 0) source_type = 3;     /* EC detected, no valid ID/data yet */
         } else if (battery_present) {
             source_type   = 1;     /* ACPI hints only */
         }

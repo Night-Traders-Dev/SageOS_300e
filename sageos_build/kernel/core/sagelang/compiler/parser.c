@@ -110,6 +110,13 @@ void parser_init(void) {
     advance_parser();
 }
 
+int parser_is_at_end(void) {
+    while (current_token.type == TOKEN_NEWLINE || current_token.type == TOKEN_SEMICOLON) {
+        advance_parser();
+    }
+    return current_token.type == TOKEN_EOF;
+}
+
 ParserState parser_get_state(void) {
     ParserState state;
     state.current_token = current_token;
@@ -128,6 +135,14 @@ static int check(TokenType type) {
 
 static int match(TokenType type) {
     if (current_token.type == type) {
+        advance_parser();
+        return 1;
+    }
+    return 0;
+}
+
+static int match_terminator(void) {
+    if (current_token.type == TOKEN_NEWLINE || current_token.type == TOKEN_SEMICOLON) {
         advance_parser();
         return 1;
     }
@@ -345,10 +360,7 @@ static Stmt* match_statement() {
     int case_capacity = 0;
     Stmt* default_case = NULL;
 
-    while (!check(TOKEN_DEDENT) && !check(TOKEN_EOF)) {
-        while (match(TOKEN_NEWLINE));
-        if (check(TOKEN_DEDENT) || check(TOKEN_EOF)) break;
-
+    while (!parser_is_at_end()) {
         if (match(TOKEN_DEFAULT)) {
             consume(TOKEN_COLON, "Expect ':' after 'default'.");
             consume(TOKEN_NEWLINE, "Expect newline after 'default:'.");
@@ -1631,12 +1643,12 @@ static Stmt* declaration() {
 
     Stmt* stmt = statement();
     if (pragma_list) { stmt->pragmas = pragma_list; }
-    match(TOKEN_NEWLINE);
+    match_terminator();
     return stmt;
 }
 
 Stmt* parse(void) {
-    while (current_token.type == TOKEN_NEWLINE) {
+    while (current_token.type == TOKEN_NEWLINE || current_token.type == TOKEN_SEMICOLON) {
         advance_parser();
     }
 

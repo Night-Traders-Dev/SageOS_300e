@@ -334,12 +334,8 @@ static int sage_repl_build_function(void* data, ProcStmt* proc,
 }
 
 void sage_repl_step(const char* line) {
-    BytecodeChunk chunk;
-    Stmt* stmt;
     char error[256];
-    int const_offset = 0;
-    int is_expression = 0;
-
+    
     if (!line || !*line) return;
 
     sage_repl_init();
@@ -349,52 +345,57 @@ void sage_repl_step(const char* line) {
     init_lexer(line, "<repl>");
     parser_init();
 
-    stmt = parse();
-    if (sage_exit_flag || stmt == NULL) {
-        sage_clear_exit_state();
-        return;
-    }
-
-    bytecode_chunk_init(&chunk);
-    if (!bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_STRICT,
-                                                   sage_repl_build_function, &g_repl_vm,
-                                                   error, sizeof(error))) {
-        if (!sage_exit_flag) {
-            printf("Compile error: %s\n", error);
+    while (!parser_is_at_end()) {
+        Stmt* stmt = parse();
+        if (sage_exit_flag || stmt == NULL) {
+            sage_clear_exit_state();
+            break;
         }
+
+        BytecodeChunk chunk;
+        int const_offset = 0;
+        int is_expression = (stmt->type == STMT_EXPRESSION);
+
+        bytecode_chunk_init(&chunk);
+        if (!bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_STRICT,
+                                                       sage_repl_build_function, &g_repl_vm,
+                                                       error, sizeof(error))) {
+            if (!sage_exit_flag) {
+                printf("Compile error: %s\n", error);
+            }
+            bytecode_chunk_free(&chunk);
+            sage_clear_exit_state();
+            break;
+        }
+
+        if (is_expression &&
+            !sage_wrap_expression_for_print(&chunk, error, sizeof(error))) {
+            printf("Compile error: %s\n", error);
+            bytecode_chunk_free(&chunk);
+            sage_clear_exit_state();
+            break;
+        }
+
+        if (!sage_import_chunk_constants(&g_repl_vm, &chunk, error, sizeof(error), &const_offset)) {
+            printf("Compile error: %s\n", error);
+            bytecode_chunk_free(&chunk);
+            sage_clear_exit_state();
+            break;
+        }
+        sage_patch_main_chunk_indices(&chunk, const_offset);
+
+        sage_prepare_vm_for_step(&g_repl_vm);
+        metal_vm_load(&g_repl_vm, chunk.code, chunk.code_count);
+        metal_vm_run(&g_repl_vm);
+
+        if (g_repl_vm.error) {
+            printf("Runtime error: %s\n", g_repl_vm.error_msg ? g_repl_vm.error_msg : "unknown");
+            g_repl_vm.error = 0;
+            g_repl_vm.error_msg = 0;
+        }
+
         bytecode_chunk_free(&chunk);
-        sage_clear_exit_state();
-        return;
     }
-
-    is_expression = (stmt->type == STMT_EXPRESSION);
-    if (is_expression &&
-        !sage_wrap_expression_for_print(&chunk, error, sizeof(error))) {
-        printf("Compile error: %s\n", error);
-        bytecode_chunk_free(&chunk);
-        sage_clear_exit_state();
-        return;
-    }
-
-    if (!sage_import_chunk_constants(&g_repl_vm, &chunk, error, sizeof(error), &const_offset)) {
-        printf("Compile error: %s\n", error);
-        bytecode_chunk_free(&chunk);
-        sage_clear_exit_state();
-        return;
-    }
-    sage_patch_main_chunk_indices(&chunk, const_offset);
-
-    sage_prepare_vm_for_step(&g_repl_vm);
-    metal_vm_load(&g_repl_vm, chunk.code, chunk.code_count);
-    metal_vm_run(&g_repl_vm);
-
-    if (g_repl_vm.error) {
-        printf("Runtime error: %s\n", g_repl_vm.error_msg ? g_repl_vm.error_msg : "unknown");
-        g_repl_vm.error = 0;
-        g_repl_vm.error_msg = 0;
-    }
-
-    bytecode_chunk_free(&chunk);
     sage_clear_exit_state();
 }
 

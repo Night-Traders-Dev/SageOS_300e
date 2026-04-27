@@ -85,7 +85,8 @@ const char* sage_token_type_name(TokenType type) {
         case TOKEN_MACRO: return "MACRO";
         case TOKEN_QUOTE: return "QUOTE";
         case TOKEN_UNQUOTE: return "UNQUOTE";
-        case TOKEN_AT: return "AT";
+        case TOKEN_SEMICOLON: return ";";
+        case TOKEN_AT: return "@";
         case TOKEN_IDENTIFIER: return "IDENTIFIER";
         case TOKEN_NUMBER: return "NUMBER";
         case TOKEN_STRING: return "STRING";

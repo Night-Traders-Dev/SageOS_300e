@@ -464,6 +464,66 @@ int metal_array_len(MetalVM* vm, int arr_idx) {
 }
 
 // ============================================================================
+// Dictionary Pool
+// ============================================================================
+
+int metal_dict_new(MetalVM* vm) {
+    int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
+    if (vm->dict_count >= max) return -1;
+    int idx = vm->dict_count++;
+    vm->dicts[idx].count = 0;
+    vm->dicts[idx].in_use = 1;
+    return idx;
+}
+
+void metal_dict_set(MetalVM* vm, int dict_idx, int key_idx, MetalValue val) {
+    int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
+    if (dict_idx < 0 || dict_idx >= max) return;
+    MetalDict* d = &vm->dicts[dict_idx];
+
+    // Search for existing key
+    for (int i = 0; i < d->count; i++) {
+        if (d->key_str_idx[i] == key_idx) {
+            d->values[i] = val;
+            return;
+        }
+    }
+
+    // Add new key
+    if (d->count < METAL_DICT_MAX_ENTRIES) {
+        d->key_str_idx[d->count] = key_idx;
+        d->values[d->count] = val;
+        d->count++;
+    }
+}
+
+MetalValue metal_dict_get(MetalVM* vm, int dict_idx, int key_idx) {
+    int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
+    if (dict_idx < 0 || dict_idx >= max) return mv_nil();
+    MetalDict* d = &vm->dicts[dict_idx];
+
+    for (int i = 0; i < d->count; i++) {
+        if (d->key_str_idx[i] == key_idx) {
+            return d->values[i];
+        }
+    }
+    return mv_nil();
+}
+
+int metal_dict_has(MetalVM* vm, int dict_idx, int key_idx) {
+    int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
+    if (dict_idx < 0 || dict_idx >= max) return 0;
+    MetalDict* d = &vm->dicts[dict_idx];
+
+    for (int i = 0; i < d->count; i++) {
+        if (d->key_str_idx[i] == key_idx) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// ============================================================================
 // Environment (scope chain — flat array)
 // ============================================================================
 
@@ -831,6 +891,16 @@ int metal_vm_step(MetalVM* vm) {
             vm->ip -= offset;
             break;
         }
+        case OP_BREAK: {
+            int offset = read_u16(vm->code, &vm->ip);
+            vm->ip = offset;
+            break;
+        }
+        case OP_CONTINUE: {
+            int offset = read_u16(vm->code, &vm->ip);
+            vm->ip = offset;
+            break;
+        }
 
         case OP_CALL: {
             int argc = read_u8(vm->code, &vm->ip);
@@ -933,6 +1003,22 @@ int metal_vm_step(MetalVM* vm) {
             metal_vm_push(vm, v);
             break;
         }
+        case OP_DICT: {
+            int count = read_u16(vm->code, &vm->ip);
+            int dict = metal_dict_new(vm);
+            // Pairs (key, val) are on stack in reverse order: [..., k1, v1, k2, v2]
+            // Wait, SageLang usually pushes k1, v1, k2, v2, so v2 is at top.
+            for (int i = 0; i < count; i++) {
+                MetalValue val = metal_vm_pop(vm);
+                MetalValue key = metal_vm_pop(vm);
+                if (key.type == MV_STR) {
+                    metal_dict_set(vm, dict, key.as.str_idx, val);
+                }
+            }
+            MetalValue v; v.type = MV_DICT; v.as.dict_idx = dict;
+            metal_vm_push(vm, v);
+            break;
+        }
         case OP_ARRAY_LEN: {
             MetalValue a = metal_vm_pop(vm);
             union { double d; uint64_t u; } vr;
@@ -943,19 +1029,27 @@ int metal_vm_step(MetalVM* vm) {
             metal_vm_push(vm, mv_num(vr.u));
             break;
         }
-        case OP_GET_INDEX: {
+        case OP_GET_INDEX:
+        case OP_GET_PROPERTY: {
             MetalValue idx = metal_vm_pop(vm);
             MetalValue obj = metal_vm_pop(vm);
             if (obj.type == MV_ARR) {
                 union { double d; uint64_t u; } vi;
                 vi.u = idx.as.num_bits;
                 metal_vm_push(vm, metal_array_get(vm, obj.as.arr_idx, (int)vi.d));
+            } else if (obj.type == MV_DICT) {
+                if (idx.type == MV_STR) {
+                    metal_vm_push(vm, metal_dict_get(vm, obj.as.dict_idx, idx.as.str_idx));
+                } else {
+                    metal_vm_push(vm, mv_nil());
+                }
             } else {
                 metal_vm_push(vm, mv_nil());
             }
             break;
         }
-        case OP_SET_INDEX: {
+        case OP_SET_INDEX:
+        case OP_SET_PROPERTY: {
             MetalValue val = metal_vm_pop(vm);
             MetalValue idx = metal_vm_pop(vm);
             MetalValue obj = metal_vm_pop(vm);
@@ -967,6 +1061,10 @@ int metal_vm_step(MetalVM* vm) {
                 int max = (int)(sizeof(vm->arrays) / sizeof(vm->arrays[0]));
                 if (ai >= 0 && ai < max && ii >= 0 && ii < vm->arrays[ai].count)
                     vm->arrays[ai].elems[ii] = val;
+            } else if (obj.type == MV_DICT) {
+                if (idx.type == MV_STR) {
+                    metal_dict_set(vm, obj.as.dict_idx, idx.as.str_idx, val);
+                }
             }
             metal_vm_push(vm, val);
             break;

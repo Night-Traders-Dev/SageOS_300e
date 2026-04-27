@@ -542,6 +542,7 @@ Token scan_token(void) {
         case '|': return make_token(TOKEN_PIPE);
         case '^': return make_token(TOKEN_CARET);
         case '~': return make_token(TOKEN_TILDE);
+        case ';': return make_token(TOKEN_SEMICOLON);
         case '@': return make_token(TOKEN_AT);
     }
 

@@ -10,6 +10,7 @@ typedef struct {
 } ParserState;
 
 void parser_init(void);
+int parser_is_at_end(void);
 Stmt* parse(void);
 ParserState parser_get_state(void);
 void parser_set_state(ParserState state);

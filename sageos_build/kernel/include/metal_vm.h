@@ -277,6 +277,12 @@ void metal_array_push(MetalVM* vm, int arr_idx, MetalValue val);
 MetalValue metal_array_get(MetalVM* vm, int arr_idx, int index);
 int metal_array_len(MetalVM* vm, int arr_idx);
 
+// Dictionary pool
+int metal_dict_new(MetalVM* vm);
+void metal_dict_set(MetalVM* vm, int dict_idx, int key_idx, MetalValue val);
+MetalValue metal_dict_get(MetalVM* vm, int dict_idx, int key_idx);
+int metal_dict_has(MetalVM* vm, int dict_idx, int key_idx);
+
 // String utilities (useful for native callbacks building return strings)
 void metal_string_concat(MetalVM* vm, int idx_a, int idx_b, int* out_idx);
 void metal_num_to_str(MetalVM* vm, long long n, int* out_idx);

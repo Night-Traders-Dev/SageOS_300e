@@ -151,16 +151,22 @@ int ata_write_sector_async(uint32_t lba, const uint16_t *buffer) {
 }
 
 int ata_wait_completion(void) {
-    while (ata_current_request || ata_request_queue) {
+    uint32_t timeout = 1000000; /* ~1 second timeout */
+    while ((ata_current_request || ata_request_queue) && timeout > 0) {
         cpu_pause();
+        timeout--;
+    }
+    if (timeout == 0) {
+        console_write("ATA wait timeout\n");
+        return 0;
     }
     return 1;
 }
 
 /* Legacy synchronous interface for compatibility */
-void ata_read_sector(uint32_t lba, uint16_t *buffer) {
-    if (!ata_read_sector_async(lba, buffer)) return;
-    ata_wait_completion();
+int ata_read_sector(uint32_t lba, uint16_t *buffer) {
+    if (!ata_read_sector_async(lba, buffer)) return 0;
+    return ata_wait_completion();
 }
 
 void ata_write_sector(uint32_t lba, const uint16_t *buffer) {

@@ -75,7 +75,7 @@ static uint32_t fat32_total_sectors;   /* from BPB total_sectors_32 */
 static uint16_t fat32_fsinfo_sector;   /* BPB fs_info field */
 static uint16_t fat32_bytes_per_sector;
 
-extern void ata_read_sector(uint32_t lba, uint16_t *buffer);
+extern int ata_read_sector(uint32_t lba, uint16_t *buffer);
 
 static void fat32_print_name(const FAT32_DirEntry *entry) {
     char name[13];
@@ -105,8 +105,7 @@ static uint32_t fat32_cluster_to_lba(uint32_t cluster) {
 }
 
 static int fat32_read_sector(uint32_t lba, uint8_t *buffer) {
-    ata_read_sector(lba, (uint16_t *)buffer);
-    return 1;
+    return ata_read_sector(lba, (uint16_t *)buffer);
 }
 
 static int streq(const char *a, const char *b) {
@@ -232,7 +231,10 @@ static int fat32_find_root_entry(const char *path, FAT32_DirEntry *out_entry) {
 
 int fat32_init(void) {
     uint8_t buffer[512];
-    fat32_read_sector(FAT32_PARTITION_START_LBA, buffer);
+    if (!fat32_read_sector(FAT32_PARTITION_START_LBA, buffer)) {
+        fat32_available = 0;
+        return 0;
+    }
     FAT32_BPB *bpb = (FAT32_BPB *)buffer;
 
     if (bpb->bytes_per_sector != 512 || bpb->fat_count == 0 || bpb->fat_size_32 == 0) {
@@ -293,7 +295,9 @@ int fat32_storage_info(uint32_t *total_kb, uint32_t *free_kb) {
     }
 
     uint8_t buf[512];
-    fat32_read_sector(FAT32_PARTITION_START_LBA + fat32_fsinfo_sector, buf);
+    if (!fat32_read_sector(FAT32_PARTITION_START_LBA + fat32_fsinfo_sector, buf)) {
+        return 0;
+    }
     FAT32_FSInfo *fi = (FAT32_FSInfo *)buf;
 
     if (fi->lead_sig  != 0x41615252U ||

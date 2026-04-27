@@ -18,6 +18,7 @@ void     console_set_serial_echo(int enabled);
 int      console_get_serial_echo(void);
 void     console_draw_status_bar(const char *right_text);
 void     console_serial_redraw_line(const char *line, uint32_t pos);
+void     console_periodic_flip(void);
 int      console_has_fb(void);
 uint32_t console_cols(void);
 uint32_t console_rows(void);

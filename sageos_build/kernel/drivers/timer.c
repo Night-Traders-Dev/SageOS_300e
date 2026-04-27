@@ -24,6 +24,11 @@ static uint32_t cpu_history_idx;
 static uint32_t cpu_history_sum;
 static uint32_t cpu_history_count;
 
+static volatile uint32_t flip_counter = 0;
+
+/* Forward declaration for framebuffer flip */
+void console_periodic_flip(void);
+
 void timer_init(void) {
     pit_reload = (uint16_t)(PIT_BASE_HZ / PIT_HZ);
 
@@ -53,6 +58,13 @@ void timer_init(void) {
 
 void timer_irq(void) {
     ticks++;
+
+    /* Periodically flip the framebuffer to update text output */
+    flip_counter++;
+    if (flip_counter >= 5) {  /* Flip every ~50ms (5 * 10ms) */
+        console_periodic_flip();
+        flip_counter = 0;
+    }
 
     uint64_t idle_delta = idle_loops - last_idle_loops;
     uint64_t total_delta = total_loops - last_total_loops;

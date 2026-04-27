@@ -282,22 +282,9 @@ static void draw_cell(uint32_t cx, uint32_t cy, char ch) {
     draw_cell_fast(cx, cy, ch, fg);
     
     /* 
-     * Targetted flip for responsiveness: only copy the affected character cell
-     * from back buffer to physical framebuffer. This is much faster than
-     * flipping full-width scanlines on hardware.
+     * Removed immediate framebuffer copy to prevent blocking keyboard input.
+     * Framebuffer updates are now handled asynchronously by timer.
      */
-    if (g_have_fb && g_info && g_back_buffer) {
-        uint32_t px = cx * char_w;
-        uint32_t py = cy * char_h;
-        uint32_t pitch = g_info->pixels_per_scanline;
-        volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
-
-        for (uint32_t y = py; y < py + char_h && y < g_info->height; y++) {
-            sage_memcpy((void*)(fb + (uint64_t)y * pitch + px), 
-                        &g_back_buffer[y * FB_MAX_WIDTH + px], 
-                        char_w * 4);
-        }
-    }
 }
 
 static void scroll(void) {
@@ -533,8 +520,13 @@ void console_u32(uint32_t v) {
     while (i > 0) console_putc(buf[--i]);
 }
 
-uint32_t console_cols(void) { return cols; }
-uint32_t console_rows(void) { return rows; }
+void console_periodic_flip(void) {
+    if (!g_have_fb || !g_info || !g_back_buffer) return;
+    
+    /* Flip the text area (from status bar to bottom) */
+    uint32_t y_start = status_rows * char_h;
+    console_flip(y_start, g_info->height);
+}
 
 static uint32_t str_len32(const char *s) {
     uint32_t n = 0;
@@ -586,3 +578,6 @@ void console_draw_status_bar(const char *right_text) {
     col = saved_col;
     if (row < status_rows) row = status_rows;
 }
+
+uint32_t console_cols(void) { return cols; }
+uint32_t console_rows(void) { return rows; }

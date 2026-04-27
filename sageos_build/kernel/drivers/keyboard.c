@@ -56,7 +56,7 @@ struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
 #define SCANCODE_QUEUE_SIZE 64
 
 #ifndef SAGEOS_FIRMWARE_I8042_FALLBACK
-#define SAGEOS_FIRMWARE_I8042_FALLBACK 0
+#define SAGEOS_FIRMWARE_I8042_FALLBACK 1
 #endif
 
 static const char keymap[128] = {
@@ -472,7 +472,10 @@ int keyboard_wait_event(KeyEvent *ev) {
         timer_poll(); /* Ensure we account for this loop in CPU% */
 
         if (firmware_mode) {
-            timer_delay_ms(1); /* 1ms delay for better responsiveness/lower CPU in firmware mode */
+            /* 
+             * No artificial delay here; timer_idle_poll() provides cpu_pause().
+             * Reducing latency for firmware-based input.
+             */
             timer_idle_poll();
         } else {
             cpu_pause();

@@ -22,6 +22,10 @@ typedef struct {
     int has_battery_device;
     int has_ec_device;
     int has_lid_device;
+    int lid_state;          /* 0=closed, 1=open, -1=unknown */
+    int suspend_requested;
+    int is_resuming;
+
     uint32_t gpe0_blk;
     uint8_t gpe0_blk_len;
     uint16_t sci_irq;
@@ -44,9 +48,11 @@ int acpi_suspend(void);
 int acpi_has_battery_device(void);
 int acpi_has_ec_device(void);
 int acpi_has_lid_device(void);
+int acpi_get_lid_state(void);
 
 void acpi_enable_sci(void);
 void acpi_check_events(void);
+void acpi_sci_handler(void);
 
 uint32_t acpi_get_emmc_base(void);
 

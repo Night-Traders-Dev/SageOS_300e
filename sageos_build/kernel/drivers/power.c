@@ -3,6 +3,7 @@
 #include "power.h"
 #include "acpi.h"
 #include "sysinfo.h"
+#include "dmesg.h"
 
 /*
  * power_qemu_exit
@@ -29,28 +30,36 @@ void power_qemu_exit(void) {
 }
 
 void power_reboot(void) {
+    dmesg_log("Power: Reboot requested.");
     uint8_t good = 0x02;
     while (good & 0x02) good = inb(0x64);
     outb(0x64, 0xFE);
 }
 
 void power_halt(void) {
+    dmesg_log("Power: System halt.");
     console_write("\nHalting.");
     for (;;) cpu_hlt();
 }
 
-void power_shutdown_stub(void) {
+void power_shutdown(void) {
+    dmesg_log("Power: Requesting ACPI S5 poweroff...");
     console_write("\nRequesting ACPI S5 poweroff...");
     if (!acpi_poweroff()) {
+        dmesg_log("Power: ACPI S5 failed or unsupported.");
         console_write("\nACPI S5 failed or unsupported.");
-        console_write("\nSystem is still running.");
     }
 }
 
-void power_suspend_stub(void) {
+void power_suspend(void) {
+    dmesg_log("Power: Requesting ACPI S3 suspend...");
     console_write("\nRequesting ACPI S3 suspend...");
     if (!acpi_suspend()) {
+        dmesg_log("Power: ACPI S3 failed or unsupported.");
         console_write("\nACPI S3 failed or unsupported.");
-        console_write("\nLid-close wake still needs SCI/GPE/EC event handling.");
+    } else {
+        /* Resume path */
+        dmesg_log("Power: Resumed from S3.");
+        console_write("\nResumed from S3.");
     }
 }

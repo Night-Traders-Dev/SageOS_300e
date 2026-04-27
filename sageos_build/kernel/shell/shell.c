@@ -574,8 +574,8 @@ void shell_exec_command(const char *cmd) {
     if (starts_with(cmd, "echo"))  { console_write("\n"); console_write(arg_after(cmd, "echo")); return; }
     if (starts_word(cmd, "color")) { cmd_color(arg_after(cmd, "color")); return; }
     if (starts_word(cmd, "dmesg")) { cmd_dmesg(); return; }
-    if (starts_word(cmd, "shutdown") || starts_word(cmd, "poweroff")) { power_shutdown_stub(); return; }
-    if (starts_word(cmd, "suspend")) { power_suspend_stub(); return; }
+    if (starts_word(cmd, "shutdown") || starts_word(cmd, "poweroff")) { power_shutdown(); return; }
+    if (starts_word(cmd, "suspend")) { power_suspend(); return; }
     if (starts_word(cmd, "halt"))    { power_halt(); return; }
     if (starts_word(cmd, "reboot"))  { console_write("\nRebooting."); power_reboot(); return; }
     console_write("\nUnknown command: "); console_write(cmd);

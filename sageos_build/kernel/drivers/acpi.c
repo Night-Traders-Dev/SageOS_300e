@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include "bootinfo.h"
 #include "acpi.h"
+#include "cros_ec.h"
 #include "console.h"
 #include "io.h"
 #include "dmesg.h"
@@ -247,6 +248,9 @@ void acpi_init(SageOSBootInfo *boot) {
     g_acpi.has_battery_device = 0;
     g_acpi.has_ec_device = 0;
     g_acpi.has_lid_device = 0;
+    g_acpi.lid_state = -1;
+    g_acpi.suspend_requested = 0;
+    g_acpi.is_resuming = 0;
     g_acpi.gpe0_blk = 0;
     g_acpi.gpe0_blk_len = 0;
     g_acpi.sci_irq = 0;
@@ -271,19 +275,71 @@ void acpi_enable_sci(void) {
 }
 
 void acpi_check_events(void) {
+    /* 
+     * Lid Polling: Evaluation of _LID or CrOS EC state.
+     * Hardware often uses GPEs for lid, but polling is a safe fallback.
+     */
+    if (g_acpi.has_lid_device) {
+        int new_state = acpi_get_lid_state();
+        
+        if (new_state != -1 && new_state != g_acpi.lid_state) {
+            if (g_acpi.lid_state != -1) {
+                dmesg_log(new_state ? "ACPI event: Lid Opened" : "ACPI event: Lid Closed");
+            }
+            g_acpi.lid_state = new_state;
+
+            /* Auto-suspend on lid close */
+            if (new_state == 0) {
+                g_acpi.suspend_requested = 1;
+            }
+        }
+    }
+
+    if (g_acpi.suspend_requested) {
+        g_acpi.suspend_requested = 0;
+        dmesg_log("ACPI: Lid-close auto-suspend triggering...");
+        acpi_suspend();
+        
+        /* On resume from S3, execution continues here */
+        g_acpi.is_resuming = 1;
+        dmesg_log("ACPI: Resumed from S3 suspend.");
+        /* Trigger UI/Driver refresh if needed */
+        g_acpi.is_resuming = 0;
+    }
+
     if (!g_acpi.gpe0_blk) return;
 
     /* Check GPE0 status (usually 1st half is status, 2nd half is enable) */
-    uint32_t status_port = g_acpi.gpe0_blk;
-    uint32_t status = inb((uint16_t)status_port);
+    uint16_t status_port = (uint16_t)g_acpi.gpe0_blk;
+    uint32_t status = inb(status_port);
 
     if (status) {
         /* Clear status by writing 1s back */
-        outb((uint16_t)status_port, (uint8_t)status);
-        
-        /* Check for Lid event (often GPE 0x1D or 0x11 on Chromebooks) */
-        /* For minimal impl, we just refresh all dynamic status bar metrics */
+        outb(status_port, (uint8_t)status);
     }
+}
+
+void acpi_sci_handler(void) {
+    /* Clear PM1 status bits if set */
+    if (g_acpi.fadt) {
+        /* PM1 status is at PM1a_EVT_BLK, but FADT often hides it. 
+           Simplest is PM1a_CNT - 4 (PM1a_STS is typically before CNT) */
+        uint16_t pm1_sts = (uint16_t)(g_acpi.pm1a_cnt - 4);
+        uint16_t sts = inw(pm1_sts);
+        if (sts) outw(pm1_sts, sts);
+    }
+
+    acpi_check_events();
+}
+
+int acpi_get_lid_state(void) {
+    /* Method 1: CrOS EC host command (Reliable on Chromebooks) */
+    if (g_acpi.has_ec_device) {
+        return cros_ec_get_lid_state();
+    }
+
+    /* Method 2: Fallback to _LID would go here (requires AML interpreter) */
+    return -1;
 }
 
 int acpi_has_lid_device(void) {

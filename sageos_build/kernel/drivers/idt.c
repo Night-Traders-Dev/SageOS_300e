@@ -4,6 +4,7 @@
 #include "timer.h"
 #include "console.h"
 #include "keyboard.h"
+#include "acpi.h"
 
 typedef struct __attribute__((packed)) {
     uint16_t offset_low;
@@ -71,10 +72,23 @@ static void pic_remap(void) {
     outb(0xA1, 0x01);
 
     /*
-     * Unmask IRQ0 timer and IRQ1 keyboard only.
+     * Unmask IRQ0 timer and IRQ1 keyboard.
      */
-    outb(0x21, 0xFC);
-    outb(0xA1, 0xFF);
+    uint8_t master_mask = 0xFC; /* 1111 1100 -> IRQ0, IRQ1 unmasked */
+    uint8_t slave_mask = 0xFF;
+
+    const AcpiInfo *acpi = acpi_info();
+    if (acpi && acpi->sci_irq > 0) {
+        if (acpi->sci_irq < 8) {
+            master_mask &= (uint8_t)~(1 << acpi->sci_irq);
+        } else if (acpi->sci_irq < 16) {
+            slave_mask &= (uint8_t)~(1 << (acpi->sci_irq - 8));
+            master_mask &= (uint8_t)~(1 << 2); /* Unmask cascade IRQ2 */
+        }
+    }
+
+    outb(0x21, master_mask);
+    outb(0xA1, slave_mask);
 
     (void)a1;
     (void)a2;
@@ -82,6 +96,44 @@ static void pic_remap(void) {
 
 void irq0_handler_c(void);
 void irq1_handler_c(void);
+void sci_handler_c(void);
+
+__attribute__((naked)) void sci_stub(void) {
+    __asm__ volatile (
+        "pushq %rax\n"
+        "pushq %rbx\n"
+        "pushq %rcx\n"
+        "pushq %rdx\n"
+        "pushq %rsi\n"
+        "pushq %rdi\n"
+        "pushq %rbp\n"
+        "pushq %r8\n"
+        "pushq %r9\n"
+        "pushq %r10\n"
+        "pushq %r11\n"
+        "pushq %r12\n"
+        "pushq %r13\n"
+        "pushq %r14\n"
+        "pushq %r15\n"
+        "call sci_handler_c\n"
+        "popq %r15\n"
+        "popq %r14\n"
+        "popq %r13\n"
+        "popq %r12\n"
+        "popq %r11\n"
+        "popq %r10\n"
+        "popq %r9\n"
+        "popq %r8\n"
+        "popq %rbp\n"
+        "popq %rdi\n"
+        "popq %rsi\n"
+        "popq %rdx\n"
+        "popq %rcx\n"
+        "popq %rbx\n"
+        "popq %rax\n"
+        "iretq\n"
+    );
+}
 
 __attribute__((naked)) void irq0_stub(void) {
     __asm__ volatile (
@@ -171,6 +223,12 @@ void irq1_handler_c(void) {
     pic_send_eoi(1);
 }
 
+void sci_handler_c(void) {
+    const AcpiInfo *acpi = acpi_info();
+    acpi_sci_handler();
+    if (acpi) pic_send_eoi((uint8_t)acpi->sci_irq);
+}
+
 void idt_init(void) {
     irq_disable();
 
@@ -180,6 +238,11 @@ void idt_init(void) {
 
     idt_set_gate(32, irq0_stub);
     idt_set_gate(33, irq1_stub);
+
+    const AcpiInfo *acpi = acpi_info();
+    if (acpi && acpi->sci_irq > 0 && acpi->sci_irq < 16) {
+        idt_set_gate((uint8_t)(32 + acpi->sci_irq), sci_stub);
+    }
 
     IdtPtr ptr;
     ptr.limit = sizeof(idt) - 1;

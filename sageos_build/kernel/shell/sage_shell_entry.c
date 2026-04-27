@@ -615,10 +615,10 @@ static MetalValue n_acpi_battery(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; acpi_cmd_battery(); return mv_nil();
 }
 static MetalValue n_shutdown(MetalVM *vm, MetalValue *a, int c) {
-    (void)vm;(void)a;(void)c; power_shutdown_stub(); return mv_nil();
+    (void)vm;(void)a;(void)c; power_shutdown(); return mv_nil();
 }
 static MetalValue n_suspend(MetalVM *vm, MetalValue *a, int c) {
-    (void)vm;(void)a;(void)c; power_suspend_stub(); return mv_nil();
+    (void)vm;(void)a;(void)c; power_suspend(); return mv_nil();
 }
 static MetalValue n_halt(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; power_halt(); return mv_nil();

@@ -280,8 +280,24 @@ static void draw_cell(uint32_t cx, uint32_t cy, char ch) {
         g_screen_fg[cy][cx] = fg;
     }
     draw_cell_fast(cx, cy, ch, fg);
-    /* Immediate flip for responsiveness */
-    console_flip(cy * char_h, (cy + 1) * char_h);
+    
+    /* 
+     * Targetted flip for responsiveness: only copy the affected character cell
+     * from back buffer to physical framebuffer. This is much faster than
+     * flipping full-width scanlines on hardware.
+     */
+    if (g_have_fb && g_info && g_back_buffer) {
+        uint32_t px = cx * char_w;
+        uint32_t py = cy * char_h;
+        uint32_t pitch = g_info->pixels_per_scanline;
+        volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
+
+        for (uint32_t y = py; y < py + char_h && y < g_info->height; y++) {
+            sage_memcpy((void*)(fb + (uint64_t)y * pitch + px), 
+                        &g_back_buffer[y * FB_MAX_WIDTH + px], 
+                        char_w * 4);
+        }
+    }
 }
 
 static void scroll(void) {

@@ -6,7 +6,7 @@ void power_qemu_exit(void);
 
 void power_reboot(void);
 void power_halt(void);
-void power_shutdown_stub(void);
-void power_suspend_stub(void);
+void power_shutdown(void);
+void power_suspend(void);
 
 #endif /* POWER_H */

@@ -335,12 +335,9 @@ void console_clear(void) {
         uint32_t status_height = status_rows * char_h;
         uint32_t bg_packed = pack_rgb(bg);
         
-        /* Clear back buffer from below status bar */
-        for (uint32_t y = status_height; y < FB_MAX_HEIGHT; y++) {
-            for (uint32_t x = 0; x < FB_MAX_WIDTH; x++) {
-                g_back_buffer[y * FB_MAX_WIDTH + x] = bg_packed;
-            }
-        }
+        /* Clear back buffer from below status bar using memset32 */
+        size_t clear_pixels = (FB_MAX_HEIGHT - status_height) * FB_MAX_WIDTH;
+        my_memset32(&g_back_buffer[status_height * FB_MAX_WIDTH], bg_packed, clear_pixels);
         
         /* Initial flip */
         console_flip(status_height, g_info->height);

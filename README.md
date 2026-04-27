@@ -2,19 +2,24 @@
 
 SageOS is a small x86_64 UEFI operating system bring-up project targeting the **Lenovo 300e Chromebook 2nd Gen AST**.
 
-The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console, runs a kernel-resident shell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
+The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console with graphics acceleration, runs a kernel-resident SageShell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
 Recent updates:
-- **SageShell & MetalVM**: The kernel shell has been fully ported to SageLang. It runs on the **MetalVM** bytecode interpreter, which now features a 32-level call stack, per-function constant pools, and a custom binary loading format (**SGVM**) for efficient execution.
-- **Unified Command Dispatch**: SageShell now owns prompt, history, and line editing while delegating command execution to the kernel C dispatcher. Command names, help text, file operations, power commands, and diagnostics now have one source of truth.
-- **Unified VFS & Shell Integration**: The shell communicates directly with the kernel's C-based VFS layer. Support for recursive directory removal (`rm -rf`), persistent directory creation (`mkdir`), and file creation (`touch`) is fully implemented.
-- **Recursive Directory Removal**: Added `vfs_rm_rf` to the kernel VFS, allowing recursive deletion of non-empty directory trees from the shell.
-- **Improved Power Management**: The `exit`, `shutdown`, `poweroff`, `halt`, `reboot`, and `suspend` commands are now fully wired from the SageShell to the kernel's power management backend.
-- **SGVM Binary Format**: Replaced raw text bytecode with a packed binary format that includes function metadata, constant pools, and remapped branch offsets, enabling complex multi-file SageLang applications to run on bare metal.
-- **Battery & EC**: Stabilized CrOS EC identity checks and `BATT_FLAG` validation. The status bar now provides real-time battery percentage with proper fallback handling.
-- **Line Editing**: Fish-style command suggestions, right-arrow acceptance, Tab completion, history navigation, prompt anchoring, and Ctrl-A/E/K/L/U/C handling are implemented through a normalized key path shared by QEMU serial, UEFI ConIn, and native i8042.
-- **btop / nano / scripts**: `btop` now redraws in place on framebuffer and serial/QEMU, `nano <path>` provides a small text editor, and `sh <path>` / `source <path>` run shell scripts from VFS files.
-- **Keyboard & Input**: Unified UEFI, serial, and native i8042 scancode mapping for consistent arrow key, Ctrl-combo, and special-key handling.
+- **Phase 4: Graphics Acceleration & SageLang Scripting** ✓:
+  - **Double Buffering**: 8MB back buffer allocated by UEFI bootloader for flicker-free rendering
+  - **Fast Scrolling**: Optimized `memmove` on back buffer followed by targeted `console_flip` updates
+  - **Instant Clears**: `memset32` bulk operations for rapid buffer clearing
+  - **SageLang Script Execution**: `sage run <path>` command executes `.sgvm` bytecode or `.sage` source files from VFS
+  - **Efficient Display Updates**: `console_flip(y_start, y_end)` copies dirty regions only
+  - **Performance Boost**: Scrolling is now instantaneous and flicker-free on both QEMU and hardware
+- **SageShell & MetalVM**: The kernel shell has been fully ported to SageLang. It runs on the **MetalVM** bytecode interpreter, which features a 32-level call stack, per-function constant pools, and a custom binary loading format (**SGVM**) for efficient execution.
+- **Unified Command Dispatch**: SageShell owns prompt, history, and line editing while delegating command execution to the kernel C dispatcher for centralized control.
+- **Unified VFS & Shell Integration**: Shell communicates directly with the kernel's C-based VFS layer with support for recursive directory removal (`rm -rf`), directory creation (`mkdir`), and file operations.
+- **SGVM Binary Format**: Packed binary format with function metadata, constant pools, and remapped branch offsets enabling complex multi-file SageLang applications on bare metal.
+- **Battery & EC**: Stabilized CrOS EC identity checks and `BATT_FLAG` validation with real-time battery percentage display.
+- **Line Editing**: Fish-style suggestions, Tab completion, history navigation (16-entry ring buffer), and full Ctrl-combo support (Ctrl-A/E/K/L/U/C).
+- **Rich Shell Features**: `btop` resource monitor, `nano` text editor, shell script execution via `sh <path>` / `source <path>`, persistent shell history.
+- **Keyboard & Input**: Unified UEFI ConIn, serial, and native i8042 scancode mapping with consistent special-key handling.
 
 ## Current Version
 
@@ -41,25 +46,31 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | PE/COFF BOOTX64.EFI | Working |
 | Kernel loading | Working |
 | GOP framebuffer console | Working |
-| Kernel shell | Working — **SageShell** (SageLang-based) is now the default REPL |
-| Shell line editing | Working — fish-style suggestions, Tab completion, cursor movement, history, and Ctrl combos in SageShell |
+| **Graphics Acceleration** (Phase 4) | **Working** — Double buffering, fast scrolling, instant clears |
+| Framebuffer back buffer | Working — 8MB allocated by UEFI loader, used for all rendering |
+| console_flip (dirty region sync) | Working — Copies specified scanline ranges to hardware framebuffer |
+| Kernel shell | Working — **SageShell** (SageLang-based) is the default REPL |
+| Shell line editing | Working — fish-style suggestions, Tab completion, cursor movement, history, and Ctrl combos |
+| Shell scripting | Working — `sh <path>` / `source <path>` run line-oriented shell scripts from VFS |
+| **SageLang Script Execution** (Phase 4) | **Working** — `sage run <path>` executes .sgvm bytecode or .sage source files |
 | Unified build/flash tool | Working |
 | Modular kernel tree | Working |
 | IDT installation | Working |
 | PIT timer (IRQ0) | Working |
 | CPU% accounting | Working — real-time 1 s sliding window |
-| Status bar | Working — persistent top-bar, non-blocking refresh, preserved during scroll |
-| Keyboard | Working — UEFI ConIn, serial/QEMU, and native i8042; arrow/special keys unified across input paths |
-| RAM status | Working — real-time used RAM tracking; may read high while firmware boot services are active |
+| Status bar | Working — persistent top-bar with battery/CPU/RAM metrics, non-blocking refresh |
+| Keyboard | Working — UEFI ConIn, serial/QEMU, and native i8042; arrow/special keys unified |
+| RAM status | Working — real-time used RAM tracking; may read high with active firmware boot services |
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
 | ACPI | Working — minimal AML parser, Battery (_BST) & Lid detection |
-| Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate; `--` shown when EC or data not confirmed |
-| VFS / FAT32 | Working — Unified VFS layer, dynamic RamFS backend (writable), and read-only FAT32 boot partition mount |
+| Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate |
+| VFS / FAT32 | Working — Unified VFS layer, dynamic RamFS backend (writable), read-only FAT32 boot partition |
 | Text editor | Working — `nano <path>` edits small text files in RamFS |
-| Shell scripting | Initial support — `sh <path>` / `source <path>` run line-oriented shell scripts |
+| Resource monitor | Working — `btop` provides real-time CPU, memory, and system metrics |
 | SageLang Backend | Working — bare-metal stabilized, runtime-free modules |
 | ELF Execution | Working — segment mapping, BSS, entry jump |
-| SageLang Toolchain | Working — compiler/runtime hooks |
+| MetalVM Bytecode | Working — 32-level call stack, per-function constant pools, SGVM binary format |
+| SageLang Toolchain | Working — compiler/runtime hooks, bytecode emission
 
 ## Important Design Note
 
@@ -145,36 +156,62 @@ Use `lenovo_300e.sh` for all normal operations.
 > - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
 > - Shell line editing, Ctrl combinations, `btop`, and full-screen `nano` are mirrored with ANSI sequences so they behave correctly in QEMU serial output.
 
-## Shell Features
+## Graphics Performance
 
-SageShell is the default REPL. Its command execution is centralized in the C kernel dispatcher while the interactive line editor stays in Sage.
+### Phase 4: Graphics Acceleration (v0.1.2+)
 
-Supported line editing:
+**Double Buffering**: A 8MB back buffer is allocated by the UEFI loader and used for all rendering operations. This eliminates flicker during screen updates and enables efficient partial updates.
+
+**Fast Scrolling**: Console scrolling now uses optimized `memmove` operations on the back buffer followed by targeted `console_flip` updates, making scrolling instantaneous even on hardware.
+
+**Efficient Clears**: The `console_clear` operation uses `memset32` for rapid bulk buffer operations instead of cell-by-cell writes.
+
+**Dirty Region Updates**: The `console_flip(y_start, y_end)` function copies only the specified scanline range from the back buffer to the hardware framebuffer, minimizing memory traffic.
+
+**Shadow Buffer**: A shadow character/color buffer tracks console content for status bar rendering and efficient selective updates.
+
+**Result**: Smooth, flicker-free console interaction on both QEMU and real hardware with no perceptible lag.
+
+## SageShell Features
+
+SageShell is the default interactive REPL. Its command execution is centralized in the C kernel dispatcher while the interactive line editor runs in SageLang for maintainability.
+
+### Line Editing
 
 ```text
-Up/Down      history navigation
-Left/Right   cursor movement; Right accepts a fish-style suggestion at end of line
-Home/End     jump to start/end
-Tab          complete the current command or list matches
-Ctrl-A/E     jump to start/end
-Ctrl-K       delete to end of line
-Ctrl-L       clear screen and redraw prompt
-Ctrl-U       clear the current line
-Ctrl-C       cancel the current line
+Up/Down          history navigation (16-entry ring buffer, newest first)
+Left/Right       cursor movement; Right accepts fish-style suggestion at line end
+Home/End         jump to start/end of line
+Tab              autocomplete commands; show candidates on multiple matches
+Backspace        delete character before cursor
+Delete           delete character at cursor
+Ctrl-A / Ctrl-E  jump to start/end of line
+Ctrl-K           delete to end of line
+Ctrl-L           clear screen and redraw prompt
+Ctrl-U           clear entire line
+Ctrl-C           cancel current line and return to prompt
 ```
 
-Useful shell commands:
+History stores up to 16 entries in a ring buffer. Duplicate consecutive commands are suppressed.
+
+### Shell Scripts
+
+Shell scripts are plain text files with one command per line:
 
 ```text
-btop              in-place resource monitor; press q to exit
-nano <path>       edit a small text file; ^S saves and ^X exits
-sh <path>         run a line-oriented shell script
-source <path>     alias for sh <path>
-write <path> <s>  write text to a file
-cat <path>        print a file
+# Comments start with #
+# Empty lines are skipped
+
+ls /
+cat /note.txt
+echo "Script finished"
 ```
 
-Shell scripts are plain text files. Empty lines and lines starting with `#` are skipped. Each remaining line is sent through the same command dispatcher as interactive input, so scripts can mix file commands, diagnostics, and `sage <code>` statements.
+Each line is sent through the same command dispatcher as interactive input, so scripts can mix file commands, diagnostics, and `sage` statements.
+
+Execute with: `sh <path>` or `source <path>`
+
+### SageLang Integration
 
 ### Flash to USB
 
@@ -322,6 +359,7 @@ Current fields include:
 magic
 framebuffer_base
 framebuffer_size
+backbuffer_address         (Phase 4: 8MB buffer for double-buffered rendering)
 width
 height
 pixels_per_scanline
@@ -345,46 +383,90 @@ kernel_size
 
 ## Shell Commands
 
+The SageShell provides a rich set of commands for system diagnostics, file operations, and scripting:
+
+### System Information & Diagnostics
 ```text
-help
-clear
-neofetch
-btop
-version
-uname
-about
-fb
-input
-keydebug
-status
-timer
-smp
-smp start
-acpi
-acpi tables
-acpi fadt
-acpi madt
-acpi lid
-acpi battery
-battery
-ls
-mkdir <path>
-touch <path>
-rm [-rf] <path>
-stat <path>
-cat <path>
-execelf <path>
-sage <module>
-sageshell
-echo <text>
-color <white|green|amber|blue|red>
-dmesg
-shutdown
-poweroff
-suspend
-halt
-reboot
-exit
+help              show available commands and usage
+version           print SageOS kernel version
+uname             print system information (name, version, architecture)
+about             print project summary
+neofetch          display system information and branding
+sysinfo           detailed system information and metrics
+fb                framebuffer configuration details
+input             display current input backend (UEFI ConIn, serial, or i8042)
+status            show real-time status bar: battery, CPU%, RAM%
+timer             display timer and idle accounting information
+```
+
+### Resource Monitoring
+```text
+btop              interactive resource monitor (press q to exit)
+```
+
+### Filesystem Operations
+```text
+ls [path]         list directory contents; defaults to /
+cat <path>        print file contents
+mkdir <path>      create a directory
+touch <path>      create an empty file
+rm [-rf] <path>   delete file or directory; -r for recursive, -f for force
+stat <path>       show file type and size information
+write <path> <s>  write text string to file
+```
+
+### Text Editing & Scripts
+```text
+nano <path>       edit small text files (^S to save, ^X to exit)
+sh <path>         execute a shell script from file
+source <path>     alias for sh <path>
+```
+
+### SageLang Execution
+```text
+sage <module>     execute inline SageLang code (requires sageshell)
+sage run <path>   execute compiled .sgvm bytecode or .sage source file from VFS
+sageshell         enter the full SageLang REPL interactive shell
+```
+
+### Hardware & Platform Diagnostics
+```text
+smp               show SMP status and CPU discovery
+smp start         start additional CPUs (AP startup)
+battery           show battery status and percentage (CrOS EC probing)
+acpi              show ACPI summary
+acpi tables       list detected ACPI tables (RSDP, XSDT, FADT, DSDT, MADT)
+acpi fadt         show FADT (Fixed ACPI Description Table) details
+acpi madt         show MADT (Multiple APIC Description Table) and CPU list
+acpi lid          show Lid status
+acpi battery      show ACPI battery object information
+pci               enumerate PCI devices
+sdhci             show SD/SDHCI controller information
+keydebug          enter raw scancode inspection mode (press ESC to exit)
+```
+
+### Text & Display
+```text
+echo <text>       print text
+color <name>      set terminal foreground color
+dmesg             show kernel diagnostic messages
+clear             clear the screen
+```
+
+### Power Management
+```text
+shutdown          initiate ACPI shutdown (S5)
+poweroff          alias for shutdown
+suspend           attempt ACPI suspend (S3)
+halt              halt the CPU
+reboot            reboot via i8042 or ACPI
+exit / q          exit the shell (QEMU only)
+```
+
+### File Execution
+```text
+execelf <path>    load and execute an ELF binary from RamFS
+install           show installation/development information
 ```
 
 ### SageShell Line Editing
@@ -396,75 +478,40 @@ exit
 | `Home` / `End` | Jump to start / end of line |
 | `Tab` | Autocomplete — dim grey hint on unique match; candidate list + LCP fill on multiple matches |
 | `Backspace` / `Delete` | Delete character before / at cursor |
-| `Ctrl-A` / `Ctrl-E` | Jump to beginning / end of line |
-| `Ctrl-U` | Clear entire line |
-| `Ctrl-C` | Cancel current line |
-
 History stores up to 16 entries in a ring buffer. Duplicate consecutive commands are suppressed.
 
-## Diagnostic Commands
+## Implementation Details & Diagnostics
 
-### Status Bar / Metrics
+### Status Bar & Metrics
 
-```text
-status
-timer
-```
+The top-right status bar displays: `BAT --%  CPU NN%  RAM NN%`
 
-The top-right status bar shows:
+Implementation features:
+- **Dirty-cell shadow buffer**: Only changed cells are redrawn
+- **Non-blocking refresh**: Runs at 10 Hz from keyboard idle path without interrupt-context framebuffer access
+- **CPU% calculation**: 100-tick sliding window (1-second average at 100 Hz) via IRQ0 idle accounting
+- **Battery display**: Real-time CrOS EC battery percentage or `--` if EC not confirmed
 
-```text
-BAT --%  CPU NN%  RAM NN%
-```
+### Battery & EC Probing
 
-The status bar uses a dirty-cell shadow buffer — only cells that change are redrawn. It refreshes at 10 Hz from the keyboard idle path without touching the framebuffer from interrupt context.
+The `battery` command probes CrOS EC via LPC memory-mapped region at candidate bases `0x900`, `0x880`, and `0x800`:
 
-CPU% is computed from IRQ0-driven idle accounting using a 100-tick sliding window (1-second average at 100 Hz).
+1. Confirms EC identity: Two-byte signature (`'E','C'`) at offset `0x20` (EC_MEMMAP_ID)
+2. Validates data with `BATT_FLAG` bit checks: `BATT_PRESENT`, `INVALID_DATA`
+3. Reads raw registers: `BATT_CAP` and `BATT_CAP_FULL` to compute percentage
 
-### Battery
-
-```text
-battery
-```
-
-The `battery` command probes the CrOS EC LPC memory-mapped region at candidate bases `0x900`, `0x880`, and `0x800`. It confirms the two-byte EC identity (`'E','C'` at `EC_MEMMAP_ID` offset `0x20`), checks `BATT_FLAG` for `BATT_PRESENT` and `INVALID_DATA` bits, then reads the raw `BATT_CAP` and `BATT_CAP_FULL` registers to compute percentage.
-
-Sample output on hardware with a confirmed EC:
-
+Sample output (hardware with confirmed EC):
 ```text
 EC ID bytes: 'E','C' confirmed
 BATT_FLAG: 0xNN  [PRESENT] [VALID] [DISCHARGING]
 percentage: 73%
 ```
 
-If the EC is not found at any candidate base, `battery` prints `ID not confirmed` and the status bar shows `--`.
+If EC is not found at any candidate base, output shows `ID not confirmed` and the status bar displays `--`.
 
-### SMP / CPU Discovery
+### SMP & CPU Discovery
 
-```text
-smp
-```
-
-Current Lenovo output shows two discovered CPUs through ACPI MADT:
-
-```text
-discovered CPUs: 2
-AP startup: INIT/SIPI sequence enabled
-per-CPU stacks: allocated
-```
-
-### ACPI
-
-```text
-acpi
-acpi tables
-acpi fadt
-acpi madt
-acpi battery
-acpi lid
-```
-
-The Lenovo 300e has working ACPI discovery with:
+The `smp` command shows:
 
 ```text
 RSDP detected
@@ -505,25 +552,29 @@ Battery:    ACPI battery hints present
 EC:         Chromebook/ACPI EC hints present
 ```
 
-## Current Limitations
+## Current Limitations & Known Issues
 
-### Battery Percentage
+### Graphics Acceleration
+- ✓ **COMPLETED (Phase 4)**: Double buffering, fast scrolling, and efficient clears
+- Status bar now uses optimized dirty-cell rendering with no framebuffer interference from interrupts
 
-The CrOS EC LPC identity check and `BATT_FLAG` validity gate are implemented. Whether the EC base address is `0x900`, `0x880`, or `0x800` on a given 300e firmware build depends on the BIOS variant. If `battery` prints `ID not confirmed` on hardware, the next step is to verify the EC base via `keydebug` or a targeted port scan.
+### SageLang Script Execution
+- ✓ **COMPLETED (Phase 4)**: `sage run <path>` executes .sgvm bytecode and .sage source files
+- Scripts can be embedded in RamFS, stored on FAT32, or embedded as binary artifacts
 
-If the EC is confirmed but data still reads invalid, the fallback path is:
+### Battery & EC
+The CrOS EC LPC identity check and `BATT_FLAG` validity gate are implemented. EC base address (`0x900`, `0x880`, or `0x800`) depends on BIOS variant. 
 
-```text
-Option A: AML interpreter for _BST / _BIF / _BIX
-Option B: CrOS EC host command 0x10 (EC_CMD_CHARGE_STATE) via LPC host command port
-```
+If `battery` prints `ID not confirmed` on hardware:
+- Verify EC base via `keydebug` mode or targeted port scan
+- Or implement fallback paths:
+  - Option A: AML interpreter for `_BST` / `_BIF` / `_BIX` ACPI methods
+  - Option B: CrOS EC host command `0x10` (EC_CMD_CHARGE_STATE) via LPC host command port
 
 ### Suspend / Lid Close Wake
+The `suspend` command attempts ACPI S3. S3 sleep package is parsed and PM1a_CNT write is issued, but automatic lid-close/lid-open behavior is not implemented.
 
-The `suspend` command attempts ACPI S3. The S3 sleep package is parsed and the PM1a_CNT write is issued, but automatic lid-close/lid-open behavior is not implemented.
-
-Next required work:
-
+To complete:
 ```text
 ACPI SCI routing
 GPE status/enable registers
@@ -534,90 +585,155 @@ resume path cleanup
 ```
 
 ### Filesystem
+A read-only FAT32 root filesystem is mounted from the EFI System Partition and accessible alongside the built-in RamFS.
 
-A read-only FAT32 root filesystem is mounted from the EFI System Partition and accessible from the shell alongside the built-in RAMFS.
-
-Next required work:
-
+To expand:
 ```text
 initrd support
-VFS expansion
-file-backed shell commands
+VFS extension to additional mount points
+file-backed shell commands and modules
 ```
 
 ## Roadmap
 
-### v0.1.2 — Battery Confirmation
+### v0.1.2 — **CURRENT** (Graphics Acceleration & SageLang Scripting)
 
+✓ Phase 4 complete:
 ```text
-- Verify EC base address on all 300e firmware variants
-- Confirm BATT_CAP / BATT_CAP_FULL register reads against hardware
-- Fall back to CrOS EC host command path if ECMAP not confirmed
-- Live battery percentage in status bar
+✓ Double buffering with 8MB back buffer
+✓ Fast scrolling via memmove + console_flip
+✓ Instant clears with memset32 optimization
+✓ sage run <path> for bytecode/source execution
+✓ Optimized status bar rendering
+✓ Production-ready graphics performance
 ```
 
 ### v0.1.3 — Lid Suspend/Wake
 
 ```text
-- ACPI SCI routing
-- GPE status/enable registers
-- lid device detection
-- lid close suspend trigger
-- lid open wake/resume handling
+- ACPI SCI routing and GPE management
+- LID device detection and _LID method evaluation
+- Lid close suspend trigger and auto wake
+- EC event handling for Chromebook integration
+- Resume path cleanup and validation
 ```
 
 ### v0.1.4 — Persistent Storage Expansion
 
 ```text
-- initrd support
-- VFS expansion
-- file-backed shell commands
+- initrd support for loaded modules
+- VFS expansion to additional partitions
+- File-backed shell commands
+- Modular filesystem driver framework
 ```
 
-### v0.1.5 — Sage Evolution (Current)
+### v0.1.5 — SageLang Evolution (In Progress)
 
-- [x] Port core shell logic to SageLang
-- [x] Implement MetalVM bytecode interpreter in the kernel
-- [x] Custom binary artifact format (SGVM) with function metadata
-- [x] Call stack support for non-native Sage functions
-- [/] Stabilize MetalVM heap and constant pool switching
-- [ ] Migrate RamFS and VFS logic to SageLang modules
-- [ ] Implement SageLang-based driver framework for non-critical peripherals
+```text
+✓ Port core shell logic to SageLang
+✓ Implement MetalVM bytecode interpreter in the kernel
+✓ Custom binary artifact format (SGVM) with function metadata
+✓ Call stack support for non-native Sage functions
+- Stabilize MetalVM heap and constant pool management
+- Migrate RamFS and VFS logic to SageLang modules
+- Implement SageLang-based driver framework
+```
 
-### v0.1.6 — AOT & Performance
+### v0.1.6 — Performance & AOT Optimization
 
-- [ ] Optimize MetalVM execution (JIT-lite or threaded interpretation)
-- [ ] Restore Sage AOT path for performance-critical kernel paths
-- [ ] Dynamic linking of SageLang bytecode "executables" from FAT32
-- [ ] Sage-native ACPI AML parser extension
+```text
+- Optimize MetalVM execution (JIT-lite or threaded interpretation)
+- Restore Sage AOT path for performance-critical kernel paths
+- Dynamic linking of SageLang bytecode "executables" from FAT32
+- Sage-native ACPI AML parser extension
+```
+
+### Later — System Expansion
+
+```text
+- Userspace task execution with protected memory
+- IPC and synchronization primitives
+- Dynamic module loading and unloading
+- Advanced power management and thermal control
+- Multi-filesystem support and advanced VFS features
+```
 
 ## Development Rules
 
 1. Keep `lenovo_300e.sh` as the only normal build/flash entry point.
-2. Keep old monolithic kernel backups out of the active compile path.
+2. Keep old phase backups in `sageos_build/backups/` only; never in active compile path.
 3. Add new kernel features as modules under `sageos_build/kernel/`.
-4. Do not reintroduce the Sage AOT kernel path until backend support is ready.
-5. Validate in QEMU before flashing.
+4. Do not reintroduce the Sage AOT kernel path until backend support is stable.
+5. Validate in QEMU before flashing to hardware.
 6. Validate on the Lenovo 300e after every hardware-facing change.
+7. Graphics operations use the back buffer; performance tests should verify `console_flip` behavior.
+8. All shell commands must be registered in the kernel C dispatcher for consistency.
 
 ## Quick Start
 
+### Build and test in QEMU:
 ```bash
 ./lenovo_300e.sh build
 ./lenovo_300e.sh qemu
-./lenovo_300e.sh flash /dev/sdb
 ```
 
-After booting on hardware:
+### Flash to USB and boot on hardware:
+```bash
+./lenovo_300e.sh flash /dev/sdbX  # Replace sdbX with your USB device
+```
 
+### Initial hardware diagnostics:
 ```text
-status
-timer
+# Graphics & Performance
+clear              # Verify flicker-free clearing
+btop               # Check performance (CPU, RAM)
+
+# Platform Discovery
+sysinfo
 smp
-acpi
+acpi tables
 acpi fadt
 acpi madt
 battery
+status
+
+# Filesystem
+ls /
+cat /note.txt
+
+# Input
+input
 keydebug
-shutdown
+```
+
+### Test SageLang scripting:
+```bash
+# In the shell, compile a test script on the host and copy to RamFS, then:
+sage run /script.sgvm    # Run compiled bytecode
+sage run /script.sage    # Run source (interpreted)
+```
+
+### Test shell scripting:
+```bash
+# Create a test script:
+write /test.sh "echo test
+ls /
+status"
+
+# Run it:
+sh /test.sh
+```
+
+## Performance Validation
+
+### Graphics Acceleration (Phase 4)
+- **Scrolling**: Should be instantaneous; no lag or flicker
+- **Status bar**: Updates smoothly at 10 Hz without affecting other operations
+- **Clear performance**: `clear` command should execute in < 100ms
+
+### QEMU Notes
+```text
+- Battery reads "--" because QEMU has no real ACPI battery
+- CPU% may read "0%" at idle (expected for a truly idle VM)
+- Shell line editing, btop, and nano work with ANSI sequences in serial
 ```

@@ -10,6 +10,8 @@
 #include "keyboard.h"
 #include "shell.h"
 #include "serial.h"
+#include "scheduler.h"
+#include "smp.h"
 #include "vfs.h"
 #include "sage_libc_shim.h"
 
@@ -133,73 +135,153 @@ void cmd_install(void) {
 /* Neofetch                                                           */
 /* ------------------------------------------------------------------ */
 
+static void console_spaces(uint32_t count) {
+    while (count--) console_putc(' ');
+}
+
+static void print_uptime_compact(void) {
+    uint64_t secs = timer_seconds();
+    uint32_t days = (uint32_t)(secs / 86400);
+    uint32_t hours = (uint32_t)((secs / 3600) % 24);
+    uint32_t mins = (uint32_t)((secs / 60) % 60);
+    uint32_t rem = (uint32_t)(secs % 60);
+
+    if (days) { console_u32(days); console_write("d "); }
+    if (hours || days) { console_u32(hours); console_write("h "); }
+    if (mins || hours || days) { console_u32(mins); console_write("m "); }
+    console_u32(rem);
+    console_write("s");
+}
+
+static void serial_uptime_compact(void) {
+    uint64_t secs = timer_seconds();
+    uint32_t days = (uint32_t)(secs / 86400);
+    uint32_t hours = (uint32_t)((secs / 3600) % 24);
+    uint32_t mins = (uint32_t)((secs / 60) % 60);
+    uint32_t rem = (uint32_t)(secs % 60);
+
+    if (days) { serial_u32(days); serial_raw("d "); }
+    if (hours || days) { serial_u32(hours); serial_raw("h "); }
+    if (mins || hours || days) { serial_u32(mins); serial_raw("m "); }
+    serial_u32(rem);
+    serial_raw("s");
+}
+
+static void neofetch_label(const char *label) {
+    console_set_fg(0x79FFB0);
+    console_write(label);
+    console_set_fg(0xE8E8E8);
+}
+
+static void neofetch_colors(void) {
+    uint32_t old = console_get_fg();
+    const uint32_t colors[] = {
+        0x79FFB0, 0x80C8FF, 0xFFBF40, 0xFF7070, 0xDDA0FF, 0xE8E8E8
+    };
+
+    for (size_t i = 0; i < sizeof(colors) / sizeof(colors[0]); i++) {
+        console_set_fg(colors[i]);
+        console_write("###");
+        console_set_fg(0xE8E8E8);
+        console_putc(' ');
+    }
+    console_set_fg(old);
+}
+
 void cmd_neofetch(void) {
     uint32_t old_fg = console_get_fg();
     SageOSBootInfo *b = console_boot_info();
-    
+
     const char *logo[] = {
-        "       _       ",
-        "     _/ \\_     ",
-        "    /     \\    ",
-        "   |  (S)  |   ",
-        "    \\_   _/    ",
-        "      \\ /      ",
-        "       |       ",
-        "               "
+        "      .::::.      ",
+        "   .:++++++++:.   ",
+        "  :+++:.  .:+++:  ",
+        " /++:   SG   :++\\ ",
+        "|++:  SageOS  :++|",
+        " \\++:.      .:++/ ",
+        "  `:++++++++++:`  ",
+        "     `-::::-`     ",
+        "                  ",
+        "                  ",
+        "                  ",
+        "                  "
     };
 
     console_write("\n");
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 12; i++) {
         console_set_fg(0x79FFB0);
         console_write(logo[i]);
         console_write("  ");
         console_set_fg(0xE8E8E8);
 
         switch (i) {
-            case 0: 
-                console_set_fg(0x80C8FF); console_write("root");
+            case 0:
+                console_set_fg(0x80C8FF);
+                console_write("root");
                 console_set_fg(0xE8E8E8); console_write("@");
                 console_set_fg(0x80C8FF); console_write("sageos");
                 break;
             case 1:
-                console_write("-------------");
+                console_write("-----------");
                 break;
             case 2:
-                console_set_fg(0x79FFB0); console_write("OS: "); 
-                console_set_fg(0xE8E8E8); console_write("SageOS");
+                neofetch_label("OS:       ");
+                console_write("SageOS " SAGEOS_VERSION " x86_64");
                 break;
             case 3:
-                console_set_fg(0x79FFB0); console_write("Kernel: "); 
-                console_set_fg(0xE8E8E8); console_write("SageOS v" SAGEOS_VERSION);
+                neofetch_label("Host:     ");
+                console_write("Lenovo 300e target");
                 break;
             case 4:
-                console_set_fg(0x79FFB0); console_write("Uptime: ");
-                console_set_fg(0xE8E8E8);
-                uint64_t secs = timer_seconds();
-                if (secs / 3600) { console_u32((uint32_t)(secs / 3600)); console_write("h "); }
-                if ((secs / 60) % 60) { console_u32((uint32_t)((secs / 60) % 60)); console_write("m "); }
-                console_u32((uint32_t)(secs % 60)); console_write("s");
+                neofetch_label("Kernel:   ");
+                console_write("SageOS modular kernel");
                 break;
             case 5:
-                console_set_fg(0x79FFB0); console_write("Shell: "); 
-                console_set_fg(0xE8E8E8); console_write("sage-sh");
+                neofetch_label("Uptime:   ");
+                print_uptime_compact();
                 break;
             case 6:
-                if (b) {
-                    console_set_fg(0x79FFB0); console_write("Res: "); 
-                    console_set_fg(0xE8E8E8); console_u32(b->width); console_write("x"); console_u32(b->height);
-                }
+                neofetch_label("Packages: ");
+                console_write("builtins (kernel shell)");
                 break;
             case 7:
-                console_set_fg(0x79FFB0); console_write("Mem: ");
-                console_set_fg(0xE8E8E8);
+                neofetch_label("Shell:    ");
+                console_write("sage-sh");
+                break;
+            case 8:
+                neofetch_label("Terminal: ");
+                console_write(console_has_fb() ? "framebuffer + serial" : "serial");
+                break;
+            case 9:
+                neofetch_label("CPU:      ");
+                console_write("x86_64, ");
+                console_u32(smp_cpu_count());
+                console_write(" logical CPU(s)");
+                break;
+            case 10:
+                neofetch_label("Memory:   ");
                 print_mb(ram_used_bytes());
                 console_write(" / ");
                 print_mb(ram_total_bytes());
                 break;
+            case 11:
+                neofetch_label("Colors:   ");
+                neofetch_colors();
+                break;
         }
         console_write("\n");
     }
+
+    if (b) {
+        console_set_fg(0x79FFB0);
+        console_write("                    Resolution: ");
+        console_set_fg(0xE8E8E8);
+        console_u32(b->width);
+        console_write("x");
+        console_u32(b->height);
+        console_write("\n");
+    }
+
     console_set_fg(old_fg);
 }
 
@@ -207,127 +289,307 @@ void cmd_neofetch(void) {
 /* BTOP                                                               */
 /* ------------------------------------------------------------------ */
 
-static void btop_draw_console(void) {
+#define BTOP_HISTORY_WIDTH 48
+
+static uint32_t btop_cpu_history[BTOP_HISTORY_WIDTH];
+static uint32_t btop_mem_history[BTOP_HISTORY_WIDTH];
+static uint32_t btop_history_len;
+
+static uint32_t pct_u64(uint64_t value, uint64_t max) {
+    if (max == 0) return 0;
+    uint64_t pct = (value * 100ULL) / max;
+    if (pct > 100) pct = 100;
+    return (uint32_t)pct;
+}
+
+static void btop_push_history(uint32_t cpu, uint32_t mem) {
+    if (cpu > 100) cpu = 100;
+    if (mem > 100) mem = 100;
+
+    if (btop_history_len < BTOP_HISTORY_WIDTH) {
+        btop_cpu_history[btop_history_len] = cpu;
+        btop_mem_history[btop_history_len] = mem;
+        btop_history_len++;
+        return;
+    }
+
+    for (uint32_t i = 1; i < BTOP_HISTORY_WIDTH; i++) {
+        btop_cpu_history[i - 1] = btop_cpu_history[i];
+        btop_mem_history[i - 1] = btop_mem_history[i];
+    }
+    btop_cpu_history[BTOP_HISTORY_WIDTH - 1] = cpu;
+    btop_mem_history[BTOP_HISTORY_WIDTH - 1] = mem;
+}
+
+static char btop_graph_char(uint32_t pct) {
+    if (pct >= 90) return '#';
+    if (pct >= 75) return 'O';
+    if (pct >= 60) return '*';
+    if (pct >= 45) return '+';
+    if (pct >= 30) return '=';
+    if (pct >= 15) return '-';
+    if (pct >= 5) return '.';
+    return ' ';
+}
+
+static void btop_write_repeated(char c, uint32_t count) {
+    while (count--) console_putc(c);
+}
+
+static void btop_serial_repeated(char c, uint32_t count) {
+    while (count--) serial_putc(c);
+}
+
+static void btop_clear_rows(uint32_t start_row, uint32_t height, uint32_t width) {
+    uint32_t rows = console_rows();
+    if (rows == 0) rows = 25;
+
+    for (uint32_t r = start_row; r < start_row + height && r < rows; r++) {
+        console_set_cursor(r, 0);
+        btop_write_repeated(' ', width);
+    }
+}
+
+static void btop_box_top(uint32_t row, uint32_t width, const char *title, uint32_t color) {
+    console_set_cursor(row, 0);
+    console_set_fg(color);
+    console_putc('+');
+    console_putc('-');
+    console_write(title);
+    console_putc(' ');
+
+    uint32_t used = 3;
+    while (title[used - 3]) used++;
+    if (used < width - 1) btop_write_repeated('-', width - used - 1);
+    console_putc('+');
+}
+
+static void btop_box_mid(uint32_t row, uint32_t width) {
+    console_set_cursor(row, 0);
+    console_set_fg(0x3A4458);
+    console_putc('|');
+    btop_write_repeated(' ', width - 2);
+    console_putc('|');
+}
+
+static void btop_box_bottom(uint32_t row, uint32_t width) {
+    console_set_cursor(row, 0);
+    console_set_fg(0x3A4458);
+    console_putc('+');
+    btop_write_repeated('-', width - 2);
+    console_putc('+');
+}
+
+static void btop_draw_history_console(uint32_t row,
+                                      uint32_t col,
+                                      uint32_t width,
+                                      const uint32_t *history,
+                                      uint32_t color) {
+    uint32_t pad = 0;
+
+    if (width > BTOP_HISTORY_WIDTH) width = BTOP_HISTORY_WIDTH;
+    if (btop_history_len < width) pad = width - btop_history_len;
+
+    console_set_cursor(row, col);
+    console_set_fg(color);
+    for (uint32_t i = 0; i < pad; i++) console_putc(' ');
+    for (uint32_t i = 0; i < width - pad; i++) {
+        uint32_t idx = btop_history_len - (width - pad) + i;
+        console_putc(btop_graph_char(history[idx]));
+    }
+}
+
+static void btop_print_threads_line(uint32_t row, const char *name, const char *state, const char *detail) {
+    console_set_cursor(row, 2);
+    console_set_fg(0xE8E8E8);
+    console_write(name);
+    console_spaces(16);
+    console_set_cursor(row, 20);
+    console_write(state);
+    console_set_cursor(row, 33);
+    console_write(detail);
+}
+
+static void btop_draw_console(uint32_t cpu, uint64_t used, uint64_t total, int bat) {
     uint32_t old_fg = console_get_fg();
     uint32_t start_row = console_has_fb() ? 2 : 0;
     uint32_t cols = console_cols();
-    if (cols == 0) cols = 80;
+    uint32_t rows = console_rows();
+    uint32_t width;
+    uint32_t mem_pct = pct_u64(used, total);
+    const sched_stats_t *sched = sched_get_stats();
 
-    for (uint32_t r = start_row; r < start_row + 18 && r < console_rows(); r++) {
-        console_set_cursor(r, 0);
-        for (uint32_t c = 0; c < cols; c++) console_putc(' ');
-    }
+    if (cols == 0) cols = 80;
+    if (rows == 0) rows = 25;
+    width = cols > 1 ? cols - 1 : 79;
+    if (width > 96) width = 96;
+    if (width < 58 && cols >= 59) width = 58;
+
+    btop_clear_rows(start_row, 24, width);
 
     console_set_cursor(start_row, 0);
     console_set_fg(0x80C8FF);
-    console_write("SageOS BTOP");
+    console_write("btop");
     console_set_fg(0xE8E8E8);
-    console_write("  q:quit  r:refresh");
+    console_write("  SageOS resources");
+    console_set_cursor(start_row, width > 22 ? width - 22 : 36);
+    console_set_fg(0x9AA4B2);
+    console_write("q quit | r refresh");
 
-    console_set_cursor(start_row + 2, 0);
-    console_write("Uptime: ");
-    uint64_t secs = timer_seconds();
-    console_u32((uint32_t)secs);
-    console_write("s    Kernel: v" SAGEOS_VERSION "    Input: ");
-    console_write(keyboard_backend());
+    btop_box_top(start_row + 2, width, " cpu ", 0x80C8FF);
+    btop_box_mid(start_row + 3, width);
+    btop_box_mid(start_row + 4, width);
+    btop_box_mid(start_row + 5, width);
+    btop_box_bottom(start_row + 6, width);
 
-    uint32_t cpu = timer_cpu_percent();
-    console_set_cursor(start_row + 4, 0);
+    console_set_cursor(start_row + 3, 2);
     console_set_fg(0x79FFB0);
-    console_write("CPU Usage: ");
-    draw_bar(cpu, 100, 30);
+    console_write("usage ");
+    draw_bar(cpu, 100, 28);
     console_write(" ");
     console_u32(cpu);
-    console_write("%");
+    console_write("%  ");
+    console_set_fg(0xE8E8E8);
+    console_write("cores ");
+    console_u32(smp_cpu_count());
+    console_write("  uptime ");
+    print_uptime_compact();
+    console_set_cursor(start_row + 4, 2);
+    console_set_fg(0x9AA4B2);
+    console_write("history ");
+    btop_draw_history_console(start_row + 4, 10, width > 16 ? width - 16 : 32, btop_cpu_history, 0x80C8FF);
+    console_set_cursor(start_row + 5, 2);
+    console_set_fg(0x9AA4B2);
+    console_write("input ");
+    console_set_fg(0xE8E8E8);
+    console_write(keyboard_backend());
 
-    uint64_t used = ram_used_bytes();
-    uint64_t total = ram_total_bytes();
-    console_set_cursor(start_row + 5, 0);
+    btop_box_top(start_row + 8, width, " mem ", 0xFFBF40);
+    btop_box_mid(start_row + 9, width);
+    btop_box_mid(start_row + 10, width);
+    btop_box_mid(start_row + 11, width);
+    btop_box_bottom(start_row + 12, width);
+
+    console_set_cursor(start_row + 9, 2);
     console_set_fg(0xFFBF40);
-    console_write("Memory:    ");
-    draw_bar((uint32_t)(used / 1024), (uint32_t)(total / 1024), 30);
+    console_write("ram   ");
+    draw_bar(mem_pct, 100, 28);
     console_write(" ");
+    console_u32(mem_pct);
+    console_write("%  ");
     print_mb(used);
     console_write(" / ");
     print_mb(total);
-
-    int bat = battery_percent();
-    console_set_cursor(start_row + 6, 0);
+    console_set_cursor(start_row + 10, 2);
+    console_set_fg(0x9AA4B2);
+    console_write("trend ");
+    btop_draw_history_console(start_row + 10, 10, width > 16 ? width - 16 : 32, btop_mem_history, 0xFFBF40);
+    console_set_cursor(start_row + 11, 2);
     console_set_fg(0xFF7070);
-    console_write("Battery:   ");
+    console_write("bat   ");
     if (bat >= 0) {
-        draw_bar((uint32_t)bat, 100, 30);
+        draw_bar((uint32_t)bat, 100, 28);
         console_write(" ");
         console_u32((uint32_t)bat);
         console_write("%");
     } else {
-        console_write("[      N/A      ] --%");
+        console_write("[------------ unavailable ------------]");
     }
 
-    console_set_fg(0xE8E8E8);
-    console_set_cursor(start_row + 8, 0);
-    console_write("Tasks:");
-    console_set_cursor(start_row + 9, 0);
-    console_write("  PID  NAME          STATUS");
-    console_set_cursor(start_row + 10, 0);
-    console_write("  0    kernel        running");
-    console_set_cursor(start_row + 11, 0);
-    console_write("  1    idle          waiting");
-    console_set_cursor(start_row + 12, 0);
-    console_write("  2    sageshell     active");
-    console_set_cursor(start_row + 13, 0);
-    console_write("  3    timer         active");
-    console_set_cursor(start_row + 14, 0);
-    console_write("  4    status_bar    active");
+    btop_box_top(start_row + 14, width, " proc ", 0xDDA0FF);
+    for (uint32_t r = start_row + 15; r < start_row + 21; r++) btop_box_mid(r, width);
+    btop_box_bottom(start_row + 21, width);
+
+    console_set_cursor(start_row + 15, 2);
+    console_set_fg(0x9AA4B2);
+    console_write("name              state        detail");
+    btop_print_threads_line(start_row + 16, "kernel", "running", "modular x86_64");
+    btop_print_threads_line(start_row + 17, "shell-main", "active", "foreground command");
+    btop_print_threads_line(start_row + 18, "scheduler", "active", "threads=");
+    console_u32(sched ? sched->thread_count : 0);
+    console_write(" ctx=");
+    console_u32((uint32_t)(sched ? sched->context_switches : 0));
+    btop_print_threads_line(start_row + 19, "timer", "irq", "PIT 100Hz");
+    btop_print_threads_line(start_row + 20, "status-bar", "active", "top overlay");
 
     console_set_fg(old_fg);
 }
 
-static void btop_draw_serial(void) {
-    uint32_t cpu = timer_cpu_percent();
-    uint64_t used = ram_used_bytes();
-    uint64_t total = ram_total_bytes();
-    int bat = battery_percent();
+static void btop_serial_history(const uint32_t *history, uint32_t width) {
+    uint32_t pad = 0;
+    if (width > BTOP_HISTORY_WIDTH) width = BTOP_HISTORY_WIDTH;
+    if (btop_history_len < width) pad = width - btop_history_len;
+
+    for (uint32_t i = 0; i < pad; i++) serial_putc(' ');
+    for (uint32_t i = 0; i < width - pad; i++) {
+        uint32_t idx = btop_history_len - (width - pad) + i;
+        serial_putc(btop_graph_char(history[idx]));
+    }
+}
+
+static void btop_serial_box_top(const char *title) {
+    serial_raw("+-- ");
+    serial_raw(title);
+    serial_raw(" ");
+    btop_serial_repeated('-', 65);
+    serial_raw("+\r\n");
+}
+
+static void btop_draw_serial(uint32_t cpu, uint64_t used, uint64_t total, int bat) {
+    uint32_t mem_pct = pct_u64(used, total);
+    const sched_stats_t *sched = sched_get_stats();
 
     serial_raw("\033[2J\033[H");
-    serial_raw("SageOS BTOP  q:quit  r:refresh\r\n\r\n");
-    serial_raw("Uptime: ");
-    serial_u32((uint32_t)timer_seconds());
-    serial_raw("s    Kernel: v" SAGEOS_VERSION "    Input: ");
-    serial_raw(keyboard_backend());
-    serial_raw("\r\n\r\n");
+    serial_raw("btop  SageOS resources                                      q quit | r refresh\r\n");
 
-    serial_raw("CPU Usage: ");
-    serial_bar(cpu, 100, 30);
+    btop_serial_box_top("cpu");
+    serial_raw("| usage ");
+    serial_bar(cpu, 100, 28);
     serial_raw(" ");
     serial_u32(cpu);
-    serial_raw("%\r\n");
+    serial_raw("%  cores ");
+    serial_u32(smp_cpu_count());
+    serial_raw("  uptime ");
+    serial_uptime_compact();
+    serial_raw("\r\n| history ");
+    btop_serial_history(btop_cpu_history, 48);
+    serial_raw("\r\n| input   ");
+    serial_raw(keyboard_backend());
+    serial_raw("\r\n+-----------------------------------------------------------------------+\r\n");
 
-    serial_raw("Memory:    ");
-    serial_bar((uint32_t)(used / 1024), (uint32_t)(total / 1024), 30);
+    btop_serial_box_top("mem");
+    serial_raw("| ram   ");
+    serial_bar(mem_pct, 100, 28);
     serial_raw(" ");
+    serial_u32(mem_pct);
+    serial_raw("%  ");
     serial_mb(used);
     serial_raw(" / ");
     serial_mb(total);
-    serial_raw("\r\n");
-
-    serial_raw("Battery:   ");
+    serial_raw("\r\n| trend ");
+    btop_serial_history(btop_mem_history, 48);
+    serial_raw("\r\n| bat   ");
     if (bat >= 0) {
         serial_bar((uint32_t)bat, 100, 30);
         serial_raw(" ");
         serial_u32((uint32_t)bat);
-        serial_raw("%\r\n");
+        serial_raw("%");
     } else {
-        serial_raw("[      N/A      ] --%\r\n");
+        serial_raw("[------------ unavailable ------------]");
     }
+    serial_raw("\r\n+-----------------------------------------------------------------------+\r\n");
 
-    serial_raw("\r\nTasks:\r\n");
-    serial_raw("  PID  NAME          STATUS\r\n");
-    serial_raw("  0    kernel        running\r\n");
-    serial_raw("  1    idle          waiting\r\n");
-    serial_raw("  2    sageshell     active\r\n");
-    serial_raw("  3    timer         active\r\n");
-    serial_raw("  4    status_bar    active\r\n");
+    btop_serial_box_top("proc");
+    serial_raw("| name              state        detail\r\n");
+    serial_raw("| kernel            running      modular x86_64\r\n");
+    serial_raw("| shell-main        active       foreground command\r\n");
+    serial_raw("| scheduler         active       threads=");
+    serial_u32(sched ? sched->thread_count : 0);
+    serial_raw(" switches=");
+    serial_u32((uint32_t)(sched ? sched->context_switches : 0));
+    serial_raw("\r\n| timer             irq          PIT 100Hz\r\n");
+    serial_raw("| status-bar        active       top overlay\r\n");
+    serial_raw("+-----------------------------------------------------------------------+\r\n");
 }
 
 void cmd_btop(void) {
@@ -338,25 +600,34 @@ void cmd_btop(void) {
     console_clear();
 
     while (running) {
+        uint32_t cpu = timer_cpu_percent();
+        uint64_t used = ram_used_bytes();
+        uint64_t total = ram_total_bytes();
+        int bat = battery_percent();
+
+        timer_poll();
+        btop_push_history(cpu, pct_u64(used, total));
+
         if (console_has_fb()) console_set_serial_echo(0);
-        btop_draw_console();
+        btop_draw_console(cpu, used, total, bat);
         if (console_has_fb()) {
             console_set_serial_echo(saved_serial_echo);
-            btop_draw_serial();
+            btop_draw_serial(cpu, used, total, bat);
         }
 
         for (int i = 0; i < 25; i++) {
             KeyEvent ev;
-            timer_poll();
+            int refresh_now = 0;
             if (keyboard_poll_any_event(&ev) && ev.pressed) {
                 if (ev.ascii == 'q' || ev.ascii == 'Q' || ev.ascii == 3) {
                     running = 0;
                 }
                 if (ev.ascii == 'r' || ev.ascii == 'R') {
                     i = 25;
+                    refresh_now = 1;
                 }
             }
-            timer_delay_ms(20);
+            if (running && !refresh_now) sched_sleep(20);
         }
     }
 

@@ -374,6 +374,7 @@ static void help(void) {
     console_write("\n  execelf <path>    execute ELF binary");
     console_write("\n  sage              interactive SageLang REPL");
     console_write("\n  sage <code>       execute one Sage statement");
+    console_write("\n  sage run <path>   execute a .sage or .sgvm file");
     console_write("\n  sageshell         launch SageShell (experimental)");
     console_write("\n  echo <text>       print text");
     console_write("\n  color <name>      white green amber blue red");
@@ -559,6 +560,13 @@ void shell_exec_command(const char *cmd) {
     if (starts_with(cmd, "sageshell")) { sage_shell_run(); return; }
     if (starts_with(cmd, "sage")) {
         const char *mod = arg_after(cmd, "sage");
+        if (starts_word(mod, "run")) {
+            const char *path = arg_after(mod, "run");
+            if (!*path) { console_write("\nusage: sage run <path>"); return; }
+            extern void sage_run_file(const char *path);
+            sage_run_file(path);
+            return;
+        }
         extern void sage_execute(const char *module_name);
         sage_execute(mod);
         return;

@@ -33,6 +33,14 @@ static uint32_t bg = 0x05070A;
 static char     g_screen_chars[MAX_ROWS][MAX_COLS];
 static uint32_t g_screen_fg[MAX_ROWS][MAX_COLS];
 
+#define FB_MAX_WIDTH  1366
+#define FB_MAX_HEIGHT 768
+static uint32_t *g_back_buffer = NULL;
+
+extern void *sage_memcpy(void *dest, const void *src, size_t n);
+extern void *sage_memmove(void *dest, const void *src, size_t n);
+extern void *sage_memset(void *s, int c, size_t n);
+
 /*
  * serial_echo: mirrors console output to serial.
  * Shell redraws disable this to avoid confusing the terminal when
@@ -219,31 +227,26 @@ static const uint8_t *glyph(char ch) {
 }
 
 /*
- * draw_cell_fast: Internal helper that draws a glyph directly to the FB
- * without updating the shadow buffer.
+ * draw_cell_fast: Internal helper that draws a glyph directly to the back buffer.
  */
 static void draw_cell_fast(uint32_t cx, uint32_t cy, char ch, uint32_t color_rgb) {
     if (!g_have_fb || !g_info) return;
 
     uint32_t px = cx * char_w;
     uint32_t py = cy * char_h;
-    uint32_t pitch = g_info->pixels_per_scanline;
-    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
+    
+    if (!g_back_buffer || px + char_w > FB_MAX_WIDTH || py + char_h > FB_MAX_HEIGHT) return;
+
     uint32_t pfg = pack_rgb(color_rgb);
     uint32_t pbg = pack_rgb(bg);
 
     const uint8_t *g = glyph(ch);
 
-    /* 
-     * Row-based blitter: Each glyph is 5x7. We draw 8 rows of 6 units
-     * (where each unit is 'scale' pixels wide). This fills the 
-     * char_w x char_h cell exactly.
-     */
     for (uint32_t gy = 0; gy < 8; gy++) {
         uint8_t bits = (gy < 7) ? g[gy] : 0;
         for (uint32_t sy = 0; sy < scale; sy++) {
-            volatile uint32_t *line = fb + (uint64_t)(py + gy * scale + sy) * pitch + px;
-            /* Left padding: 1 unit (scale pixels) */
+            uint32_t *line = &g_back_buffer[(py + gy * scale + sy) * FB_MAX_WIDTH + px];
+            /* Left padding: 1 unit */
             for (uint32_t sx = 0; sx < scale; sx++) *line++ = pbg;
             /* Glyph: 5 units */
             for (uint32_t gx = 0; gx < 5; gx++) {
@@ -254,18 +257,36 @@ static void draw_cell_fast(uint32_t cx, uint32_t cy, char ch, uint32_t color_rgb
     }
 }
 
+/*
+ * console_flip: Copies the specified range of scanlines from the back buffer
+ * to the physical framebuffer.
+ */
+void console_flip(uint32_t y_start, uint32_t y_end) {
+    if (!g_have_fb || !g_info || !g_back_buffer) return;
+    if (y_end > g_info->height) y_end = g_info->height;
+    
+    uint32_t pitch = g_info->pixels_per_scanline;
+    uint32_t width = g_info->width;
+    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
+
+    for (uint32_t y = y_start; y < y_end; y++) {
+        sage_memcpy((void*)(fb + (uint64_t)y * pitch), &g_back_buffer[y * FB_MAX_WIDTH], width * 4);
+    }
+}
+
 static void draw_cell(uint32_t cx, uint32_t cy, char ch) {
     if (cx < MAX_COLS && cy < MAX_ROWS) {
         g_screen_chars[cy][cx] = ch;
         g_screen_fg[cy][cx] = fg;
     }
     draw_cell_fast(cx, cy, ch, fg);
+    /* Immediate flip for responsiveness */
+    console_flip(cy * char_h, (cy + 1) * char_h);
 }
 
 static void scroll(void) {
     /* 
-     * Update shadow buffer: Move every line from (status_rows + 1) to (rows - 1)
-     * up by one line.
+     * Update shadow buffer for shell tracking.
      */
     for (uint32_t r = status_rows + 1; r < rows; r++) {
         for (uint32_t c = 0; c < cols; c++) {
@@ -273,7 +294,6 @@ static void scroll(void) {
             g_screen_fg[r - 1][c] = g_screen_fg[r][c];
         }
     }
-    /* Clear the new bottom line in the shadow buffer */
     for (uint32_t c = 0; c < cols; c++) {
         g_screen_chars[rows - 1][c] = ' ';
         g_screen_fg[rows - 1][c] = fg;
@@ -282,15 +302,28 @@ static void scroll(void) {
     if (row > status_rows) row--;
 
     /* 
-     * Redraw the active scroll area from the shadow buffer.
-     * This avoids reading from the slow UEFI framebuffer.
+     * Fast Scroll in Back Buffer: Move pixel rows directly.
      */
     if (g_have_fb) {
-        for (uint32_t r = status_rows; r < rows; r++) {
-            for (uint32_t c = 0; c < cols; c++) {
-                draw_cell_fast(c, r, g_screen_chars[r][c], g_screen_fg[r][c]);
+        uint32_t scroll_y_start = status_rows * char_h;
+        uint32_t scroll_y_end   = rows * char_h;
+        
+        /* Move all rows up by char_h */
+        size_t line_bytes = FB_MAX_WIDTH * 4;
+        sage_memmove(&g_back_buffer[scroll_y_start * FB_MAX_WIDTH],
+                     &g_back_buffer[(scroll_y_start + char_h) * FB_MAX_WIDTH],
+                     (scroll_y_end - scroll_y_start - char_h) * line_bytes);
+                     
+        /* Clear the bottom line in back buffer */
+        uint32_t pbg = pack_rgb(bg);
+        for (uint32_t y = scroll_y_end - char_h; y < scroll_y_end; y++) {
+            for (uint32_t x = 0; x < FB_MAX_WIDTH; x++) {
+                g_back_buffer[y * FB_MAX_WIDTH + x] = pbg;
             }
         }
+        
+        /* Full flip of the scroll area */
+        console_flip(scroll_y_start, scroll_y_end);
     }
 }
 
@@ -301,12 +334,17 @@ void console_clear(void) {
     if (g_have_fb && g_info) {
         uint32_t status_height = status_rows * char_h;
         uint32_t bg_packed = pack_rgb(bg);
-        volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)g_info->framebuffer_base;
-        uint32_t pitch = g_info->pixels_per_scanline;
-
-        for (uint32_t y = status_height; y < g_info->height; y++) {
-            my_memset32((void *)(fb + (uint64_t)y * pitch), bg_packed, g_info->width);
+        
+        /* Clear back buffer from below status bar */
+        for (uint32_t y = status_height; y < FB_MAX_HEIGHT; y++) {
+            for (uint32_t x = 0; x < FB_MAX_WIDTH; x++) {
+                g_back_buffer[y * FB_MAX_WIDTH + x] = bg_packed;
+            }
         }
+        
+        /* Initial flip */
+        console_flip(status_height, g_info->height);
+
         /* Clear shadow buffer */
         for (uint32_t r = 0; r < MAX_ROWS; r++) {
             for (uint32_t c = 0; c < MAX_COLS; c++) {
@@ -353,6 +391,12 @@ void console_init(SageOSBootInfo *info) {
         rows = info->height / char_h;
         if (!cols) cols = 1;
         if (!rows) rows = 1;
+
+        /* 
+         * Allocate back buffer from memory handoff.
+         * For now, we take a 8MB chunk at 16MB physical — very likely safe.
+         */
+        g_back_buffer = (uint32_t *)0x1000000ULL;
     } else {
         cols = VGA_W;
         rows = VGA_H;
@@ -518,10 +562,11 @@ void console_draw_status_bar(const char *right_text) {
 
     for (uint32_t i = 0; i < cols && i < 255; i++) {
         if (current[i] != status_shadow[i]) {
-            draw_cell(i, 0, current[i]);
+            draw_cell_fast(i, 0, current[i], fg);
             status_shadow[i] = current[i];
         }
     }
+    console_flip(0, char_h);
 
     fg = saved_fg;
     bg = saved_bg;

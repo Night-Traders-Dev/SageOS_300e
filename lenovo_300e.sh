@@ -138,7 +138,7 @@ build_kernel() {
       "${objs[@]}" \
       -o "$BUILD/kernel.elf"
 
-    llvm-objcopy -O binary "$BUILD/kernel.elf" "$BUILD/KERNEL.BIN"
+    llvm-objcopy -O binary --remove-section .bss "$BUILD/kernel.elf" "$BUILD/KERNEL.BIN"
 
     local kernel_start=""
     local kernel_end=""

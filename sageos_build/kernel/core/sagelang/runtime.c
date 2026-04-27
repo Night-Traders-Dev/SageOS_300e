@@ -554,6 +554,62 @@ void sage_execute(const char* line) {
 }
 
 void sage_run_file(const char* path) {
-    (void)path;
-    printf("File execution not yet implemented in kernel REPL.\n");
+    if (!path || !*path) {
+        printf("sage: no path specified\n");
+        return;
+    }
+
+    VfsStat st;
+    int r = vfs_stat(path, &st);
+    if (r < 0) {
+        printf("sage: cannot stat %s: %s\n", path, vfs_strerror(r));
+        return;
+    }
+
+    if (st.type != VFS_FILE) {
+        printf("sage: %s is not a file\n", path);
+        return;
+    }
+
+    /* Limit script size to 1MB for now (we have plenty of RAM) */
+    if (st.size > 1024 * 1024) {
+        printf("sage: script too large (max 1MB)\n");
+        return;
+    }
+
+    /* Allocation from kernel space is tricky without a true malloc.
+       We'll use a temporary buffer from the sage_heap if it's large enough,
+       or just reuse a static buffer. */
+    static uint8_t script_buffer[65536]; /* 64KB static buffer for scripts */
+    size_t to_read = (size_t)st.size;
+    if (to_read > sizeof(script_buffer)) to_read = sizeof(script_buffer);
+
+    int n = vfs_read(path, 0, script_buffer, to_read);
+    if (n < 0) {
+        printf("sage: error reading %s: %s\n", path, vfs_strerror(n));
+        return;
+    }
+
+    /* Check for SGVM magic if it's bytecode */
+    if (n >= 4 && script_buffer[0] == 'S' && script_buffer[1] == 'G' &&
+        script_buffer[2] == 'V' && script_buffer[3] == 'M') {
+        
+        MetalVM vm;
+        metal_vm_init(&vm);
+        vm.write_char = metal_vm_write_char_bridge;
+        sage_register_repl_natives(&vm);
+        
+        if (metal_vm_load_binary(&vm, script_buffer, n)) {
+            metal_vm_run(&vm);
+            if (vm.error) {
+                printf("Runtime error: %s\n", vm.error_msg ? vm.error_msg : "unknown");
+            }
+        } else {
+            printf("sage: invalid bytecode file %s\n", path);
+        }
+    } else {
+        /* Fallback to interpreting as source code */
+        script_buffer[n] = '\0';
+        sage_execute((const char*)script_buffer);
+    }
 }

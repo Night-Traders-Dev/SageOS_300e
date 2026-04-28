@@ -265,6 +265,8 @@ STUBEOF
 qemu_run() {
     local ovmf=""
 
+    export SAGEOS_EXIT_BOOT_SERVICES=1
+
     for f in \
         /usr/share/ovmf/OVMF.fd \
         /usr/share/OVMF/OVMF_CODE.fd \

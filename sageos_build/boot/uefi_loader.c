@@ -554,6 +554,7 @@ static void collect_gop_info(void) {
         return;
     }
 
+#if !SAGEOS_EXIT_BOOT_SERVICES
     gBootInfo.framebuffer_base = gop->Mode->FrameBufferBase;
     gBootInfo.framebuffer_size = gop->Mode->FrameBufferSize;
     gBootInfo.width = gop->Mode->Info->HorizontalResolution;
@@ -568,6 +569,7 @@ static void collect_gop_info(void) {
     print(L"x");
     print_hex64(gBootInfo.height);
     print(L"\r\n");
+#endif
 }
 
 static EFI_STATUS load_kernel(EFI_HANDLE image_handle, UINT64 *kernel_size_out) {

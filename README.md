@@ -451,6 +451,7 @@ acpi lid          show Lid status
 acpi battery      show ACPI battery object information
 pci               enumerate PCI devices
 net               show networking stack and interface status
+net selftest      build sample ARP and DHCP frames for packet-layer validation
 wifi              show detailed QCA6174A Wi-Fi probe state
 sdhci             show SD/SDHCI controller information
 keydebug          enter raw scancode inspection mode (press ESC to exit)
@@ -508,8 +509,10 @@ Implementation features:
 The current networking slice is device-first, not user-facing networking yet:
 
 - `net` owns a fixed interface registry and packet-layer scaffolding
+- `net selftest` builds sample ARP and DHCP discover frames in-kernel so packet construction can be verified without live Wi-Fi association
 - `wifi` probes the Lenovo 300e Qualcomm QCA6174A (`168c:003e`) over PCI
 - The driver reads BAR0, IRQ routing, PCI capabilities, and enables memory/bus-master access
+- ARP, IPv4, UDP, and DHCP discover frame builders are implemented; ICMP, DNS, and TCP are still pending
 - Firmware assets are searched in VFS at:
   - `/ath10k/QCA6174/hw3.0/firmware-6.bin`
   - `/ath10k/QCA6174/hw3.0/board-2.bin`

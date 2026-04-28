@@ -19,6 +19,7 @@
 #include "dmesg.h"
 #include "ata.h"
 #include "scheduler.h"
+#include "net.h"
 
 extern int fat32_init(void);
 
@@ -106,6 +107,8 @@ void kmain(SageOSBootInfo *info) {
     dmesg_log("PCI bus enumerated");
     sdhci_init();
     dmesg_log("SDHCI initialized");
+    net_init();
+    dmesg_log("network subsystem initialized");
 
     keyboard_init();
     dmesg_log("keyboard initialized");
@@ -124,6 +127,8 @@ void kmain(SageOSBootInfo *info) {
     console_write("\n");
     console_write("PCI devices: ");
     console_u32((uint32_t)pci_device_count());
+    console_write("\nNetwork devices: ");
+    console_u32((uint32_t)net_device_count());
     console_write("\n");
     console_write("Type help to list commands.\n");
 

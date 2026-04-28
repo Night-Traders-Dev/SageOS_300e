@@ -21,6 +21,8 @@
 #include "version.h"
 #include "dmesg.h"
 #include "scheduler.h"
+#include "net.h"
+#include "wifi_qca6174.h"
 #include "sage_shell_entry.h"
 #include "sage_libc_shim.h"
 
@@ -58,11 +60,11 @@ static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
     "acpi tables", "battery", "btop", "cat", "clear", "color", "dmesg", "echo",
     "execelf", "exit", "fb", "halt", "help", "input", "install", "keydebug", "ls",
-    "mkdir", "nano", "neofetch", "pci", "poweroff", "q", "reboot", "rm", "sage",
+    "mkdir", "nano", "neofetch", "net", "pci", "poweroff", "q", "reboot", "rm", "sage",
     "sched",
     "sageshell", "sdhci", "sh", "shutdown", "smp", "smp start", "source", "stat",
     "status", "stop", "suspend", "sysinfo", "timer", "touch", "uname", "version",
-    "write",
+    "wifi", "write",
 };
 
 #define SHELL_CMD_COUNT (sizeof(shell_commands) / sizeof(shell_commands[0]))
@@ -363,6 +365,8 @@ static void help(void) {
     console_write("\n  battery           show battery/EC detector");
     console_write("\n  keydebug          raw keyboard scancode monitor");
     console_write("\n  pci               list PCI devices");
+    console_write("\n  net               network stack and interface status");
+    console_write("\n  wifi              QCA6174A Wi-Fi probe details");
     console_write("\n  sdhci             eMMC/SD controller info");
     console_write("\n  ls [path]         list directory (default: /)");
     console_write("\n  cat <path>        print file contents");
@@ -443,6 +447,8 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "acpi"))         { acpi_cmd_summary(); return; }
     if (starts_word(cmd, "keydebug"))     { keyboard_keydebug(); return; }
     if (starts_word(cmd, "pci"))          { pci_cmd_info(); return; }
+    if (starts_word(cmd, "net"))          { net_cmd_info(); return; }
+    if (starts_word(cmd, "wifi"))         { qca6174_cmd_info(); return; }
     if (starts_word(cmd, "sdhci"))        { sdhci_cmd_info(); return; }
     if (starts_word(cmd, "exit") || streq(cmd, "q")) { power_qemu_exit(); return; }
     if (starts_with(cmd, "ls")) {

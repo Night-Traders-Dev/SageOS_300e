@@ -25,13 +25,18 @@ typedef struct {
 
 typedef struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
 
+typedef EFI_STATUS (EFIAPI *EFI_INPUT_RESET)(
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *self,
+    uint8_t extended_verification
+);
+
 typedef EFI_STATUS (EFIAPI *EFI_READ_KEY_STROKE)(
     EFI_SIMPLE_TEXT_INPUT_PROTOCOL *self,
     EFI_INPUT_KEY *key
 );
 
 struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
-    void *Reset;
+    EFI_INPUT_RESET Reset;
     EFI_READ_KEY_STROKE ReadKeyStroke;
     void *WaitForKey;
 };
@@ -57,7 +62,7 @@ struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
 #define SCANCODE_QUEUE_SIZE 64
 
 #ifndef SAGEOS_FIRMWARE_I8042_FALLBACK
-#define SAGEOS_FIRMWARE_I8042_FALLBACK 1
+#define SAGEOS_FIRMWARE_I8042_FALLBACK 0
 #endif
 
 static const char keymap[128] = {
@@ -85,6 +90,7 @@ static int caps_lock;
 static int ctrl_down;
 static int alt_down;
 static int extended_prefix;
+static int firmware_input_reset_done;
 
 static int firmware_input_available(void) {
     SageOSBootInfo *b = console_boot_info();
@@ -97,6 +103,24 @@ static int firmware_input_available(void) {
 
 static int firmware_i8042_fallback_enabled(void) {
     return SAGEOS_FIRMWARE_I8042_FALLBACK != 0;
+}
+
+static EFI_SIMPLE_TEXT_INPUT_PROTOCOL *firmware_con_in(void) {
+    SageOSBootInfo *b = console_boot_info();
+    if (!firmware_input_available()) return 0;
+    return (EFI_SIMPLE_TEXT_INPUT_PROTOCOL *)(uintptr_t)b->con_in;
+}
+
+static void firmware_input_reset_once(void) {
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *con_in;
+
+    if (firmware_input_reset_done) return;
+    firmware_input_reset_done = 1;
+
+    con_in = firmware_con_in();
+    if (!con_in || !con_in->Reset) return;
+
+    con_in->Reset(con_in, 0);
 }
 
 const char *keyboard_backend(void) {
@@ -177,7 +201,10 @@ void keyboard_init(void) {
     scancode_buffer = 0;
     shift_down = 0;
     caps_lock = 0;
+    ctrl_down = 0;
+    alt_down = 0;
     extended_prefix = 0;
+    firmware_input_reset_done = 0;
 
     if (firmware_input_available() && !firmware_i8042_fallback_enabled()) return;
 
@@ -249,12 +276,14 @@ static char translate_ascii(uint8_t sc) {
  * scancodes that the i8042 path emits so the shell dispatch is unified.
  */
 static int firmware_poll_key(KeyEvent *ev) {
-    SageOSBootInfo *b = console_boot_info();
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *con_in;
+
     if (!firmware_input_available()) return 0;
 
-    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *con_in =
-        (EFI_SIMPLE_TEXT_INPUT_PROTOCOL *)(uintptr_t)b->con_in;
+    con_in = firmware_con_in();
     if (!con_in || !con_in->ReadKeyStroke) return 0;
+
+    firmware_input_reset_once();
 
     EFI_INPUT_KEY key;
     key.ScanCode   = 0;
@@ -265,6 +294,12 @@ static int firmware_poll_key(KeyEvent *ev) {
     ev->extended = 0;
     ev->ascii    = 0;
     ev->scancode = 0;
+
+    if (key.UnicodeChar && key.UnicodeChar <= 0x7F) {
+        char c = (char)key.UnicodeChar;
+        ev->ascii = (c == '\r') ? '\n' : c;
+        return 1;
+    }
 
     /* Special/extended keys — map UEFI scan to PS/2 extended scancode */
     if (key.ScanCode) {
@@ -282,16 +317,8 @@ static int firmware_poll_key(KeyEvent *ev) {
             ev->ascii    = 27;
             return 1;
         default:
-            /* Unknown scan code — ignore */
             return 0;
         }
-    }
-
-    /* Printable / control character */
-    if (key.UnicodeChar && key.UnicodeChar <= 0x7F) {
-        char c = (char)key.UnicodeChar;
-        ev->ascii = (c == '\r') ? '\n' : c;
-        return 1;
     }
 
     return 0;

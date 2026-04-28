@@ -562,6 +562,8 @@ S5 (shutdown) and S3 (suspend) sleep packages are parsed from the DSDT at boot a
 
 Default builds keep UEFI boot services active so the kernel can read `ConIn` events on the internal keyboard. Set `SAGEOS_EXIT_BOOT_SERVICES=1` when building to test the strict native i8042 path.
 
+`SAGEOS_FIRMWARE_I8042_FALLBACK` defaults to `0` on the Lenovo hardware build. Set it to `1` only for input diagnostics if you explicitly want the hybrid firmware+i8042 path.
+
 Both input backends now correctly deliver arrow keys and other special keys (Home, End, Delete, Page Up/Down) by mapping UEFI scan codes to PS/2-style extended scancodes in a unified dispatch path.
 
 ```text

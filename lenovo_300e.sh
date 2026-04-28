@@ -110,7 +110,7 @@ build_kernel() {
           -DMETAL_HEAP_SIZE=32768 \
           -DMETAL_CONST_POOL=256 \
           -DMETAL_NATIVE_MAX=64 \
-          -DSAGEOS_FIRMWARE_I8042_FALLBACK="${SAGEOS_FIRMWARE_I8042_FALLBACK:-1}" \
+          -DSAGEOS_FIRMWARE_I8042_FALLBACK="${SAGEOS_FIRMWARE_I8042_FALLBACK:-0}" \
           -c "$src" \
           -o "$obj"
 

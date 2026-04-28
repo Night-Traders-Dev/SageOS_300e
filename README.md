@@ -5,6 +5,11 @@ SageOS is a small x86_64 UEFI operating system bring-up project targeting the **
 The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console with graphics acceleration, runs a kernel-resident SageShell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
 Recent updates:
+- **Phase 5: Networking Groundwork** ✓:
+  - **Network subsystem**: Added a kernel `net` registry for future interfaces, packet-layer structures, and IPv4 checksum helpers
+  - **QCA6174A Wi-Fi probe**: Detects the Lenovo 300e Qualcomm `168c:003e` device, reads PCI revision/IRQ/capabilities, and enables MMIO + bus mastering
+  - **Firmware staging checks**: Looks for ath10k assets in VFS and reports whether `firmware-6.bin` and `board-2.bin` are present
+  - **New diagnostics**: `net` reports stack/interface state and `wifi` reports detailed QCA6174A bring-up status
 - **Phase 4: Graphics Acceleration & SageLang Scripting** ✓:
   - **Double Buffering**: 8MB back buffer allocated by UEFI bootloader for flicker-free rendering
   - **Fast Scrolling**: Optimized `memmove` on back buffer followed by targeted `console_flip` updates
@@ -65,6 +70,8 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | ACPI | Working — minimal AML parser, Battery (_BST) & Lid detection |
 | Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate |
 | VFS / FAT32 | Working — Unified VFS layer, dynamic RamFS backend (writable), read-only FAT32 boot partition |
+| Networking core | Partial — interface registry, Ethernet/ARP/IPv4/UDP packet structures, checksum helpers, `net` diagnostics |
+| Wi-Fi (QCA6174A) | Partial — PCI discovery, BAR/IRQ/capability probing, firmware asset detection, `wifi` diagnostics |
 | Text editor | Working — `nano <path>` edits small text files in RamFS |
 | Resource monitor | Working — `btop` provides real-time CPU, memory, and system metrics |
 | SageLang Backend | Working — bare-metal stabilized, runtime-free modules |
@@ -94,10 +101,11 @@ SageOS_300e/
     │   ├── core/
     │   │   ├── kernel.c
     │   │   └── sagelang/    # MetalVM interpreter & Sage runtime
-    │   ├── drivers/         # ACPI, Battery, Framebuffer, IDT, etc.
+    │   ├── drivers/         # ACPI, Battery, Framebuffer, Network, PCI, etc.
     │   ├── fs/              # VFS, FAT32, JSON, RamFS
     │   ├── include/
-    │   │   └── metal_vm.h   # VM architecture definitions
+    │   │   ├── metal_vm.h   # VM architecture definitions
+    │   │   └── net.h        # Network device model and packet-layer types
     │   └── shell/
     │       ├── shell.c      # Legacy C shell & command dispatcher
     │       ├── sage_shell/  # SageLang shell sources (.sage)
@@ -154,6 +162,7 @@ Use `lenovo_300e.sh` for all normal operations.
 > **QEMU notes:**
 > - Battery reads `--` — QEMU exposes no real ACPI battery by default.
 > - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
+> - `Network devices: 0` is expected in the default QEMU profile; the Lenovo 300e QCA6174A Wi-Fi card is only visible on real hardware.
 > - Shell line editing, Ctrl combinations, `btop`, and full-screen `nano` are mirrored with ANSI sequences so they behave correctly in QEMU serial output.
 
 ## Graphics Performance
@@ -346,7 +355,7 @@ Kernel entry.S bridges ABI and stack
   ↓
 kmain()
   ↓
-serial → console → ACPI → SMP → IDT → PIT/IRQ → battery → keyboard → shell
+serial → console → ACPI → SMP → IDT → PIT/IRQ → VFS → PCI → storage → net → keyboard → shell
 ```
 
 ## Boot Info Handoff
@@ -441,6 +450,8 @@ acpi madt         show MADT (Multiple APIC Description Table) and CPU list
 acpi lid          show Lid status
 acpi battery      show ACPI battery object information
 pci               enumerate PCI devices
+net               show networking stack and interface status
+wifi              show detailed QCA6174A Wi-Fi probe state
 sdhci             show SD/SDHCI controller information
 keydebug          enter raw scancode inspection mode (press ESC to exit)
 ```
@@ -491,6 +502,25 @@ Implementation features:
 - **Non-blocking refresh**: Runs at 10 Hz from keyboard idle path without interrupt-context framebuffer access
 - **CPU% calculation**: 100-tick sliding window (1-second average at 100 Hz) via IRQ0 idle accounting
 - **Battery display**: Real-time CrOS EC battery percentage or `--` if EC not confirmed
+
+### Networking Bring-up
+
+The current networking slice is device-first, not user-facing networking yet:
+
+- `net` owns a fixed interface registry and packet-layer scaffolding
+- `wifi` probes the Lenovo 300e Qualcomm QCA6174A (`168c:003e`) over PCI
+- The driver reads BAR0, IRQ routing, PCI capabilities, and enables memory/bus-master access
+- Firmware assets are searched in VFS at:
+  - `/ath10k/QCA6174/hw3.0/firmware-6.bin`
+  - `/ath10k/QCA6174/hw3.0/board-2.bin`
+  - `/fat32/ath10k/QCA6174/hw3.0/firmware-6.bin`
+  - `/fat32/ath10k/QCA6174/hw3.0/board-2.bin`
+  - `/firmware/ath10k/QCA6174/hw3.0/firmware-6.bin`
+  - `/firmware/ath10k/QCA6174/hw3.0/board-2.bin`
+  - `/fat32/firmware/ath10k/QCA6174/hw3.0/firmware-6.bin`
+  - `/fat32/firmware/ath10k/QCA6174/hw3.0/board-2.bin`
+
+Current limitation: there is no firmware upload, transmit/receive ring setup, scan, authentication, DHCP, or TCP path yet. This milestone establishes the interface model and real hardware probe path for later ath10k-style bring-up.
 
 ### Battery & EC Probing
 

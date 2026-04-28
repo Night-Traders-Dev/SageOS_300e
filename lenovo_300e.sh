@@ -309,7 +309,7 @@ qemu_run() {
       -cpu Skylake-Client \
       -drive id=hd0,file="$IMG",format=raw,media=disk,snapshot=on \
       -m 256M \
-      -curses \
+      -display curses \
       -monitor none \
       -device isa-debug-exit,iobase=0x501,iosize=2; then
         local rc=$?

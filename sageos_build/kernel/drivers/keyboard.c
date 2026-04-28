@@ -283,7 +283,7 @@ static int firmware_poll_key(KeyEvent *ev) {
     con_in = firmware_con_in();
     if (!con_in || !con_in->ReadKeyStroke) return 0;
 
-    firmware_input_reset_once();
+    // firmware_input_reset_once();
 
     EFI_INPUT_KEY key;
     key.ScanCode   = 0;
@@ -294,12 +294,6 @@ static int firmware_poll_key(KeyEvent *ev) {
     ev->extended = 0;
     ev->ascii    = 0;
     ev->scancode = 0;
-
-    if (key.UnicodeChar && key.UnicodeChar <= 0x7F) {
-        char c = (char)key.UnicodeChar;
-        ev->ascii = (c == '\r') ? '\n' : c;
-        return 1;
-    }
 
     /* Special/extended keys — map UEFI scan to PS/2 extended scancode */
     if (key.ScanCode) {
@@ -319,6 +313,13 @@ static int firmware_poll_key(KeyEvent *ev) {
         default:
             return 0;
         }
+    }
+
+    /* Printable / control character */
+    if (key.UnicodeChar && key.UnicodeChar <= 0x7F) {
+        char c = (char)key.UnicodeChar;
+        ev->ascii = (c == '\r') ? '\n' : c;
+        return 1;
     }
 
     return 0;

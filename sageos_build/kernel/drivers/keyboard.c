@@ -283,7 +283,7 @@ static int firmware_poll_key(KeyEvent *ev) {
     con_in = firmware_con_in();
     if (!con_in || !con_in->ReadKeyStroke) return 0;
 
-    // firmware_input_reset_once();
+    firmware_input_reset_once();
 
     EFI_INPUT_KEY key;
     key.ScanCode   = 0;
@@ -447,6 +447,10 @@ int keyboard_poll_any_event(KeyEvent *ev) {
     char serial_c;
     int firmware_mode = firmware_input_available();
 
+    if (firmware_i8042_fallback_enabled()) {
+        if (keyboard_poll_event(ev)) return 1;
+    }
+
     if (firmware_poll_key(ev)) return 1;
 
     if (serial_poll_char(&serial_c)) {
@@ -458,7 +462,7 @@ int keyboard_poll_any_event(KeyEvent *ev) {
         return 1;
     }
 
-    if (!firmware_mode || firmware_i8042_fallback_enabled()) {
+    if (!firmware_mode) {
         return keyboard_poll_event(ev);
     }
 

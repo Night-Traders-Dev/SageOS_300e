@@ -74,3 +74,6 @@ sageos_build/KERNEL.BIN
 .sageos_patch_backups/
 .fuse_hidden00002d8100000005
 .fuse_hidden0000773300000008
+
+# Build images
+*.img

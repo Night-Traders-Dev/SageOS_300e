@@ -126,6 +126,9 @@ void kmain(SageOSBootInfo *info) {
     status_init();
     dmesg_log("status bar initialized");
 
+    dmesg_load_persistent();
+    dmesg_log("persistent dmesg loaded");
+
     sched_init();
     dmesg_log("scheduler initialized");
 

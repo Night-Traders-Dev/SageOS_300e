@@ -3,8 +3,11 @@
 #include "console.h"
 #include "timer.h"
 #include "dmesg.h"
+#include "ata.h"
 
 #define DMESG_SIZE 16384
+#define PERSISTENT_LBA 100
+#define PERSISTENT_SECTORS 32
 
 static char dmesg_buf[DMESG_SIZE];
 static uint32_t dmesg_head = 0;
@@ -16,8 +19,39 @@ static void append_char(char c) {
     if (dmesg_total < DMESG_SIZE) dmesg_total++;
 }
 
+void dmesg_save_persistent(void) {
+    if (!ata_is_available()) return;
+
+    uint16_t sector[256];
+    uint32_t bytes_saved = 0;
+
+    for (uint32_t s = 0; s < PERSISTENT_SECTORS && bytes_saved < DMESG_SIZE; s++) {
+        for (int i = 0; i < 256; i++) {
+            sector[i] = (uint16_t)dmesg_buf[bytes_saved++];
+            sector[i] |= (uint16_t)dmesg_buf[bytes_saved++] << 8;
+        }
+        ata_write_sector(PERSISTENT_LBA + s, sector);
+    }
+}
+
+void dmesg_load_persistent(void) {
+    if (!ata_is_available()) return;
+
+    uint16_t sector[256];
+    uint32_t bytes_loaded = 0;
+
+    for (uint32_t s = 0; s < PERSISTENT_SECTORS && bytes_loaded < DMESG_SIZE; s++) {
+        if (!ata_read_sector(PERSISTENT_LBA + s, sector)) break;
+        for (int i = 0; i < 256; i++) {
+            dmesg_buf[bytes_loaded++] = (char)(sector[i] & 0xFF);
+            dmesg_buf[bytes_loaded++] = (char)((sector[i] >> 8) & 0xFF);
+        }
+    }
+    dmesg_total = bytes_loaded;
+    dmesg_head = bytes_loaded % DMESG_SIZE;
+}
+
 void dmesg_log(const char *msg) {
-    // Add timestamp [ seconds.microseconds ]
     uint64_t ticks = timer_ticks();
     uint64_t sec = ticks / 100;
 
@@ -32,7 +66,6 @@ void dmesg_log(const char *msg) {
 
     append_char('.');
     
-    // Fixed width 6-digit microsecond approximation (actually centiseconds * 1000)
     uint32_t csec = (uint32_t)(ticks % 100);
     append_char((char)('0' + (csec / 10)));
     append_char((char)('0' + (csec % 10)));
@@ -48,6 +81,8 @@ void dmesg_log(const char *msg) {
         append_char(*msg++);
     }
     append_char('\n');
+    
+    dmesg_save_persistent();
 }
 
 void dmesg_dump(void) {

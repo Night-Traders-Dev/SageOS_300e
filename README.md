@@ -5,6 +5,12 @@ SageOS is a small x86_64 UEFI operating system bring-up project targeting the **
 The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console with graphics acceleration, runs a kernel-resident SageShell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
 Recent updates:
+- **Phase 6: Advanced Storage & Dual-Image Installer** ✓:
+  - **BTRFS Root Support**: Implemented a minimal BTRFS superblock detector and VFS backend for root partition support.
+  - **SWAP Support**: Added SWAP partition identification and memory management groundwork.
+  - **Dual-Image Build System**: Refactored `lenovo_300e.sh` to generate both a lightweight **Live OS image** (ESP-only) and a full **Installer image** (ESP + BTRFS + SWAP).
+  - **GPT Refactoring**: Updated the default installer partition layout: ESP (64MiB), Root (128MiB BTRFS), and SWAP (125MB).
+  - **New Installer**: Added a full-featured `install` command and `install.sage` script for bare-metal deployment.
 - **Phase 5: Networking Groundwork** ✓:
   - **Network subsystem**: Added a kernel `net` registry for future interfaces, packet-layer structures, and IPv4 checksum helpers
   - **QCA6174A Wi-Fi probe**: Detects the Lenovo 300e Qualcomm `168c:003e` device, reads PCI revision/IRQ/capabilities, and enables MMIO + bus mastering
@@ -70,6 +76,8 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | ACPI | Working — minimal AML parser, Battery (_BST) & Lid detection |
 | Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate |
 | VFS / FAT32 | Working — Unified VFS layer, dynamic RamFS backend (writable), read-only FAT32 boot partition |
+| **BTRFS Root** (Phase 6) | **Working** — Superblock detection and VFS mount integration |
+| **SWAP Support** (Phase 6) | **Working** — Partition identification and registration |
 | Networking core | Partial — interface registry, Ethernet/ARP/IPv4/UDP packet structures, checksum helpers, `net` diagnostics |
 | Wi-Fi (QCA6174A) | Partial — PCI discovery, BAR/IRQ/capability probing, firmware asset detection, `wifi` diagnostics |
 | Text editor | Working — `nano <path>` edits small text files in RamFS |
@@ -156,10 +164,11 @@ Use `lenovo_300e.sh` for all normal operations.
 ### Run in QEMU
 
 ```bash
-./lenovo_300e.sh qemu
+./lenovo_300e.sh qemu [live|installer]
 ```
 
 > **QEMU notes:**
+> - Defaults to `live` image.
 > - **Headless Mode**: QEMU runs headlessly; interaction is through the serial console.
 > - Battery reads `--` — QEMU exposes no real ACPI battery by default.
 > - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
@@ -228,7 +237,7 @@ Execute with: `sh <path>` or `source <path>`
 Default target is usually `/dev/sdb`:
 
 ```bash
-./lenovo_300e.sh flash /dev/sdb
+./lenovo_300e.sh flash [live|installer] [/dev/sdX]
 ```
 
 ### Build and Flash

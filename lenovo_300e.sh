@@ -9,9 +9,21 @@ OBJ="$BUILD/obj"
 IMG="$ROOT/sageos.img"
 ESP="$BUILD/esp.img"
 
-IMG_SIZE_MIB="${IMG_SIZE_MIB:-96}"
-ESP_SIZE_MIB="${ESP_SIZE_MIB:-64}"
-ESP_START_LBA="${ESP_START_LBA:-2048}"
+IMG_LIVE="$ROOT/sageos-live.img"
+IMG_INSTALLER="$ROOT/sageos-installer.img"
+ESP="$BUILD/esp.img"
+
+# Live Image Config
+LIVE_IMG_SIZE_MIB=96
+LIVE_ESP_SIZE_MIB=64
+
+# Installer Image Config
+INSTALLER_IMG_SIZE_MIB=512
+INSTALLER_ESP_SIZE_MIB=64
+INSTALLER_BTRFS_SIZE_MIB=128
+INSTALLER_SWAP_SIZE_MIB=125
+
+ESP_START_LBA=2048
 
 restore_tty() {
     if [ -t 0 ]; then
@@ -40,6 +52,60 @@ check_tools() {
     need sgdisk
     need truncate
     need dd
+}
+
+gen_live_image() {
+    echo "--- Generating Live OS Image ---"
+    local img="$IMG_LIVE"
+    truncate -s "${LIVE_IMG_SIZE_MIB}M" "$img"
+
+    sgdisk --clear "$img" >/dev/null
+    sgdisk \
+      --new=1:${ESP_START_LBA}:+${LIVE_ESP_SIZE_MIB}M \
+      --typecode=1:EF00 \
+      --change-name=1:"EFI System" \
+      "$img" >/dev/null
+
+    dd if="$ESP" of="$img" bs=512 seek="$ESP_START_LBA" conv=notrunc status=none
+    echo "[OK] Live Image: $img"
+}
+
+gen_installer_image() {
+    echo "--- Generating Installer Image ---"
+    local img="$IMG_INSTALLER"
+    truncate -s "${INSTALLER_IMG_SIZE_MIB}M" "$img"
+
+    # Partition offsets
+    local btrfs_start=$((ESP_START_LBA + (INSTALLER_ESP_SIZE_MIB * 1024 * 1024 / 512)))
+    local swap_start=$((btrfs_start + (INSTALLER_BTRFS_SIZE_MIB * 1024 * 1024 / 512)))
+
+    sgdisk --clear "$img" >/dev/null
+    sgdisk \
+      --new=1:${ESP_START_LBA}:+${INSTALLER_ESP_SIZE_MIB}M \
+      --typecode=1:EF00 \
+      --change-name=1:"EFI System" \
+      --new=2:${btrfs_start}:+${INSTALLER_BTRFS_SIZE_MIB}M \
+      --typecode=2:8300 \
+      --change-name=2:"SageOS Root (BTRFS)" \
+      --new=3:${swap_start}:+${INSTALLER_SWAP_SIZE_MIB}M \
+      --typecode=3:8200 \
+      --change-name=3:"SageOS Swap" \
+      "$img" >/dev/null
+
+    # Flash ESP
+    dd if="$ESP" of="$img" bs=512 seek="$ESP_START_LBA" conv=notrunc status=none
+
+    # Format BTRFS if tool exists
+    if command -v mkfs.btrfs >/dev/null 2>&1; then
+        echo "  Formatting BTRFS partition..."
+        local btrfs_img="$BUILD/btrfs.img"
+        truncate -s "${INSTALLER_BTRFS_SIZE_MIB}M" "$btrfs_img"
+        mkfs.btrfs -f -L SAGEOS_ROOT "$btrfs_img" >/dev/null
+        dd if="$btrfs_img" of="$img" bs=512 seek="$btrfs_start" conv=notrunc status=none
+        rm "$btrfs_img"
+    fi
+
+    echo "[OK] Installer Image: $img"
 }
 
 build_kernel() {
@@ -242,7 +308,7 @@ STUBEOF
     build_kernel
 
     echo "--- Creating ESP FAT32 image ---"
-    dd if=/dev/zero of="$ESP" bs=1M count="$ESP_SIZE_MIB" status=none
+    dd if=/dev/zero of="$ESP" bs=1M count="$INSTALLER_ESP_SIZE_MIB" status=none
     mkfs.fat -F 32 -n SAGEOS "$ESP" >/dev/null
 
     mmd -i "$ESP" ::/EFI
@@ -250,29 +316,17 @@ STUBEOF
     mcopy -i "$ESP" "$BUILD/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
     mcopy -i "$ESP" "$BUILD/KERNEL.BIN" ::/KERNEL.BIN
 
-    echo "--- Creating GPT disk image ---"
-    truncate -s "${IMG_SIZE_MIB}M" "$IMG"
-
-    sgdisk --clear "$IMG" >/dev/null
-    sgdisk \
-      --new=1:${ESP_START_LBA}:+${ESP_SIZE_MIB}M \
-      --typecode=1:EF00 \
-      --change-name=1:"EFI System" \
-      "$IMG" >/dev/null
-
-    dd if="$ESP" of="$IMG" bs=512 seek="$ESP_START_LBA" conv=notrunc status=none
-
-    echo "--- Verifying GPT ---"
-    sgdisk -v "$IMG"
+    gen_live_image
+    gen_installer_image
 
     echo "--- Build complete ---"
-    echo "Image:  $IMG"
-    echo "UEFI:   $BUILD/BOOTX64.EFI"
-    echo "Kernel: $BUILD/KERNEL.BIN"
+    echo "Live Image:      $IMG_LIVE"
+    echo "Installer Image: $IMG_INSTALLER"
 }
 
 qemu_run() {
     local ovmf=""
+    local target_img="${1:-$IMG_LIVE}"
 
     export SAGEOS_EXIT_BOOT_SERVICES=1
 
@@ -292,12 +346,12 @@ qemu_run() {
         exit 1
     fi
 
-    if [ ! -f "$IMG" ]; then
-        echo "Image not found. Building first..."
+    if [ ! -f "$target_img" ]; then
+        echo "Image $target_img not found. Building first..."
         build_image
     fi
 
-    echo "Disk device is $IMG"
+    echo "Disk device is $target_img"
 
     pkill -9 -f qemu-system-x86_64 >/dev/null 2>&1 || true
     restore_tty
@@ -318,7 +372,7 @@ qemu_run() {
     if ! qemu-system-x86_64 \
       -bios "$ovmf" \
       -cpu Skylake-Client \
-      -drive id=hd0,file="$IMG",format=raw,media=disk,snapshot=on \
+      -drive id=hd0,file="$target_img",format=raw,media=disk,snapshot=on \
       -m 256M \
       -display none \
       -serial stdio \
@@ -335,10 +389,11 @@ qemu_run() {
 }
 
 flash_usb() {
-    local dev="${1:-/dev/sdb}"
+    local img="${1:-$IMG_LIVE}"
+    local dev="${2:-/dev/sdb}"
 
-    if [ ! -f "$IMG" ]; then
-        echo "Image not found. Building first..."
+    if [ ! -f "$img" ]; then
+        echo "Image $img not found. Building first..."
         build_image
     fi
 
@@ -355,7 +410,7 @@ flash_usb() {
     esac
 
     echo "=== SageOS Lenovo 300e Flasher ==="
-    echo "Image:  $IMG"
+    echo "Image:  $img"
     echo "Device: $dev"
     echo
     lsblk "$dev"
@@ -385,7 +440,7 @@ flash_usb() {
     done < <(lsblk -ln -o NAME,MOUNTPOINT "$dev" | tail -n +2)
 
     echo "Flashing..."
-    sudo dd if="$IMG" of="$dev" bs=4M status=progress conv=fsync
+    sudo dd if="$img" of="$dev" bs=4M status=progress conv=fsync
 
     sync
     sudo partprobe "$dev" 2>/dev/null || true
@@ -396,7 +451,7 @@ flash_usb() {
 }
 
 clean_all() {
-    rm -f "$IMG" "$ESP"
+    rm -f "$IMG_LIVE" "$IMG_INSTALLER" "$ESP"
     rm -f "$BUILD/BOOTX64.EFI" "$BUILD/KERNEL.BIN" "$BUILD/kernel.elf"
     rm -f "$OBJ"/*.o "$OBJ"/*.obj 2>/dev/null || true
     echo "Cleaned Lenovo 300e build outputs."
@@ -404,11 +459,12 @@ clean_all() {
 
 status() {
     echo "Root:   $ROOT"
-    echo "Image:  $IMG"
+    echo "Live:   $IMG_LIVE"
+    echo "Inst:   $IMG_INSTALLER"
     echo "UEFI:   $BUILD/BOOTX64.EFI"
     echo "Kernel: $BUILD/KERNEL.BIN"
     echo
-    ls -lh "$IMG" "$BUILD/BOOTX64.EFI" "$BUILD/KERNEL.BIN" "$BUILD/kernel.elf" 2>/dev/null || true
+    ls -lh "$IMG_LIVE" "$IMG_INSTALLER" "$BUILD/BOOTX64.EFI" "$BUILD/KERNEL.BIN" "$BUILD/kernel.elf" 2>/dev/null || true
 }
 
 usage() {
@@ -418,13 +474,14 @@ SageOS Lenovo 300e unified build tool
 Usage:
   ./lenovo_300e.sh build
   ./lenovo_300e.sh build-kernel
-  ./lenovo_300e.sh qemu
-  ./lenovo_300e.sh flash [/dev/sdX]
-  ./lenovo_300e.sh all [/dev/sdX]
+  ./lenovo_300e.sh qemu [live|installer]
+  ./lenovo_300e.sh flash [live|installer] [/dev/sdX]
   ./lenovo_300e.sh clean
   ./lenovo_300e.sh status
 
 Defaults:
+  qemu target: live
+  flash image: live
   flash device: /dev/sdb
 USAGE
 }
@@ -456,14 +513,14 @@ STUBEOF
         build_kernel
         ;;
     qemu)
-        qemu_run
+        target="$IMG_LIVE"
+        if [ "${1:-}" = "installer" ]; then target="$IMG_INSTALLER"; fi
+        qemu_run "$target"
         ;;
     flash)
-        flash_usb "${1:-/dev/sdb}"
-        ;;
-    all)
-        build_image
-        flash_usb "${1:-/dev/sdb}"
+        img="$IMG_LIVE"
+        if [ "${1:-}" = "installer" ]; then img="$IMG_INSTALLER"; shift; fi
+        flash_usb "$img" "${1:-/dev/sdb}"
         ;;
     clean)
         clean_all

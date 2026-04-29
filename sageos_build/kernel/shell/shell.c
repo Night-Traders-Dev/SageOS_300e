@@ -63,7 +63,7 @@ static const char *const shell_commands[] = {
     "mkdir", "nano", "neofetch", "net", "net selftest", "pci", "poweroff", "q", "reboot", "rm", "sage",
     "sched",
     "sageshell", "sdhci", "sh", "shutdown", "smp", "smp start", "source", "stat",
-    "status", "stop", "suspend", "sysinfo", "timer", "touch", "uname", "version",
+    "status", "stop", "suspend", "swap", "sysinfo", "timer", "touch", "uname", "version",
     "wifi", "write",
 };
 
@@ -441,6 +441,7 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "acpi lid"))     { acpi_cmd_lid(); return; }
     if (starts_word(cmd, "acpi battery")) { acpi_cmd_battery(); return; }
     if (starts_word(cmd, "acpi"))         { acpi_cmd_summary(); return; }
+    if (starts_word(cmd, "swap"))         { extern void cmd_swap(void); cmd_swap(); return; }
     if (starts_word(cmd, "keydebug"))     { keyboard_keydebug(); return; }
     if (starts_word(cmd, "pci"))          { pci_cmd_info(); return; }
     if (starts_word(cmd, "net selftest")) { net_cmd_selftest(); return; }

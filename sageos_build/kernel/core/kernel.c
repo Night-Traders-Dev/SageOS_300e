@@ -12,7 +12,9 @@
 #include "idt.h"
 #include "vfs.h"
 #include "fat32.h"
+#include "btrfs.h"
 #include "ramfs.h"
+#include "swap.h"
 #include "pci.h"
 #include "sdhci.h"
 #include "version.h"
@@ -101,6 +103,15 @@ void kmain(SageOSBootInfo *info) {
     } else {
         dmesg_log("FAT32 not available");
     }
+
+    btrfs_init();
+    if (btrfs_is_available()) {
+        vfs_mount("/btrfs", btrfs_get_backend());
+        dmesg_log("BTRFS mounted at /btrfs");
+    }
+
+    swap_init();
+    dmesg_log("SWAP initialized");
 
     /* PCI bus enumeration — discovers AMD SoC, QCA6174A Wi-Fi, eMMC */
     pci_enumerate();

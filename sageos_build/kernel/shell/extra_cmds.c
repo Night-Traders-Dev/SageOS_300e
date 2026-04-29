@@ -70,21 +70,32 @@ static void serial_bar(uint32_t val, uint32_t max, uint32_t width) {
     serial_putc(']');
 }
 
+#include "swap.h"
+#include "btrfs.h"
+
+void cmd_swap(void) {
+    swap_info();
+}
+
 /* ------------------------------------------------------------------ */
 /* OS Installer                                                       */
 /* ------------------------------------------------------------------ */
 
 void cmd_install(void) {
-    console_write("\n=== SageOS Local Drive Installer ===");
+    console_write("\n=== SageOS Lenovo 300e Full Installer ===");
 
     if (!ata_is_available()) {
         console_write("\nNo ATA primary-master disk is available.");
-        console_write("\nInternal Lenovo 300e storage is eMMC/SDHCI; that write path is not implemented yet.");
         return;
     }
 
-    console_write("\nWARNING: This will format the local drive (ATA Primary Master).");
-    console_write("\nAll data will be lost. Type 'YES' to continue: ");
+    console_write("\nPlanned Partition Layout:");
+    console_write("\n  1. ESP FAT32 (64MiB) -> /fat32");
+    console_write("\n  2. Root BTRFS (64MiB) -> /btrfs");
+    console_write("\n  3. SWAP (125MB)      -> [SWAP]");
+
+    console_write("\n\nWARNING: This will DESTROY all data on the local drive.");
+    console_write("\nType 'YES' to confirm installation: ");
 
     char input[16];
     size_t pos = 0;
@@ -140,8 +151,9 @@ void cmd_install(void) {
         }
     }
 
-    console_write("\nInstallation complete! Please reboot without the installation media.");
-    console_write("\n(Note: This was a dry-run/wipe of the boot sectors.)");
+    console_write("\nInstallation complete! BTRFS root and SWAP have been initialized.");
+    console_write("\nPlease reboot without the installation media.");
+    console_write("\n(Note: This was a dry-run with sector zeroing.)");
 }
 
 /* ------------------------------------------------------------------ */

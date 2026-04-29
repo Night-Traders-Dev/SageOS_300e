@@ -168,8 +168,10 @@ static int read_battery_percent_host(void) {
 
 void battery_init(void)
 {
-    serial_write("[battery] EC probe: skipping probe to avoid hangs\r\n");
-    dmesg_log("battery: skipping Chromebook EC probe to avoid hangs");
+    dmesg_log("battery: initializing Chromebook EC");
+
+    /* Small delay to allow EC to settle after system power-on */
+    for (int i = 0; i < 1000000; i++) __asm__ volatile ("pause");
 
     battery_present = acpi_has_battery_device();
     ec_present      = acpi_has_ec_device();
@@ -177,8 +179,23 @@ void battery_init(void)
     percent_valid   = 0;
     source_type     = 0;
 
-    /* Skip EC probing for now to avoid hangs in QEMU */
-    dmesg_log("battery: EC probe skipped (not available in this environment)");
+    /* Probe EC memmap at candidate bases */
+    uint16_t bases[] = {0x900, 0x880, 0x800};
+    for (int i = 0; i < 3; i++) {
+        ec_lpc_base = bases[i];
+        if (check_ec_id_at(ec_lpc_base)) {
+            source_type = 2;
+            dmesg_log("battery: EC found at candidate base");
+            return;
+        }
+    }
+
+    if (ec_present) {
+        source_type = 3;
+        dmesg_log("battery: EC hinted, but ID not confirmed");
+    } else {
+        dmesg_log("battery: EC not detected");
+    }
 }
 
 int battery_percent(void)

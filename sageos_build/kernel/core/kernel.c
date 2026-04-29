@@ -28,9 +28,6 @@ extern int fat32_init(void);
 static void shell_main_thread(void *arg) {
     (void)arg;
 
-    dmesg_log("init system starting");
-    sage_init_run();
-
     dmesg_log("shell thread started");
     for (;;) {
         timer_poll();
@@ -131,6 +128,10 @@ void kmain(SageOSBootInfo *info) {
 
     sched_init();
     dmesg_log("scheduler initialized");
+
+    /* Initialize system services */
+    dmesg_log("init system starting");
+    sage_init_run();
 
     console_write("SageOS modular kernel v" SAGEOS_VERSION " entered.\n");
     console_write("Framebuffer console online.\n");

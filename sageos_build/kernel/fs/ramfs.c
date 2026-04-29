@@ -6,9 +6,6 @@
 #include "version.h"
 
 /* Embedded binary files */
-#include "bin_hello.h"
-#include "bin_hello_json.h"
-#include "bin_hello_kernel.h"
 #include "commands_embed.h"
 
 /* -----------------------------------------------------------------------
@@ -462,13 +459,9 @@ void ramfs_init(void) {
     ramfs_create_file_ref("/dev/fb0",     fb,   r_strlen(fb));
     ramfs_create_file_ref("/proc/input",  inp,  r_strlen(inp));
 
-    /* ELF binary */
-    ramfs_create_file_ref("/bin/hello", (const char *)bin_hello, sizeof(bin_hello));
-
     /* Sage test files */
     ramfs_create_file_ref("/etc/test.sage",     test_sage_source, r_strlen(test_sage_source));
     ramfs_create_file_ref("/etc/test_err.sage", test_error_sage_source, r_strlen(test_error_sage_source));
-    ramfs_create_file_ref("/etc/hello_native.sagec", (const char *)hello_kernel_sagec, sizeof(hello_kernel_sagec));
 
     /* Embed external SageLang commands */
     ramfs_embed_commands();

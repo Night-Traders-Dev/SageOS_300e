@@ -160,11 +160,11 @@ Use `lenovo_300e.sh` for all normal operations.
 ```
 
 > **QEMU notes:**
-> - **Graphical Window**: QEMU now opens a native graphical window (GTK/SDL) to render the high-resolution framebuffer console.
+> - **Headless Mode**: QEMU runs headlessly; interaction is through the serial console.
 > - Battery reads `--` — QEMU exposes no real ACPI battery by default.
 > - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
 > - `Network devices: 0` is expected in the default QEMU profile; the Lenovo 300e QCA6174A Wi-Fi card is only visible on real hardware.
-> - **Serial Mirroring**: Shell line editing, Ctrl combinations, `btop`, and full-screen `nano` are still mirrored with ANSI sequences to `stdio` for debugging.
+> - **Serial Interaction**: Shell line editing, Ctrl combinations, `btop`, and full-screen `nano` are handled directly over the serial interface.
 
 ## Graphics Performance
 

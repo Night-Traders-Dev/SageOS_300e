@@ -1,4 +1,3 @@
-# sageos_build/kernel/etc/commands/version.sage
 proc main():
     os_write_char(10)
     os_write_str("SageOS kernel ")

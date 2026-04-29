@@ -423,10 +423,8 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
     if (starts_word(cmd, "btop"))         { cmd_btop(); return; }
     if (starts_word(cmd, "install"))      { cmd_install(); return; }
-    if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel " SAGEOS_VERSION " modular x86_64"); return; }
-    if (starts_word(cmd, "uname"))        { console_write("\nSageOS sageos " SAGEOS_VERSION " x86_64 lenovo_300e"); return; }
-    if (starts_word(cmd, "about"))        { console_write("\nSageOS is a small POSIX-inspired OS target."); console_write("\nCurrent phase: modular kernel and hardware diagnostics."); return; }
     if (starts_word(cmd, "fb"))           { cmd_fb(); return; }
+    if (starts_word(cmd, "about"))        { console_write("\nSageOS is a small POSIX-inspired OS target."); console_write("\nCurrent phase: modular kernel and hardware diagnostics."); return; }
     if (starts_word(cmd, "input"))        { console_write("\nInput backend: "); console_write(keyboard_backend()); console_write("\nUse keydebug to inspect raw scancodes."); return; }
     if (starts_word(cmd, "status"))       { status_print(); return; }
     if (starts_word(cmd, "sysinfo"))      { sysinfo_cmd(); return; }

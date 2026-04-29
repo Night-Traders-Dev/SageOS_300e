@@ -1029,8 +1029,10 @@ int metal_vm_step(MetalVM* vm) {
         // I/O
         case OP_PRINT: {
             MetalValue val = metal_vm_pop(vm);
-            metal_print_value(vm, val);
-            if (vm->write_char) vm->write_char('\n');
+            if (val.type != MV_NIL) {
+                metal_print_value(vm, val);
+                if (vm->write_char) vm->write_char('\n');
+            }
             break;
         }
 

@@ -8,6 +8,7 @@
 #include "metal_vm.h"
 #include "sage_alloc.h"
 #include "version.h"
+#include "vfs.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -78,7 +79,6 @@ MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc) {
     return mv_dbl((double)metal_array_len(vm, args[0].as.arr_idx));
 }
 
-#include "vfs.h"
 MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc) {
     if (argc < 1 || args[0].type != MV_STR) return mv_nil();
     const char* path = metal_string_get(vm, args[0].as.str_idx);
@@ -183,6 +183,40 @@ MetalValue n_os_cat(MetalVM* vm, MetalValue* args, int argc) {
     return mv_nil();
 }
 
+MetalValue n_os_get_mount_count(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm; (void)args; (void)argc;
+    return mv_dbl((double)vfs_get_mount_count());
+}
+
+MetalValue n_os_get_mount_info(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_NUM) return mv_nil();
+    union { double d; uint64_t u; } v;
+    v.u = args[0].as.num_bits;
+    int index = (int)v.d;
+
+    VfsMountInfo mi;
+    if (vfs_get_mount_info(index, &mi) == 0) {
+        int d_idx = metal_dict_new(vm);
+        if (d_idx < 0) return mv_nil();
+
+        int k_path = metal_string_intern(vm, "path", 4);
+        int k_type = metal_string_intern(vm, "type", 4);
+
+        metal_dict_set(vm, d_idx, k_path, mv_str(vm, mi.path, (int)strlen(mi.path)));
+        metal_dict_set(vm, d_idx, k_type, mv_str(vm, mi.type, (int)strlen(mi.type)));
+
+        MetalValue res; res.type = MV_DICT; res.as.dict_idx = d_idx;
+        return res;
+    }
+    return mv_nil();
+}
+
+#include "swap.h"
+MetalValue n_os_swap_is_available(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm; (void)args; (void)argc;
+    return mv_bool(swap_is_available());
+}
+
 static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "len", n_len);
     metal_vm_register_native(vm, "os_strlen", n_os_strlen);
@@ -195,6 +229,9 @@ static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "os_set_color_hex", n_os_set_color_hex);
     metal_vm_register_native(vm, "os_path_exists", n_os_path_exists);
     metal_vm_register_native(vm, "os_cat", n_os_cat);
+    metal_vm_register_native(vm, "os_get_mount_count", n_os_get_mount_count);
+    metal_vm_register_native(vm, "os_get_mount_info", n_os_get_mount_info);
+    metal_vm_register_native(vm, "os_swap_is_available", n_os_swap_is_available);
 }
 
 static void sage_repl_reset_vm(void) {

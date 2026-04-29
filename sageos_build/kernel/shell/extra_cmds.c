@@ -160,10 +160,6 @@ void cmd_install(void) {
 /* Neofetch                                                           */
 /* ------------------------------------------------------------------ */
 
-static void console_spaces(uint32_t count) {
-    while (count--) console_putc(' ');
-}
-
 static void print_uptime_compact(void) {
     uint64_t secs = timer_seconds();
     uint32_t days = (uint32_t)(secs / 86400);
@@ -306,17 +302,6 @@ static void btop_draw_history_console(uint32_t row,
     }
 }
 
-static void btop_print_threads_line(uint32_t row, const char *name, const char *state, const char *detail) {
-    console_set_cursor(row, 2);
-    console_set_fg(0xE8E8E8);
-    console_write(name);
-    console_spaces(16);
-    console_set_cursor(row, 20);
-    console_write(state);
-    console_set_cursor(row, 33);
-    console_write(detail);
-}
-
 static void btop_draw_console(uint32_t cpu, uint64_t used, uint64_t total, int bat) {
     uint32_t old_fg = console_get_fg();
     uint32_t start_row = console_has_fb() ? 2 : 0;
@@ -403,21 +388,54 @@ static void btop_draw_console(uint32_t cpu, uint64_t used, uint64_t total, int b
         console_write("[------------ unavailable ------------]");
     }
 
-    btop_box_top(start_row + 14, width, " proc ", 0xDDA0FF);
+    btop_box_top(start_row + 14, width, " storage & proc ", 0xDDA0FF);
     for (uint32_t r = start_row + 15; r < start_row + 21; r++) btop_box_mid(r, width);
     btop_box_bottom(start_row + 21, width);
 
-    console_set_cursor(start_row + 15, 2);
+    /* Storage info */
+    int m_count = vfs_get_mount_count();
+    for (int i = 0; i < m_count && i < 3; i++) {
+        VfsMountInfo mi;
+        if (vfs_get_mount_info(i, &mi) == 0) {
+            console_set_cursor(start_row + 15 + i, 2);
+            console_set_fg(0x79FFB0);
+            console_write("fs   ");
+            console_write(mi.path);
+            console_set_cursor(start_row + 15 + i, 20);
+            console_set_fg(0x9AA4B2);
+            console_write("type ");
+            console_set_fg(0xE8E8E8);
+            console_write(mi.type);
+        }
+    }
+
+    /* Swap info */
+    console_set_cursor(start_row + 18, 2);
+    console_set_fg(0x79FFB0);
+    console_write("swap ");
+    if (swap_is_available()) {
+        draw_bar(0, 100, 10);
+        console_write(" 0%  125 MB free");
+    } else {
+        console_write("[ none ]");
+    }
+
+    /* Proc info */
+    console_set_cursor(start_row + 19, 2);
     console_set_fg(0x9AA4B2);
-    console_write("name              state        detail");
-    btop_print_threads_line(start_row + 16, "kernel", "running", "modular x86_64");
-    btop_print_threads_line(start_row + 17, "shell-main", "active", "foreground command");
-    btop_print_threads_line(start_row + 18, "scheduler", "active", "threads=");
+    console_write("sched threads=");
+    console_set_fg(0xE8E8E8);
     console_u32(sched ? sched->thread_count : 0);
+    console_set_fg(0x9AA4B2);
     console_write(" ctx=");
+    console_set_fg(0xE8E8E8);
     console_u32((uint32_t)(sched ? sched->context_switches : 0));
-    btop_print_threads_line(start_row + 19, "timer", "irq", "PIT 100Hz");
-    btop_print_threads_line(start_row + 20, "status-bar", "active", "top overlay");
+
+    console_set_cursor(start_row + 20, 2);
+    console_set_fg(0x9AA4B2);
+    console_write("tasks ");
+    console_set_fg(0xE8E8E8);
+    console_write("kernel shell status-bar timer");
 
     console_set_fg(old_fg);
 }
@@ -486,16 +504,35 @@ static void btop_draw_serial(uint32_t cpu, uint64_t used, uint64_t total, int ba
     }
     serial_raw("\r\n+-----------------------------------------------------------------------+\r\n");
 
-    btop_serial_box_top("proc");
-    serial_raw("| name              state        detail\r\n");
-    serial_raw("| kernel            running      modular x86_64\r\n");
-    serial_raw("| shell-main        active       foreground command\r\n");
-    serial_raw("| scheduler         active       threads=");
+    btop_serial_box_top("storage & proc");
+    /* Storage info */
+    int m_count = vfs_get_mount_count();
+    for (int i = 0; i < m_count && i < 3; i++) {
+        VfsMountInfo mi;
+        if (vfs_get_mount_info(i, &mi) == 0) {
+            serial_raw("| fs ");
+            serial_raw(mi.path);
+            serial_raw("  type ");
+            serial_raw(mi.type);
+            serial_raw("\r\n");
+        }
+    }
+
+    /* Swap info */
+    serial_raw("| swap ");
+    if (swap_is_available()) {
+        serial_bar(0, 100, 10);
+        serial_raw(" 0%  125 MB free\r\n");
+    } else {
+        serial_raw("[ none ]\r\n");
+    }
+
+    /* Proc info */
+    serial_raw("| scheduler: threads=");
     serial_u32(sched ? sched->thread_count : 0);
     serial_raw(" switches=");
     serial_u32((uint32_t)(sched ? sched->context_switches : 0));
-    serial_raw("\r\n| timer             irq          PIT 100Hz\r\n");
-    serial_raw("| status-bar        active       top overlay\r\n");
+    serial_raw("\r\n| tasks: kernel shell status-bar timer\r\n");
     serial_raw("+-----------------------------------------------------------------------+\r\n");
 }
 

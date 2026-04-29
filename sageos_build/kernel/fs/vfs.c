@@ -143,6 +143,36 @@ int vfs_mount(const char *mount_path, VfsBackend *backend) {
     return VFS_OK;
 }
 
+int vfs_get_mount_count(void) {
+    return g_mount_count;
+}
+
+int vfs_get_mount_info(int index, VfsMountInfo *out) {
+    if (index < 0 || index >= g_mount_count || !g_mounts[index].active) {
+        return VFS_ENOENT;
+    }
+    
+    /* Copy path */
+    int i = 0;
+    const char *p = g_mounts[index].path;
+    while (p[i] && i < VFS_MAX_PATH - 1) {
+        out->path[i] = p[i];
+        i++;
+    }
+    out->path[i] = 0;
+
+    /* Copy type (backend name) */
+    i = 0;
+    const char *t = g_mounts[index].backend->name;
+    while (t[i] && i < 31) {
+        out->type[i] = t[i];
+        i++;
+    }
+    out->type[i] = 0;
+
+    return VFS_OK;
+}
+
 int vfs_umount(const char *mount_path) {
     for (int i = 0; i < g_mount_count; i++) {
         if (g_mounts[i].active &&

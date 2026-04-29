@@ -14,8 +14,10 @@ IMG_INSTALLER="$ROOT/sageos-installer.img"
 ESP="$BUILD/esp.img"
 
 # Live Image Config
-LIVE_IMG_SIZE_MIB=96
+LIVE_IMG_SIZE_MIB=512
 LIVE_ESP_SIZE_MIB=64
+LIVE_BTRFS_SIZE_MIB=128
+LIVE_SWAP_SIZE_MIB=125
 
 # Installer Image Config
 INSTALLER_IMG_SIZE_MIB=512
@@ -59,14 +61,36 @@ gen_live_image() {
     local img="$IMG_LIVE"
     truncate -s "${LIVE_IMG_SIZE_MIB}M" "$img"
 
+    # Partition offsets - using same layout as installer
+    local btrfs_start=$((ESP_START_LBA + (LIVE_ESP_SIZE_MIB * 1024 * 1024 / 512)))
+    local swap_start=$((btrfs_start + (LIVE_BTRFS_SIZE_MIB * 1024 * 1024 / 512)))
+
     sgdisk --clear "$img" >/dev/null
     sgdisk \
       --new=1:${ESP_START_LBA}:+${LIVE_ESP_SIZE_MIB}M \
       --typecode=1:EF00 \
       --change-name=1:"EFI System" \
+      --new=2:${btrfs_start}:+${LIVE_BTRFS_SIZE_MIB}M \
+      --typecode=2:8300 \
+      --change-name=2:"SageOS Root (BTRFS)" \
+      --new=3:${swap_start}:+${LIVE_SWAP_SIZE_MIB}M \
+      --typecode=3:8200 \
+      --change-name=3:"SageOS Swap" \
       "$img" >/dev/null
 
+    # Flash ESP
     dd if="$ESP" of="$img" bs=512 seek="$ESP_START_LBA" conv=notrunc status=none
+
+    # Format BTRFS if tool exists
+    if command -v mkfs.btrfs >/dev/null 2>&1; then
+        echo "  Formatting BTRFS partition..."
+        local btrfs_img="$BUILD/btrfs_live.img"
+        truncate -s "${LIVE_BTRFS_SIZE_MIB}M" "$btrfs_img"
+        mkfs.btrfs -f -L SAGEOS_LIVE_ROOT "$btrfs_img" >/dev/null
+        dd if="$btrfs_img" of="$img" bs=512 seek="$btrfs_start" conv=notrunc status=none
+        rm "$btrfs_img"
+    fi
+
     echo "[OK] Live Image: $img"
 }
 

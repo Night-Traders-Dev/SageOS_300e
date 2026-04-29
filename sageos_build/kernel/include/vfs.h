@@ -153,6 +153,15 @@ int vfs_rm_rf(const char *path);
 /* List a directory (console output — convenience) */
 void vfs_ls(const char *path);
 
+/* Query mount points */
+typedef struct {
+    char path[VFS_MAX_PATH];
+    char type[32];
+} VfsMountInfo;
+
+int vfs_get_mount_count(void);
+int vfs_get_mount_info(int index, VfsMountInfo *out);
+
 /* Legacy compat */
 VfsNode *vfs_find(const char *path);
 

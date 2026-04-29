@@ -445,14 +445,15 @@ int keyboard_poll_event(KeyEvent *ev) {
 
 int keyboard_poll_any_event(KeyEvent *ev) {
     char serial_c;
-    int firmware_mode = firmware_input_available();
 
-    if (firmware_i8042_fallback_enabled()) {
-        if (keyboard_poll_event(ev)) return 1;
-    }
-
+    /*
+     * Priority 1: UEFI firmware input (if available)
+     */
     if (firmware_poll_key(ev)) return 1;
 
+    /*
+     * Priority 2: Serial terminal input
+     */
     if (serial_poll_char(&serial_c)) {
         if (serial_c == 27) return parse_serial_escape(ev);
         ev->scancode = 0;
@@ -462,7 +463,10 @@ int keyboard_poll_any_event(KeyEvent *ev) {
         return 1;
     }
 
-    if (!firmware_mode) {
+    /*
+     * Priority 3: Native i8042 PS/2 input (if fallback enabled or firmware inactive)
+     */
+    if (firmware_i8042_fallback_enabled() || !firmware_input_available()) {
         return keyboard_poll_event(ev);
     }
 

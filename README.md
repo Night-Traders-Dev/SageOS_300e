@@ -11,10 +11,10 @@ Recent updates:
   - **Firmware staging checks**: Looks for ath10k assets in VFS and reports whether `firmware-6.bin` and `board-2.bin` are present
   - **New diagnostics**: `net` reports stack/interface state and `wifi` reports detailed QCA6174A bring-up status
 - **Phase 4: Graphics Acceleration & SageLang Scripting** ✓:
-  - **Double Buffering**: 8MB back buffer allocated by UEFI bootloader for flicker-free rendering
+  - **Double Buffering**: 16MB back buffer allocated by UEFI bootloader for flicker-free rendering (supports up to 2560x1600)
   - **Fast Scrolling**: Optimized `memmove` on back buffer followed by targeted `console_flip` updates
   - **Instant Clears**: `memset32` bulk operations for rapid buffer clearing
-  - **SageLang Script Execution**: `sage run <path>` command executes `.sgvm` bytecode or `.sage` source files from VFS
+  - **SageLang Script Execution**: `sage run <path>` command executes `.sgvm bytecode` or `.sage` source files from VFS
   - **Efficient Display Updates**: `console_flip(y_start, y_end)` copies dirty regions only
   - **Performance Boost**: Scrolling is now instantaneous and flicker-free on both QEMU and hardware
 - **SageShell & MetalVM**: The kernel shell has been fully ported to SageLang. It runs on the **MetalVM** bytecode interpreter, which features a 32-level call stack, per-function constant pools, and a custom binary loading format (**SGVM**) for efficient execution.
@@ -52,7 +52,7 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | Kernel loading | Working |
 | GOP framebuffer console | Working |
 | **Graphics Acceleration** (Phase 4) | **Working** — Double buffering, fast scrolling, instant clears |
-| Framebuffer back buffer | Working — 8MB allocated by UEFI loader, used for all rendering |
+| Framebuffer back buffer | Working — 16MB allocated by UEFI loader, used for all rendering |
 | console_flip (dirty region sync) | Working — Copies specified scanline ranges to hardware framebuffer |
 | Kernel shell | Working — **SageShell** (SageLang-based) is the default REPL |
 | Shell line editing | Working — fish-style suggestions, Tab completion, cursor movement, history, and Ctrl combos |
@@ -65,7 +65,7 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | CPU% accounting | Working — real-time 1 s sliding window |
 | Status bar | Working — persistent top-bar with battery/CPU/RAM metrics, non-blocking refresh |
 | Keyboard | Working — UEFI ConIn, serial/QEMU, and native i8042; arrow/special keys unified |
-| RAM status | Working — real-time used RAM tracking; may read high with active firmware boot services |
+| RAM status | Working — real-time used RAM tracking; includes 16MB backbuffer allocation |
 | SMP | Working — INIT/SIPI sequence, per-CPU stacks, AP idle loop |
 | ACPI | Working — minimal AML parser, Battery (_BST) & Lid detection |
 | Battery | Working — CrOS EC LPC probed at 0x900/0x880/0x800; `BATT_FLAG` validity gate |
@@ -92,7 +92,6 @@ SageOS_300e/
 ├── lenovo_300e.sh           # Unified build/flash/qemu script
 ├── README.md
 ├── VERSION
-├── VERSION.h                # Auto-generated from VERSION
 └── sageos_build/
     ├── sage_lang/           # SageLang toolchain (submodule)
     ├── scripts/
@@ -105,7 +104,8 @@ SageOS_300e/
     │   ├── fs/              # VFS, FAT32, JSON, RamFS
     │   ├── include/
     │   │   ├── metal_vm.h   # VM architecture definitions
-    │   │   └── net.h        # Network device model and packet-layer types
+    │   │   ├── net.h        # Network device model and packet-layer types
+    │   │   └── version.h    # Auto-generated from VERSION
     │   └── shell/
     │       ├── shell.c      # Legacy C shell & command dispatcher
     │       ├── sage_shell/  # SageLang shell sources (.sage)
@@ -160,16 +160,17 @@ Use `lenovo_300e.sh` for all normal operations.
 ```
 
 > **QEMU notes:**
+> - **Graphical Window**: QEMU now opens a native graphical window (GTK/SDL) to render the high-resolution framebuffer console.
 > - Battery reads `--` — QEMU exposes no real ACPI battery by default.
 > - CPU% may read `0%` at an idle shell prompt — expected for a truly idle VM.
 > - `Network devices: 0` is expected in the default QEMU profile; the Lenovo 300e QCA6174A Wi-Fi card is only visible on real hardware.
-> - Shell line editing, Ctrl combinations, `btop`, and full-screen `nano` are mirrored with ANSI sequences so they behave correctly in QEMU serial output.
+> - **Serial Mirroring**: Shell line editing, Ctrl combinations, `btop`, and full-screen `nano` are still mirrored with ANSI sequences to `stdio` for debugging.
 
 ## Graphics Performance
 
 ### Phase 4: Graphics Acceleration (v0.1.2+)
 
-**Double Buffering**: A 8MB back buffer is allocated by the UEFI loader and used for all rendering operations. This eliminates flicker during screen updates and enables efficient partial updates.
+**Double Buffering**: A 16MB back buffer is allocated by the UEFI loader and used for all rendering operations. This eliminates flicker during screen updates and enables efficient partial updates at resolutions up to 2560x1600.
 
 **Fast Scrolling**: Console scrolling now uses optimized `memmove` operations on the back buffer followed by targeted `console_flip` updates, making scrolling instantaneous even on hardware.
 
@@ -368,7 +369,7 @@ Current fields include:
 magic
 framebuffer_base
 framebuffer_size
-backbuffer_address         (Phase 4: 8MB buffer for double-buffered rendering)
+backbuffer_address         (Phase 4: 16MB buffer for double-buffered rendering)
 width
 height
 pixels_per_scanline
@@ -635,7 +636,7 @@ file-backed shell commands and modules
 
 ✓ Phase 4 complete:
 ```text
-✓ Double buffering with 8MB back buffer
+✓ Double buffering with 16MB back buffer
 ✓ Fast scrolling via memmove + console_flip
 ✓ Instant clears with memset32 optimization
 ✓ sage run <path> for bytecode/source execution

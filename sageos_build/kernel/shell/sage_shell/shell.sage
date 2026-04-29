@@ -31,8 +31,8 @@ proc shell_dispatch(line):
         os_sage_exec(cmd_path)
         return nil
 
-    os_shell_exec(line)
-    return nil
+    let res = os_shell_exec(line)
+    return res
 
 proc shell_run():
     shell_prompt()

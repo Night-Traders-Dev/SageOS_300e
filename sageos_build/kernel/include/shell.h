@@ -8,7 +8,6 @@ const char *shell_completion_at(const char *prefix, int index);
 const char *shell_completion_common_prefix(const char *prefix);
 const char *shell_suggestion(const char *line);
 void shell_print_completions(const char *prefix);
-void cmd_neofetch(void);
 void cmd_btop(void);
 void cmd_install(void);
 void cmd_nano(const char *path);

@@ -21,6 +21,9 @@ proc shell_dispatch(line):
     if os_streq(line, "dmesg"):
         cmd_dmesg()
         return nil
+    if os_streq(line, "neofetch"):
+        cmd_neofetch()
+        return nil
     os_shell_exec(line)
     return nil
 

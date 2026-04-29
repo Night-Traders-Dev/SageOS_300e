@@ -401,6 +401,9 @@ static MetalValue n_cpu_percent(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_battery_percent(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; return mv_dbl((double)battery_percent());
 }
+static MetalValue n_smp_cpu_count(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;(void)a;(void)c; return mv_dbl((double)smp_cpu_count());
+}
 static MetalValue n_uptime_str(MetalVM *vm, MetalValue *a, int c) {
     (void)a;(void)c;
     uint64_t secs = timer_seconds();
@@ -694,6 +697,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_ram_total_str", n_ram_total_str);
     REG("os_cpu_percent",   n_cpu_percent);
     REG("os_battery_percent",n_battery_percent);
+    REG("os_smp_cpu_count", n_smp_cpu_count);
     REG("os_uptime_str",    n_uptime_str);
     /* btop helpers */
     REG("os_draw_bar",      n_draw_bar);

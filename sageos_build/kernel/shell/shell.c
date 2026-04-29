@@ -421,7 +421,6 @@ void shell_exec_command(const char *cmd) {
     if (streq(cmd, "")) return;
     if (starts_word(cmd, "help"))         { help(); return; }
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
-    if (starts_word(cmd, "neofetch"))     { cmd_neofetch(); return; }
     if (starts_word(cmd, "btop"))         { cmd_btop(); return; }
     if (starts_word(cmd, "install"))      { cmd_install(); return; }
     if (starts_word(cmd, "version"))      { console_write("\nSageOS kernel " SAGEOS_VERSION " modular x86_64"); return; }

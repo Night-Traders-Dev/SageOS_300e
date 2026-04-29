@@ -212,9 +212,17 @@ MetalValue n_os_get_mount_info(MetalVM* vm, MetalValue* args, int argc) {
 }
 
 #include "swap.h"
+#include "shell.h"
 MetalValue n_os_swap_is_available(MetalVM* vm, MetalValue* args, int argc) {
     (void)vm; (void)args; (void)argc;
     return mv_bool(swap_is_available());
+}
+
+MetalValue n_os_shell_exec(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_nil();
+    const char* cmd = metal_string_get(vm, args[0].as.str_idx);
+    shell_exec_command(cmd);
+    return mv_nil();
 }
 
 static void sage_register_repl_natives(MetalVM* vm) {
@@ -232,6 +240,7 @@ static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "os_get_mount_count", n_os_get_mount_count);
     metal_vm_register_native(vm, "os_get_mount_info", n_os_get_mount_info);
     metal_vm_register_native(vm, "os_swap_is_available", n_os_swap_is_available);
+    metal_vm_register_native(vm, "os_shell_exec", n_os_shell_exec);
 }
 
 static void sage_repl_reset_vm(void) {

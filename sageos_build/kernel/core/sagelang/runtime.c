@@ -688,7 +688,7 @@ void sage_run_file(const char* path) {
     if (n >= 4 && script_buffer[0] == 'S' && script_buffer[1] == 'G' &&
         script_buffer[2] == 'V' && script_buffer[3] == 'M') {
         
-        MetalVM vm;
+        static MetalVM vm;
         metal_vm_init(&vm);
         vm.write_char = metal_vm_write_char_bridge;
         sage_register_repl_natives(&vm);

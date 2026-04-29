@@ -554,7 +554,6 @@ static void collect_gop_info(void) {
         return;
     }
 
-#if !SAGEOS_EXIT_BOOT_SERVICES
     gBootInfo.framebuffer_base = gop->Mode->FrameBufferBase;
     gBootInfo.framebuffer_size = gop->Mode->FrameBufferSize;
     gBootInfo.width = gop->Mode->Info->HorizontalResolution;
@@ -562,6 +561,7 @@ static void collect_gop_info(void) {
     gBootInfo.pixels_per_scanline = gop->Mode->Info->PixelsPerScanLine;
     gBootInfo.pixel_format = gop->Mode->Info->PixelFormat;
 
+#if !SAGEOS_EXIT_BOOT_SERVICES
     print(L"GOP framebuffer: ");
     print_hex64(gBootInfo.framebuffer_base);
     print(L" ");

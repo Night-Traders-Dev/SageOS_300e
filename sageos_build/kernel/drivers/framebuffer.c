@@ -33,8 +33,8 @@ static uint32_t bg = 0x05070A;
 static char     g_screen_chars[MAX_ROWS][MAX_COLS];
 static uint32_t g_screen_fg[MAX_ROWS][MAX_COLS];
 
-#define FB_MAX_WIDTH  1366
-#define FB_MAX_HEIGHT 768
+#define FB_MAX_WIDTH  2560
+#define FB_MAX_HEIGHT 1600
 static uint32_t *g_back_buffer = NULL;
 
 extern void *sage_memcpy(void *dest, const void *src, size_t n);
@@ -334,7 +334,7 @@ void console_clear(void) {
     row = 0;
     col = 0;
 
-    if (g_have_fb && g_info) {
+    if (g_have_fb && g_info && g_back_buffer) {
         uint32_t status_height = status_rows * char_h;
         uint32_t bg_packed = pack_rgb(bg);
         
@@ -379,6 +379,7 @@ void console_init(SageOSBootInfo *info) {
         info &&
         info->magic == SAGEOS_BOOT_MAGIC &&
         info->framebuffer_base &&
+        info->backbuffer_address &&
         info->width >= 320 &&
         info->height >= 200 &&
         info->pixels_per_scanline >= info->width;

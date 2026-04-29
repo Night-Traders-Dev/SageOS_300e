@@ -69,3 +69,11 @@ void dmesg_dump(void) {
         if (c) console_putc(c);
     }
 }
+
+uint32_t dmesg_get_total(void) { return dmesg_total; }
+uint32_t dmesg_get_head(void) { return dmesg_head; }
+uint32_t dmesg_get_size(void) { return DMESG_SIZE; }
+char dmesg_get_char(uint32_t index) {
+    if (index >= DMESG_SIZE) return 0;
+    return dmesg_buf[index];
+}

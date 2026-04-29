@@ -19,13 +19,14 @@ OUT_DIR="${2:-kernel/shell}"
 SAGE_SHELL_DIR="sageos_build/kernel/shell"
 INPUT="${SAGE_SHELL_DIR}/sage_shell/shell.sage"
 COMMANDS="${SAGE_SHELL_DIR}/sage_shell/commands.sage"
+DMESG="${SAGE_SHELL_DIR}/sage_shell/dmesg.sage"
 INPUT_HELPER="${SAGE_SHELL_DIR}/sage_shell/input.sage"
 BYTECODE="${SAGE_SHELL_DIR}/sage_shell.bc"
 OUT_H="${SAGE_SHELL_DIR}/sage_shell_bytecode.h"
 COMBINED="${SAGE_SHELL_DIR}/sage_shell_combined.sage"
 
 echo "[sage-shell] Combining .sage sources..."
-cat "${INPUT_HELPER}" "${COMMANDS}" "${INPUT}" > "${COMBINED}"
+cat "${INPUT_HELPER}" "${COMMANDS}" "${DMESG}" "${INPUT}" > "${COMBINED}"
 
 echo "[sage-shell] Compiling to bytecode..."
 # sage --compile-bytecode outputs a raw binary bytecode file

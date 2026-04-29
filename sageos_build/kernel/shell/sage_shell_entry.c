@@ -569,6 +569,18 @@ static MetalValue n_keydebug(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_dmesg_dump(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; dmesg_dump(); return mv_nil();
 }
+static MetalValue n_dmesg_get_total(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;(void)a;(void)c; return mv_dbl((double)dmesg_get_total());
+}
+static MetalValue n_dmesg_get_head(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;(void)a;(void)c; return mv_dbl((double)dmesg_get_head());
+}
+static MetalValue n_dmesg_get_size(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;(void)a;(void)c; return mv_dbl((double)dmesg_get_size());
+}
+static MetalValue n_dmesg_get_char(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm; return mv_dbl((double)(unsigned char)dmesg_get_char((uint32_t)arg_num(a,c,0)));
+}
 static MetalValue n_status_print(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; status_print(); return mv_nil();
 }
@@ -704,6 +716,10 @@ static void register_natives(MetalVM *vm) {
     REG("os_shell_print_completions", n_shell_print_completions);
     REG("os_keydebug",      n_keydebug);
     REG("os_dmesg_dump",    n_dmesg_dump);
+    REG("os_dmesg_get_total", n_dmesg_get_total);
+    REG("os_dmesg_get_head",  n_dmesg_get_head);
+    REG("os_dmesg_get_size",  n_dmesg_get_size);
+    REG("os_dmesg_get_char",  n_dmesg_get_char);
     REG("os_status_print",  n_status_print);
     REG("os_status_refresh",n_status_refresh);
     REG("os_sysinfo",       n_sysinfo);

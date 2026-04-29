@@ -396,7 +396,7 @@ static void help(void) {
 
 static void cmd_fb(void) {
     SageOSBootInfo *b = console_boot_info();
-    console_write("\nFramebuffer: ");
+    console_write("\nFramebuffer:");
     if (!console_has_fb() || !b) { console_write("not available"); return; }
     console_write("enabled");
     console_write("\n  base: ");               console_hex64(b->framebuffer_base);
@@ -405,10 +405,6 @@ static void cmd_fb(void) {
     console_write("x");                        console_u32(b->height);
     console_write("\n  pixels_per_scanline: "); console_u32(b->pixels_per_scanline);
     console_write("\n  pixel_format: ");        console_u32(b->pixel_format);
-}
-
-static void cmd_dmesg(void) {
-    dmesg_dump();
 }
 
 static void cmd_color(const char *name) {
@@ -585,7 +581,7 @@ void shell_exec_command(const char *cmd) {
     }
     if (starts_with(cmd, "echo"))  { console_write("\n"); console_write(arg_after(cmd, "echo")); return; }
     if (starts_word(cmd, "color")) { cmd_color(arg_after(cmd, "color")); return; }
-    if (starts_word(cmd, "dmesg")) { cmd_dmesg(); return; }
+    // if (starts_word(cmd, "dmesg")) { cmd_dmesg(); return; }
     if (starts_word(cmd, "shutdown") || starts_word(cmd, "poweroff")) { power_shutdown(); return; }
     if (starts_word(cmd, "suspend")) { power_suspend(); return; }
     if (starts_word(cmd, "halt"))    { power_halt(); return; }

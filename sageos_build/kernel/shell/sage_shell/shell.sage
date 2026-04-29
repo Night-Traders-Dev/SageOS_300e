@@ -18,6 +18,9 @@ proc shell_prompt():
 proc shell_dispatch(line):
     if os_strlen(line) == 0:
         return nil
+    if os_strcmp(line, "dmesg") == 0:
+        cmd_dmesg()
+        return nil
     os_shell_exec(line)
     return nil
 

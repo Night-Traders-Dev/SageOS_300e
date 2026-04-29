@@ -271,6 +271,38 @@ proc read_line():
 # This file remains in the SageShell compile bundle to keep the build script
 # layout stable while the shell is reduced to prompt, history, and line editing.
 # =============================================================================
+# SageOS dmesg implementation
+# dmesg.sage
+# =============================================================================
+
+proc dmesg_dump_sage():
+    let total = os_dmesg_get_total()
+    let size = os_dmesg_get_size()
+    let head = os_dmesg_get_head()
+    
+    let start = 0
+    let count = 0
+    
+    if total < size:
+        start = 0
+        count = total
+    else:
+        start = head
+        count = size
+        
+    let i = 0
+    os_write_char(10) # Newline
+    while i < count:
+        let idx = (start + i) % size
+        let c = os_dmesg_get_char(idx)
+        if c != 0:
+            os_write_char(c)
+        i = i + 1
+
+# Export for shell dispatch if needed
+proc cmd_dmesg():
+    dmesg_dump_sage()
+# =============================================================================
 # SageOS Shell - Main Shell Loop
 # shell.sage
 #
@@ -289,6 +321,9 @@ proc shell_prompt():
 
 proc shell_dispatch(line):
     if os_strlen(line) == 0:
+        return nil
+    if os_strcmp(line, "dmesg") == 0:
+        cmd_dmesg()
         return nil
     os_shell_exec(line)
     return nil

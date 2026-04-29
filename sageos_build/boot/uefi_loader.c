@@ -802,9 +802,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
     gBootInfo.kernel_base = KERNEL_LOAD_ADDR;
     gBootInfo.kernel_size = kernel_size;
 
-    /* Allocate 8MB for backbuffer */
+    /* Allocate 16MB for backbuffer (supports up to 2560x1600) */
     EFI_PHYSICAL_ADDRESS bb_addr = 0;
-    status = gBS->AllocatePages(AllocateAnyPages, EfiLoaderData, 2048, &bb_addr);
+    status = gBS->AllocatePages(AllocateAnyPages, EfiLoaderData, 4096, &bb_addr);
     if (status == EFI_SUCCESS) {
         gBootInfo.backbuffer_address = bb_addr;
     } else {

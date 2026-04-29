@@ -311,8 +311,7 @@ qemu_run() {
       -cpu Skylake-Client \
       -drive id=hd0,file="$IMG",format=raw,media=disk,snapshot=on \
       -m 256M \
-      -display curses \
-      -monitor none \
+      -serial stdio \
       -device isa-debug-exit,iobase=0x501,iosize=2; then
         local rc=$?
         # rc=1 is the normal 'exit' command path (write 0x00 => (0<<1)|1 = 1)

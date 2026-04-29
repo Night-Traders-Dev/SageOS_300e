@@ -201,6 +201,15 @@ build_image() {
 
     # Compile SageLang shell sources -> bytecode -> C header
     echo "--- Compiling SageLang shell sources (SageShell) ---"
+    
+    # Generate embedded commands header
+    if [ -d "$KERNEL/etc/commands" ]; then
+        python3 "$KERNEL/fs/embed_commands.py" "$KERNEL/etc/commands" "$KERNEL/fs/commands_embed.h"
+    else
+        echo "/* No commands to embed */" > "$KERNEL/fs/commands_embed.h"
+        echo "static void ramfs_embed_commands(void) {}" >> "$KERNEL/fs/commands_embed.h"
+    fi
+
     if command -v sage > /dev/null 2>&1; then
         bash "$BUILD/scripts/compile_sage_shell.sh" sage "$KERNEL/shell"
     elif [ -x "$BUILD/sage_lang/sage" ]; then

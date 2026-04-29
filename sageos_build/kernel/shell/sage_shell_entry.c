@@ -447,6 +447,11 @@ static MetalValue n_delay_ms(MetalVM *vm, MetalValue *a, int c) {
 }
 
 /* --- Kernel commands --- */
+static MetalValue n_path_exists(MetalVM *vm, MetalValue *a, int c) {
+    const char *path = arg_str(vm, a, c, 0);
+    VfsStat st;
+    return mv_bool(vfs_stat(path, &st) == 0);
+}
 static MetalValue n_ls(MetalVM *vm, MetalValue *a, int c) {
     const char *path = arg_str(vm, a, c, 0);
     if (!*path) path = "/";
@@ -703,6 +708,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_draw_bar",      n_draw_bar);
     REG("os_delay_ms",      n_delay_ms);
     /* Kernel commands */
+    REG("os_path_exists",   n_path_exists);
     REG("os_ls",            n_ls);
     REG("os_cat",           n_cat);
     REG("os_mkdir",         n_mkdir);

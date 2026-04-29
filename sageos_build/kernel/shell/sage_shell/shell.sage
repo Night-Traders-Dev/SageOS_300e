@@ -24,6 +24,14 @@ proc shell_dispatch(line):
     if os_streq(line, "neofetch"):
         cmd_neofetch()
         return nil
+
+    # Hot Dispatch: Check for command script in /etc/commands/
+    # For now, we only handle single-word commands without arguments
+    let cmd_path = "/etc/commands/" + line + ".sage"
+    if os_path_exists(cmd_path):
+        os_sage_exec(cmd_path)
+        return nil
+
     os_shell_exec(line)
     return nil
 

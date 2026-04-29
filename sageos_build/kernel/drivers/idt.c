@@ -27,7 +27,7 @@ static void idt_set_gate(uint8_t vector, void *handler) {
     uint64_t addr = (uint64_t)(uintptr_t)handler;
 
     idt[vector].offset_low = (uint16_t)(addr & 0xFFFF);
-    idt[vector].selector = 0x38;
+    idt[vector].selector = 0x08;  /* kernel_gdt: 64-bit code segment */
     idt[vector].ist = 0;
     idt[vector].type_attr = 0x8E;
     idt[vector].offset_mid = (uint16_t)((addr >> 16) & 0xFFFF);

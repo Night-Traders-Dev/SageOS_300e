@@ -64,9 +64,13 @@ void timer_irq(void) {
     extern void ata_timer_tick(void);
     ata_timer_tick();
 
-    /* Process serial output buffer */
-    extern void serial_process_tx_buffer(void);
-    serial_process_tx_buffer();
+    /*
+     * Do NOT call serial_process_tx_buffer() here.
+     * Calling outb() from inside an IRQ handler re-enters QEMU's I/O
+     * mutex (already held for IRQ delivery) and triggers the TCG assertion:
+     *   qemu_mutex_lock_iothread_impl: assertion failed: (!qemu_mutex_iothread_locked())
+     * Serial TX is driven inline by serial_putc() / serial_write().
+     */
 
     sched_timer_tick();
 

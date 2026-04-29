@@ -1,10 +1,19 @@
 .global _start
 .extern kmain
 
+.section .rodata
+.align 16
+kernel_gdt:
+    .quad 0x0000000000000000   /* 0x00: null */
+    .quad 0x00AF9A000000FFFF   /* 0x08: 64-bit code, DPL0, present */
+    .quad 0x00AF92000000FFFF   /* 0x10: 64-bit data, DPL0, present */
+kernel_gdt_end:
+
 .section .text
 .code64
 
 _start:
+    cli
     cld
     mov %rcx, %rbx
 
@@ -17,6 +26,50 @@ _start:
     sub %rdi, %rcx
     xor %eax, %eax
     rep stosb
+
+    /*
+     * Install our own GDT so we are not relying on OVMF's GDT layout.
+     * OVMF's selector 0x38 is not guaranteed to be a 64-bit code segment
+     * across all firmware versions — a wrong selector in an IDT gate causes
+     * an immediate triple fault on the first exception.
+     *
+     * Build the GDTR on the stack at runtime to avoid any linker absolute
+     * address embedding issue in a flat binary.
+     *
+     * Our GDT layout:
+     *   0x00 null
+     *   0x08 64-bit code (DPL 0)
+     *   0x10 64-bit data (DPL 0)
+     *
+     * GDTR format (10 bytes): [limit:16][base:64]
+     * We build it on the stack: push base (8 bytes), then push limit word.
+     * The sub/movw approach ensures the structure is correctly laid out.
+     */
+    lea kernel_gdt(%rip), %rax      /* base of GDT */
+    subq $16, %rsp                  /* make room on stack for GDTR */
+    movq %rax, 2(%rsp)              /* store 64-bit base at offset +2 */
+    movw $(kernel_gdt_end - kernel_gdt - 1), %cx
+    movw %cx, 0(%rsp)               /* store 16-bit limit at offset +0 */
+    lgdt (%rsp)
+    addq $16, %rsp
+
+    /* Reload data segment registers with the new data selector. */
+    mov $0x10, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+    mov %ax, %ss
+
+    /*
+     * Far-return to flush CS with our 64-bit code selector (0x08).
+     * We push the new CS:RIP pair and lretq to atomically reload CS.
+     */
+    lea .Lafter_lgdt(%rip), %rax
+    pushq $0x08       /* new CS */
+    pushq %rax        /* return RIP */
+    lretq
+.Lafter_lgdt:
 
     lea stack_top(%rip), %rsp
     andq $-16, %rsp

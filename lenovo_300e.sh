@@ -352,7 +352,16 @@ qemu_run() {
     local ovmf=""
     local target_img="${1:-$IMG_LIVE}"
 
-    export SAGEOS_EXIT_BOOT_SERVICES=1
+    # SAGEOS_EXIT_BOOT_SERVICES is a compile-time flag baked into BOOTX64.EFI.
+    # Running the kernel with boot services still active (the default=0) is
+    # fundamentally unsafe: UEFI's own timer/event callbacks keep firing after
+    # the kernel installs its GDT, IDT, and PIT, which causes an immediate
+    # triple fault and reset. ExitBootServices() MUST be called before the
+    # kernel takes over — this is the standard OS loader contract.
+    #
+    # Always rebuild for QEMU with SAGEOS_EXIT_BOOT_SERVICES=1.
+    echo "--- Rebuilding with SAGEOS_EXIT_BOOT_SERVICES=1 for QEMU ---"
+    SAGEOS_EXIT_BOOT_SERVICES=1 build_image
 
     for f in \
         /usr/share/ovmf/OVMF.fd \
@@ -370,31 +379,37 @@ qemu_run() {
         exit 1
     fi
 
-    if [ ! -f "$target_img" ]; then
-        echo "Image $target_img not found. Building first..."
-        build_image
-    fi
-
     echo "Disk device is $target_img"
 
     pkill -9 -f qemu-system-x86_64 >/dev/null 2>&1 || true
     restore_tty
 
+    # QEMU flags rationale:
+    #
+    # -machine q35
+    #   Q35 chipset (ICH9 + PCIe) instead of the legacy i440FX+PIIX3.
+    #   Under TCG, the legacy PIIX3 PIC wiring can cause re-entrant I/O
+    #   traps (qemu_mutex_lock_iothread assertion) when the kernel's IRQ0
+    #   handler issues outb() calls while QEMU is already processing a
+    #   prior I/O instruction. Q35 avoids this.
+    #
+    # -accel tcg,thread=single
+    #   Run TCG in single-threaded mode; prevents races between the TCG
+    #   execution thread and QEMU's I/O thread.
+    #
     # -cpu Skylake-Client
     #   Exposes CPUID leaf 0x16 (processor frequency information) so
     #   sysinfo can read base/max MHz directly instead of falling back
     #   to RDTSC calibration.  Skylake-Client matches the ISA level of
-    #   the Celeron N4020 (Gemini Lake, which is Goldmont Plus — a
-    #   close enough model for diagnostic purposes).
+    #   the Celeron N4020 (Gemini Lake / Goldmont Plus).
     #
     # -device isa-debug-exit,iobase=0x501,iosize=2
     #   Allows the kernel 'exit' command to terminate QEMU cleanly.
     #   Writing 0x00 to port 0x501 exits with code 1.
-    #
-    # -drive id=hd0,...,media=disk
-    #   Suppresses OVMF's "Disk device is ..." probe diagnostic.
     if ! qemu-system-x86_64 \
+      -machine q35 \
       -bios "$ovmf" \
+      -accel tcg,thread=single \
       -cpu Skylake-Client \
       -drive id=hd0,file="$target_img",format=raw,media=disk,snapshot=on \
       -m 256M \
@@ -411,6 +426,7 @@ qemu_run() {
 
     restore_tty
 }
+
 
 flash_usb() {
     local img="${1:-$IMG_LIVE}"

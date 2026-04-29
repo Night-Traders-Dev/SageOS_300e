@@ -151,6 +151,38 @@ MetalValue n_os_write_str(MetalVM* vm, MetalValue* args, int argc) {
     return mv_nil();
 }
 
+MetalValue n_os_set_color_hex(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm;
+    if (argc >= 1 && args[0].type == MV_NUM) {
+        union { double d; uint64_t u; } v;
+        v.u = args[0].as.num_bits;
+        console_set_fg((uint32_t)v.d);
+    }
+    return mv_nil();
+}
+
+MetalValue n_os_path_exists(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_bool(0);
+    const char* path = metal_string_get(vm, args[0].as.str_idx);
+    VfsStat st;
+    return mv_bool(vfs_stat(path, &st) == 0);
+}
+
+MetalValue n_os_cat(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_nil();
+    const char* path = metal_string_get(vm, args[0].as.str_idx);
+    char buf[513];
+    uint64_t off = 0;
+    while (1) {
+        int n = vfs_read(path, off, buf, 512);
+        if (n <= 0) break;
+        buf[n] = 0;
+        console_write(buf);
+        off += (uint64_t)n;
+    }
+    return mv_nil();
+}
+
 static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "len", n_len);
     metal_vm_register_native(vm, "os_strlen", n_os_strlen);
@@ -160,6 +192,9 @@ static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "os_version_string", n_os_version_string);
     metal_vm_register_native(vm, "os_write_char", n_os_write_char);
     metal_vm_register_native(vm, "os_write_str", n_os_write_str);
+    metal_vm_register_native(vm, "os_set_color_hex", n_os_set_color_hex);
+    metal_vm_register_native(vm, "os_path_exists", n_os_path_exists);
+    metal_vm_register_native(vm, "os_cat", n_os_cat);
 }
 
 static void sage_repl_reset_vm(void) {
@@ -443,7 +478,7 @@ void sage_repl_step(const char* line) {
         int is_expression = (stmt->type == STMT_EXPRESSION);
 
         bytecode_chunk_init(&chunk);
-        if (!bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_STRICT,
+        if (!bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_HYBRID,
                                                        sage_repl_build_function, &g_repl_vm,
                                                        error, sizeof(error))) {
             if (!sage_exit_flag) {

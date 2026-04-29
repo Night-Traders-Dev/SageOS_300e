@@ -1,3 +1,4 @@
+<a name="top"></a>
 # SageOS Lenovo 300e Build
 
 SageOS is a small x86_64 UEFI operating system bring-up project targeting the **Lenovo 300e Chromebook 2nd Gen AST**.
@@ -5,6 +6,11 @@ SageOS is a small x86_64 UEFI operating system bring-up project targeting the **
 The kernel boots through UEFI, loads a freestanding kernel, initializes a GOP framebuffer console with graphics acceleration, runs a kernel-resident SageShell with fish-style line editing, discovers platform hardware through ACPI, and provides early diagnostics for keyboard, framebuffer, SMP, ACPI, timer, memory, and battery/EC support.
 
 Recent updates:
+- **Phase 7: Programmable Init System** ✓:
+  - **SageInit**: Implemented a programmable init system in SageLang (`/etc/init.sage`). See [Init System Documentation](docs/init_system.md).
+  - **Early System Boot**: The kernel now hands off execution to the init script for service bring-up and system configuration.
+  - **Native Bridge**: Exposed a rich set of kernel native APIs (VFS, console, system info) to the SageLang init process.
+  - **Unified Banner**: Moved system banner and MOTD logic from C to the SageLang init script.
 - **Phase 6: Advanced Storage & Dual-Image Installer** ✓:
   - **BTRFS Root Support**: Implemented a minimal BTRFS superblock detector and VFS backend for root partition support.
   - **SWAP Support**: Added SWAP partition identification and memory management groundwork.
@@ -57,6 +63,7 @@ CPU:    AMD x86_64, multi-core SMP enabled
 | PE/COFF BOOTX64.EFI | Working |
 | Kernel loading | Working |
 | GOP framebuffer console | Working |
+| **Programmable Init** (Phase 7) | **Working** — `/etc/init.sage` manages boot flow |
 | **Graphics Acceleration** (Phase 4) | **Working** — Double buffering, fast scrolling, instant clears |
 | Framebuffer back buffer | Working — 16MB allocated by UEFI loader, used for all rendering |
 | console_flip (dirty region sync) | Working — Copies specified scanline ranges to hardware framebuffer |
@@ -365,7 +372,7 @@ Kernel entry.S bridges ABI and stack
   ↓
 kmain()
   ↓
-serial → console → ACPI → SMP → IDT → PIT/IRQ → VFS → PCI → storage → net → keyboard → shell
+serial → console → ACPI → SMP → IDT → PIT/IRQ → VFS → PCI → storage → net → keyboard → SageInit (/etc/init.sage) → shell
 ```
 
 ## Boot Info Handoff

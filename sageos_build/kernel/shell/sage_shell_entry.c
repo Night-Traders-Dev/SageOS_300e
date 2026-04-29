@@ -754,6 +754,16 @@ static void register_natives(MetalVM *vm) {
 #undef REG
 }
 
+/* --- System Init --- */
+void sage_init_run(void) {
+    extern void sage_run_file(const char *path);
+    if (vfs_stat("/etc/init.sage", NULL) == 0) {
+        sage_run_file("/etc/init.sage");
+    } else {
+        console_write("\nWARN: /etc/init.sage not found, skipping init system.\n");
+    }
+}
+
 /* -----------------------------------------------------------------------
  * sage_shell_run — public entry point called from shell.c "sageshell" command
  * --------------------------------------------------------------------- */

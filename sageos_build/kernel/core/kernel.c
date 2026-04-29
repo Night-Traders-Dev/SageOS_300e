@@ -36,18 +36,6 @@ static void shell_main_thread(void *arg) {
     }
 }
 
-static void banner(void) {
-    uint32_t old = console_get_fg();
-
-    console_set_fg(0x79FFB0);
-    console_write("  ____    _    ____ _____ ___  ____  \n");
-    console_write(" / ___|  / \\  / ___| ____/ _ \\/ ___| \n");
-    console_write(" \\___ \\ / _ \\| |  _|  _|| | | \\___ \\ \n");
-    console_write("  ___) / ___ \\ |_| | |__| |_| |___) |\n");
-    console_write(" |____/_/   \\_\\____|_____\\___/|____/ \n");
-    console_set_fg(old);
-    console_write("\n");
-}
 
 static int firmware_input_mode(SageOSBootInfo *info) {
     return

@@ -149,21 +149,7 @@ static int dequeue_scancode(uint8_t *sc) {
     return 1;
 }
 
-static int wait_read(void) {
-    for (uint32_t i = 0; i < 100000; i++) {
-        if (inb(I8042_STATUS) & I8042_OBF) return 1;
-        cpu_pause();
-    }
-    return 0;
-}
 
-static int wait_write(void) {
-    for (uint32_t i = 0; i < 100000; i++) {
-        if ((inb(I8042_STATUS) & I8042_IBF) == 0) return 1;
-        cpu_pause();
-    }
-    return 0;
-}
 
 static void flush_output(void) {
     for (int i = 0; i < 32; i++) {
@@ -172,18 +158,7 @@ static void flush_output(void) {
     }
 }
 
-static void command(uint8_t v) {
-    if (wait_write()) outb(I8042_COMMAND, v);
-}
 
-static void data(uint8_t v) {
-    if (wait_write()) outb(I8042_DATA, v);
-}
-
-static uint8_t read_timeout(uint8_t fallback) {
-    if (wait_read()) return inb(I8042_DATA);
-    return fallback;
-}
 
 static void drain_controller(void) {
     for (int i = 0; i < 32; i++) {  /* Increased from 16 to 32 */
@@ -208,42 +183,15 @@ void keyboard_init(void) {
 
     if (firmware_input_available() && !firmware_i8042_fallback_enabled()) return;
 
-    command(0xAD);
-    command(0xA7);
-    flush_output();
-
-    command(0x20);
-    uint8_t cfg = read_timeout(0);
-    cfg &= (uint8_t)~0x03;  /* Disable keyboard and mouse interrupts */
-    cfg |= 0x10;           /* Disable mouse interface */
-    cfg |= 0x20;           /* Enable scancode translation */
-
-    command(0x60);
-    data(cfg);
-
-    command(0xAE);
-    flush_output();
-
-    /* Enable keyboard scanning */
-    data(0xF4);
-    if (wait_read()) {
-        uint8_t ack = inb(I8042_DATA);
-        if (ack != 0xFA) {
-            /* Keyboard didn't acknowledge, try again */
-            data(0xF4);
-            (void)read_timeout(0);
-        }
-    }
-
-    command(0x20);
-    cfg = read_timeout(cfg);
-    cfg |= 0x01;           /* Enable keyboard interrupts */
-    cfg |= 0x10;           /* Disable mouse interface */
-    cfg |= 0x20;           /* Enable scancode translation */
-    cfg &= (uint8_t)~0x02; /* Disable mouse interrupts */
-
-    command(0x60);
-    data(cfg);
+    /* 
+     * Modern hardware (like the Lenovo 300e) often provides PS/2 keyboard 
+     * emulation via USB SMM (System Management Mode) or an Embedded Controller.
+     * Sending full reset/reconfiguration commands (0xAD, 0x20, 0x60, etc.) 
+     * to the 8042 controller can break this emulation and leave the keyboard dead.
+     * 
+     * Since the BIOS has already initialized the keyboard for us, we just 
+     * flush any pending output and leave the configuration intact. 
+     */
     flush_output();
 }
 

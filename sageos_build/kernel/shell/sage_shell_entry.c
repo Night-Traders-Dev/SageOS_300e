@@ -651,8 +651,8 @@ static MetalValue n_qemu_exit(MetalVM *vm, MetalValue *a, int c) {
 }
 static MetalValue n_sage_exec(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;
-    extern void sage_execute(const char *module_name);
-    sage_execute(arg_str(vm,a,c,0));
+    extern void sage_run_file(const char *path);
+    sage_run_file(arg_str(vm,a,c,0));
     return mv_nil();
 }
 

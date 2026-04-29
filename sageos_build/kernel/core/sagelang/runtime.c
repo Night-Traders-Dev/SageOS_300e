@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "metal_vm.h"
 #include "sage_alloc.h"
+#include "version.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -127,12 +128,38 @@ MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) {
     return mv_dbl(0.0);
 }
 
+MetalValue n_os_version_string(MetalVM* vm, MetalValue* args, int argc) {
+    (void)args;(void)argc;
+    return mv_str(vm, SAGEOS_VERSION, (int)strlen(SAGEOS_VERSION));
+}
+
+MetalValue n_os_write_char(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm;
+    if (argc >= 1 && args[0].type == MV_NUM) {
+        union { double d; uint64_t u; } v;
+        v.u = args[0].as.num_bits;
+        console_putc((char)v.d);
+    }
+    return mv_nil();
+}
+
+MetalValue n_os_write_str(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc >= 1 && args[0].type == MV_STR) {
+        const char* s = metal_string_get(vm, args[0].as.str_idx);
+        if (s) console_write(s);
+    }
+    return mv_nil();
+}
+
 static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "len", n_len);
     metal_vm_register_native(vm, "os_strlen", n_os_strlen);
     metal_vm_register_native(vm, "os_starts_with", n_os_starts_with);
     metal_vm_register_native(vm, "os_array_len", n_os_array_len);
     metal_vm_register_native(vm, "os_stat", n_os_stat);
+    metal_vm_register_native(vm, "os_version_string", n_os_version_string);
+    metal_vm_register_native(vm, "os_write_char", n_os_write_char);
+    metal_vm_register_native(vm, "os_write_str", n_os_write_str);
 }
 
 static void sage_repl_reset_vm(void) {

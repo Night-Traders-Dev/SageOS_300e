@@ -66,15 +66,24 @@ void kmain(SageOSBootInfo *info) {
         dmesg_log("SMP initialized (firmware input mode)");
     }
 
-    /* Timer-driven status updates and CPU accounting must work even when
-       firmware console input is active. */
-    timer_init();
-    dmesg_log("timer initialized");
-    idt_init();
-    dmesg_log("IDT initialized");
-    ata_init();
-    dmesg_log("ATA initialized");
-    irq_enable();
+    if (!firmware_input) {
+        /* Timer-driven status updates and CPU accounting */
+        timer_init();
+        dmesg_log("timer initialized");
+        idt_init();
+        dmesg_log("IDT initialized");
+        ata_init();
+        dmesg_log("ATA initialized");
+        irq_enable();
+    } else {
+        dmesg_log("skipping IDT/timer initialization (firmware input mode)");
+        /*
+         * We still need ATA initialized even if we don't use interrupts for it
+         * (ATA polling mode will be used if interrupts aren't available).
+         */
+        ata_init();
+        dmesg_log("ATA initialized (polling mode)");
+    }
 
     battery_init();
     dmesg_log("battery subsystem initialized");

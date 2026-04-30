@@ -45,6 +45,14 @@ _start:
      * We build it on the stack: push base (8 bytes), then push limit word.
      * The sub/movw approach ensures the structure is correctly laid out.
      */
+    /*
+     * Check if boot services are active (offset 0x54 in SageOSBootInfo).
+     * If they are, skip loading our GDT and IDT so we don't break UEFI's
+     * interrupt handlers and timer (required for UEFI keyboard input).
+     */
+    cmpl $0, 0x54(%rbx)
+    jne .Lafter_lgdt
+
     lea kernel_gdt(%rip), %rax      /* base of GDT */
     subq $16, %rsp                  /* make room on stack for GDTR */
     movq %rax, 2(%rsp)              /* store 64-bit base at offset +2 */

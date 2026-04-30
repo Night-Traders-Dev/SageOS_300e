@@ -262,7 +262,7 @@ build_image() {
     # Native i8042 and PIT IRQ0 drivers may conflict with UEFI firmware
     # interrupt ownership.  Use SAGEOS_EXIT_BOOT_SERVICES=1 for the strict
     # hardware path (keyboard reverts to native-only; ConIn no longer works).
-    if [ "${SAGEOS_EXIT_BOOT_SERVICES:-1}" = "0" ]; then
+    if [ "${SAGEOS_EXIT_BOOT_SERVICES:-0}" = "0" ]; then
         echo "WARN: SAGEOS_EXIT_BOOT_SERVICES=0 — UEFI boot services remain active."
         echo "      Firmware ConIn is primary; i8042 fallback is disabled by default."
         echo "      Set SAGEOS_FIRMWARE_I8042_FALLBACK=1 only for input diagnostics."
@@ -276,7 +276,7 @@ build_image() {
       -fno-stack-protector \
       -fshort-wchar \
       -mno-red-zone \
-      -DSAGEOS_EXIT_BOOT_SERVICES="${SAGEOS_EXIT_BOOT_SERVICES:-1}" \
+      -DSAGEOS_EXIT_BOOT_SERVICES="${SAGEOS_EXIT_BOOT_SERVICES:-0}" \
       -Wall \
       -Wextra \
       -c "$BOOT/uefi_loader.c" \
@@ -361,7 +361,7 @@ qemu_run() {
     #
     # Always rebuild for QEMU with SAGEOS_EXIT_BOOT_SERVICES=1.
     echo "--- Rebuilding with SAGEOS_EXIT_BOOT_SERVICES=1 for QEMU ---"
-    SAGEOS_EXIT_BOOT_SERVICES=1 build_image
+    build_image
 
     for f in \
         /usr/share/ovmf/OVMF.fd \

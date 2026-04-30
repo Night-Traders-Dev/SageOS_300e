@@ -130,6 +130,16 @@ uint32_t timer_cpu_percent(void) {
 }
 
 void timer_delay_ms(uint32_t ms) {
+    if (pit_reload == 0) {
+        /* Firmware mode: PIT not initialized, use a rough busy loop */
+        for (uint32_t i = 0; i < ms; i++) {
+            for (uint32_t j = 0; j < 10000; j++) {
+                cpu_pause();
+            }
+        }
+        return;
+    }
+
     uint64_t start = ticks;
     uint64_t end = start + (ms * PIT_HZ) / 1000;
     if (end == start && ms > 0) end++;

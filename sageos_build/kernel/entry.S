@@ -11,9 +11,17 @@ kernel_gdt_end:
 
 .section .text
 .code64
-
+.global _start
 _start:
+    /* 
+     * RCX points to SageOSBootInfo (MS ABI).
+     * Check boot_services_active at offset 0x54.
+     * If active, keep interrupts enabled so UEFI background tasks (USB) can run.
+     */
+    cmpl $0, 0x54(%rcx)
+    jne .Lkeep_irqs
     cli
+.Lkeep_irqs:
     cld
     mov %rcx, %rbx
 

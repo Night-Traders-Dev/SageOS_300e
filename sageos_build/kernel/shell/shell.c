@@ -705,6 +705,7 @@ void shell_run(void) {
     uint32_t start_row = 0;
     uint32_t start_col = 0;
     size_t displayed_len = 0;
+    size_t line_max = SHELL_LINE_MAX - 1;  /* effective cap, recomputed per-prompt */
 
     shell_history_count = 0;
     shell_history_head  = 0;
@@ -712,6 +713,14 @@ void shell_run(void) {
 
     prompt();
     console_get_cursor(&start_row, &start_col);
+    /* Clamp input length to the remaining columns on this row so the line
+     * never wraps — the redraw logic assumes single-row input. */
+    {
+        uint32_t cols = console_cols();
+        if (cols > start_col + 2)
+            line_max = cols - start_col - 2;
+        if (line_max >= SHELL_LINE_MAX) line_max = SHELL_LINE_MAX - 1;
+    }
     line[0] = 0;
 
     for (;;) {
@@ -798,6 +807,13 @@ void shell_run(void) {
             shell_history_nav = -1;
             prompt();
             console_get_cursor(&start_row, &start_col);
+            /* Recompute line_max for the new prompt position */
+            {
+                uint32_t cols = console_cols();
+                if (cols > start_col + 2)
+                    line_max = cols - start_col - 2;
+                if (line_max >= SHELL_LINE_MAX) line_max = SHELL_LINE_MAX - 1;
+            }
             continue;
         }
         if (c == 3) { /* Ctrl-C */
@@ -843,7 +859,7 @@ void shell_run(void) {
             continue;
         }
 
-        if ((uint8_t)c >= 32 && (uint8_t)c <= 126 && len + 1 < sizeof(line)) {
+        if ((uint8_t)c >= 32 && (uint8_t)c <= 126 && len < line_max) {
             int append_at_end = (pos == len) && (displayed_len == len);
             memmove(line + pos + 1, line + pos, len - pos + 1);
             line[pos] = c;

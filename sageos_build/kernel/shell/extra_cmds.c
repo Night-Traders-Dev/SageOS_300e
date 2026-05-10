@@ -843,3 +843,14 @@ void cmd_source(const char *path) {
         line_no++;
     }
 }
+
+/* ------------------------------------------------------------------ */
+/* dmesg                                                               */
+/* ------------------------------------------------------------------ */
+
+#include "dmesg.h"
+
+void cmd_dmesg(void) {
+    console_write("\n");
+    dmesg_dump();
+}

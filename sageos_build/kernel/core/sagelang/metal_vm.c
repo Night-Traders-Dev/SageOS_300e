@@ -154,9 +154,18 @@ MetalValue mv_bool(int val) {
 }
 
 MetalValue mv_str(MetalVM* vm, const char* s, int len) {
-    MetalValue v;
-    v.type = MV_STR;
+    MetalValue v; v.type = MV_STR;
     v.as.str_idx = metal_string_intern(vm, s, len);
+    
+    console_write("[debug] mv_str: len=");
+    console_u32((uint32_t)len);
+    console_write(" s=");
+    for (int i = 0; i < len; i++) {
+        if (s[i] >= 32 && s[i] <= 126) vm->write_char(s[i]);
+        else vm->write_char('?');
+    }
+    console_write("\n");
+    
     return v;
 }
 
@@ -220,6 +229,16 @@ static int load_const_pool(MetalVM* vm, const unsigned char* data, int length, i
             int slen = read_u16_le(data, pos);
             if (*pos + slen > length) break;
             v = mv_str(vm, (const char*)&data[*pos], slen);
+            if (v.as.str_idx < 0) {
+                console_write("Metal VM: FAILED TO INTERN STRING\n");
+            }
+            
+            console_write("[debug] load_const: string idx=");
+            console_u32((uint32_t)i);
+            console_write(" val=");
+            console_write(metal_string_get(vm, v.as.str_idx));
+            console_write("\n");
+            
             *pos += slen;
         } else {
             v = mv_nil();
@@ -260,6 +279,9 @@ int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     // Functions
     if (pos + 2 > length) return 1; // No functions? That's okay.
     int fn_count = read_u16_le(data, &pos);
+    console_write("[debug] load_binary: loading ");
+    console_u32((uint32_t)fn_count);
+    console_write(" functions\n");
     if (fn_count < 0 || fn_count > (int)(sizeof(vm->functions)/sizeof(vm->functions[0]))) {
         console_write("load_binary: too many functions\n");
         return 0;
@@ -712,13 +734,18 @@ int metal_vm_step(MetalVM* vm) {
             if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_GET_GLOBAL: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
             unsigned int hash = fnv1a_hash(name, (int)strlen(name));
+            
+            console_write("[debug] OP_GET_GLOBAL: ");
+            console_write(name);
+            
             MetalValue val;
             if (scope_lookup(vm, hash, &val)) {
+                console_write(" type: ");
+                console_u32(val.type);
+                console_write("\n");
                 metal_vm_push(vm, val);
             } else {
-                console_write("[debug] OP_GET_GLOBAL nil lookup: ");
-                console_write(name);
-                console_write("\n");
+                console_write(" (NOT FOUND)\n");
                 metal_vm_push(vm, mv_nil());
             }
             break;
@@ -746,6 +773,11 @@ int metal_vm_step(MetalVM* vm) {
             MetalValue val;
             val.type = MV_FN;
             val.as.fn_idx = fn_idx;
+            console_write("[debug] OP_DEFINE_FN: name=");
+            console_write(name);
+            console_write(" index=");
+            console_u32((uint32_t)fn_idx);
+            console_write("\n");
             scope_define(vm, hash, val);
             break;
         }

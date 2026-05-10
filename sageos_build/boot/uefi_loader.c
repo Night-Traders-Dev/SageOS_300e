@@ -291,15 +291,31 @@ typedef EFI_STATUS (EFIAPI *EFI_FILE_GET_INFO)(
     void *buffer
 );
 
+typedef EFI_STATUS (EFIAPI *EFI_FILE_WRITE)(
+    EFI_FILE_PROTOCOL *self,
+    UINTN *buffer_size,
+    void *buffer
+);
+
+typedef EFI_STATUS (EFIAPI *EFI_FILE_GET_POSITION)(
+    EFI_FILE_PROTOCOL *self,
+    UINT64 *position
+);
+
+typedef EFI_STATUS (EFIAPI *EFI_FILE_SET_POSITION)(
+    EFI_FILE_PROTOCOL *self,
+    UINT64 position
+);
+
 struct EFI_FILE_PROTOCOL {
     UINT64 Revision;
     EFI_FILE_OPEN Open;
     EFI_FILE_CLOSE Close;
     void *Delete;
     EFI_FILE_READ Read;
-    void *Write;
-    void *GetPosition;
-    void *SetPosition;
+    EFI_FILE_WRITE Write;
+    EFI_FILE_GET_POSITION GetPosition;
+    EFI_FILE_SET_POSITION SetPosition;
     EFI_FILE_GET_INFO GetInfo;
     void *SetInfo;
     void *Flush;
@@ -395,6 +411,16 @@ typedef struct {
     UINT64 kernel_base;
     UINT64 kernel_size;
     UINT64 backbuffer_address;
+
+    /*
+     * USB / ESP boot-log handoff.
+     * The UEFI loader opens BOOTLOG.TXT on the ESP and passes the open
+     * EFI_FILE_PROTOCOL* here so the kernel can append to it via UEFI
+     * boot services (which remain active in firmware-input mode).
+     * log_offset tracks the current byte position for SetPosition.
+     */
+    UINT64 log_file;    /* EFI_FILE_PROTOCOL* cast to UINT64, 0 if none */
+    UINT64 log_offset;  /* current write position in the log file        */
 } __attribute__((packed)) SageOSBootInfo;
 
 #define SAGEOS_BOOT_MAGIC 0x534147454F534249ULL
@@ -432,6 +458,7 @@ static EFI_GUID ACPI_10_TABLE_GUID = {
 static EFI_SYSTEM_TABLE *gST;
 static EFI_BOOT_SERVICES *gBS;
 static SageOSBootInfo gBootInfo;
+static EFI_FILE_PROTOCOL *gLogFile = 0;  /* open BOOTLOG.TXT handle */
 
 static void print(CHAR16 *s) {
     if (gST && gST->ConOut) {
@@ -763,6 +790,119 @@ static EFI_STATUS handoff_memory_map(EFI_HANDLE image_handle, int exit_boot_serv
     return EFI_INVALID_PARAMETER;
 }
 
+/* -----------------------------------------------------------------------
+ * USB boot-log helpers
+ * Write ASCII text to BOOTLOG.TXT on the ESP via EFI File Protocol.
+ * ----------------------------------------------------------------------- */
+
+static UINTN gLogOffset = 0;
+
+static void log_write_raw(const char *s, UINTN len) {
+    if (!gLogFile || !gLogFile->Write) return;
+    if (len == 0) return;
+    /* SetPosition to current offset so appends are sequential */
+    if (gLogFile->SetPosition) {
+        gLogFile->SetPosition(gLogFile, gLogOffset);
+    }
+    UINTN written = len;
+    gLogFile->Write(gLogFile, &written, (void *)s);
+    gLogOffset += written;
+    /* Flush so data survives even if we crash right after */
+    if (gLogFile->Flush) {
+        ((EFI_STATUS (EFIAPI *)(EFI_FILE_PROTOCOL *))gLogFile->Flush)(gLogFile);
+    }
+}
+
+static void log_write(const char *s) {
+    UINTN len = 0;
+    while (s[len]) len++;
+    log_write_raw(s, len);
+}
+
+static void log_hex64(UINT64 v) {
+    static const char hex[] = "0123456789ABCDEF";
+    char out[19];
+    out[0] = '0'; out[1] = 'x';
+    for (int i = 0; i < 16; i++) {
+        out[2 + i] = hex[(v >> ((15 - i) * 4)) & 0xF];
+    }
+    out[18] = 0;
+    log_write(out);
+}
+
+static void log_line(const char *label, const char *value) {
+    log_write(label);
+    if (value) log_write(value);
+    log_write("\r\n");
+}
+
+static void log_line_hex(const char *label, UINT64 value) {
+    log_write(label);
+    log_hex64(value);
+    log_write("\r\n");
+}
+
+static EFI_STATUS open_log_file(EFI_HANDLE image_handle) {
+    EFI_STATUS status;
+    EFI_LOADED_IMAGE_PROTOCOL *loaded_image = 0;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs = 0;
+    EFI_FILE_PROTOCOL *root = 0;
+
+    status = gBS->HandleProtocol(
+        image_handle,
+        &EFI_LOADED_IMAGE_PROTOCOL_GUID,
+        (void **)&loaded_image
+    );
+    if (status != EFI_SUCCESS) return status;
+
+    status = gBS->HandleProtocol(
+        loaded_image->DeviceHandle,
+        &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+        (void **)&fs
+    );
+    if (status != EFI_SUCCESS) return status;
+
+    status = fs->OpenVolume(fs, &root);
+    if (status != EFI_SUCCESS) return status;
+
+    /* Open (or create) BOOTLOG.TXT with read+write access */
+    status = root->Open(
+        root,
+        &gLogFile,
+        L"\\BOOTLOG.TXT",
+        0x0000000000000003ULL,  /* EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE */
+        0
+    );
+
+    if (status != EFI_SUCCESS) {
+        /* File doesn't exist yet — create it */
+        status = root->Open(
+            root,
+            &gLogFile,
+            L"\\BOOTLOG.TXT",
+            0x8000000000000003ULL,  /* READ | WRITE | CREATE */
+            0
+        );
+    }
+
+    root->Close(root);
+
+    if (status != EFI_SUCCESS) {
+        gLogFile = 0;
+        return status;
+    }
+
+    /* Seek to end to append (or start fresh each boot by truncating to 0) */
+    gLogOffset = 0;
+    if (gLogFile->SetPosition) {
+        gLogFile->SetPosition(gLogFile, 0);
+    }
+
+    gBootInfo.log_file   = (UINT64)(uintptr_t)gLogFile;
+    gBootInfo.log_offset = 0;
+    return EFI_SUCCESS;
+}
+
 EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table) {
     gST = system_table;
     gBS = system_table->BootServices;
@@ -774,7 +914,36 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
     print(L"SageOS UEFI loader entered.\r\n");
     print(L"MS ABI loader active.\r\n");
 
+    /* Zero-init the boot info struct including new log fields */
+    for (UINTN i = 0; i < sizeof(gBootInfo); i++) {
+        ((UINT8 *)&gBootInfo)[i] = 0;
+    }
+    gBootInfo.log_file   = 0;
+    gBootInfo.log_offset = 0;
+
+    /* --- Open BOOTLOG.TXT on the ESP for persistent logging --- */
+    EFI_STATUS log_status = open_log_file(image_handle);
+    if (log_status == EFI_SUCCESS) {
+        print(L"BOOTLOG.TXT opened.\r\n");
+    } else {
+        print(L"BOOTLOG.TXT open failed (continuing without log).\r\n");
+    }
+
+    log_write("=== SageOS Boot Log ===\r\n");
+    log_line("[BL] UEFI loader entered", 0);
+    log_line("[BL] MS ABI loader active", 0);
+
     collect_gop_info();
+
+    if (gBootInfo.framebuffer_base) {
+        log_line_hex("[BL] GOP framebuffer base: ", gBootInfo.framebuffer_base);
+        log_line_hex("[BL] GOP width:  ", gBootInfo.width);
+        log_line_hex("[BL] GOP height: ", gBootInfo.height);
+        log_line_hex("[BL] GOP pixel_format: ", gBootInfo.pixel_format);
+        log_line("[BL] GOP: OK", 0);
+    } else {
+        log_line("[BL] GOP: UNAVAILABLE", 0);
+    }
 
     gBootInfo.system_table = (UINT64)(uintptr_t)gST;
     gBootInfo.boot_services = (UINT64)(uintptr_t)gBS;
@@ -785,34 +954,50 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
     gBootInfo.input_mode = 1;
     gBootInfo.acpi_rsdp = find_acpi_rsdp(system_table);
 
+    log_line("[BL] firmware input handoff active", 0);
+    log_line_hex("[BL] ACPI RSDP: ", gBootInfo.acpi_rsdp);
+    log_line_hex("[BL] system_table: ", gBootInfo.system_table);
+    log_line_hex("[BL] boot_services: ", gBootInfo.boot_services);
+
     print(L"Firmware input handoff active.\r\n");
     print(L"ACPI RSDP: ");
     print_hex64(gBootInfo.acpi_rsdp);
     print(L"\r\n");
     print(L"Loading KERNEL.BIN...\r\n");
+    log_line("[BL] loading KERNEL.BIN", 0);
 
     UINT64 kernel_size = 0;
     EFI_STATUS status = load_kernel(image_handle, &kernel_size);
 
     if (status != EFI_SUCCESS) {
+        log_write("[BL] KERNEL LOAD FAILED: ");
+        log_hex64(status);
+        log_write("\r\n");
         print(L"Kernel load failed.\r\n");
         for (;;) {}
     }
 
     gBootInfo.kernel_base = KERNEL_LOAD_ADDR;
     gBootInfo.kernel_size = kernel_size;
+    log_line_hex("[BL] KERNEL.BIN loaded, size: ", kernel_size);
+    log_line_hex("[BL] kernel load addr: ", KERNEL_LOAD_ADDR);
 
     /* Allocate 16MB for backbuffer (supports up to 2560x1600) */
     EFI_PHYSICAL_ADDRESS bb_addr = 0;
     status = gBS->AllocatePages(AllocateAnyPages, EfiLoaderData, 4096, &bb_addr);
     if (status == EFI_SUCCESS) {
         gBootInfo.backbuffer_address = bb_addr;
+        log_line_hex("[BL] backbuffer allocated at: ", bb_addr);
     } else {
         gBootInfo.backbuffer_address = 0;
+        log_write("[BL] backbuffer allocation FAILED: ");
+        log_hex64(status);
+        log_write("\r\n");
     }
 
 #if SAGEOS_EXIT_BOOT_SERVICES
     print(L"Exiting boot services...\r\n");
+    log_line("[BL] ExitBootServices: starting", 0);
 
     gBootInfo.boot_services_active = 0;
     gBootInfo.input_mode = 2;
@@ -820,13 +1005,21 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
     status = handoff_memory_map(image_handle, 1);
 
     if (status != EFI_SUCCESS) {
+        log_write("[BL] ExitBootServices FAILED: ");
+        log_hex64(status);
+        log_write("\r\n");
         print(L"ExitBootServices failed: ");
         print_hex64(status);
         print(L"\r\n");
         for (;;) {}
     }
+    log_line("[BL] ExitBootServices: OK — log ends here", 0);
+    /* After ExitBootServices the log file handle is invalid. Clear it. */
+    gBootInfo.log_file   = 0;
+    gBootInfo.log_offset = 0;
 #else
     print(L"Keeping boot services active for firmware keyboard input.\r\n");
+    log_line("[BL] boot services kept active (firmware keyboard mode)", 0);
 
     gBootInfo.boot_services_active = 1;
     gBootInfo.input_mode = 1;
@@ -834,6 +1027,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
     status = handoff_memory_map(image_handle, 0);
 
     if (status != EFI_SUCCESS) {
+        log_write("[BL] memory map capture failed: ");
+        log_hex64(status);
+        log_write("\r\n");
         print(L"Memory map capture failed: ");
         print_hex64(status);
         print(L"\r\n");
@@ -842,7 +1038,17 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_tabl
         gBootInfo.memory_desc_size = 0;
         gBootInfo.memory_total = 0;
         gBootInfo.memory_usable = 0;
+    } else {
+        log_line_hex("[BL] memory_total:  ", gBootInfo.memory_total);
+        log_line_hex("[BL] memory_usable: ", gBootInfo.memory_usable);
     }
+
+    /* Update log_file/log_offset in gBootInfo so kernel can continue writing */
+    gBootInfo.log_file   = (UINT64)(uintptr_t)gLogFile;
+    gBootInfo.log_offset = (UINT64)gLogOffset;
+    log_line("[BL] handing off to kernel — log continues from kernel", 0);
+    /* Sync final offset back so kernel starts at the right position */
+    gBootInfo.log_offset = (UINT64)gLogOffset;
 #endif
 
     typedef void (EFIAPI *kernel_entry_t)(SageOSBootInfo *);

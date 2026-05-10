@@ -33,6 +33,16 @@ typedef struct {
     uint64_t kernel_base;
     uint64_t kernel_size;
     uint64_t backbuffer_address;
+
+    /*
+     * USB / ESP boot-log handoff.
+     * The UEFI loader opens BOOTLOG.TXT on the ESP and passes the open
+     * EFI_FILE_PROTOCOL* here so the kernel can append to it via UEFI
+     * boot services (which remain active in firmware-input mode).
+     * log_offset tracks the current byte position for SetPosition.
+     */
+    uint64_t log_file;    /* EFI_FILE_PROTOCOL* cast to uint64_t, 0 if none */
+    uint64_t log_offset;  /* current write position in the log file       */
 } __attribute__((packed)) SageOSBootInfo;
 
 #endif

@@ -1,4 +1,5 @@
 #include "bootinfo.h"
+#include "bootlog.h"
 #include "serial.h"
 #include "console.h"
 #include "keyboard.h"
@@ -29,6 +30,7 @@ static void shell_main_thread(void *arg) {
     (void)arg;
 
     dmesg_log("shell thread started");
+    bootlog("[KRN] shell thread running\r\n");
     for (;;) {
         timer_poll();
         sage_shell_run();
@@ -49,89 +51,153 @@ static int firmware_input_mode(SageOSBootInfo *info) {
 void kmain(SageOSBootInfo *info) {
     int firmware_input = firmware_input_mode(info);
 
+    /*
+     * Init the USB boot log first so every subsequent step is captured.
+     * bootlog() is a no-op if log_file == 0.
+     */
+    bootlog_init(info);
+    bootlog("[KRN] kmain entered\r\n");
+
     serial_init();
+    bootlog("[KRN] serial_init OK\r\n");
+
     console_init(info);
+    bootlog("[KRN] console_init OK\r\n");
 
     dmesg_log("SageOS modular kernel starting...");
     dmesg_log("serial and console initialized");
 
+    bootlog(firmware_input
+        ? "[KRN] mode: firmware-input (boot services active)\r\n"
+        : "[KRN] mode: native (boot services exited)\r\n");
+
+    bootlog("[KRN] acpi_init: start\r\n");
     acpi_init(info);
     dmesg_log("ACPI initialized");
+    bootlog("[KRN] acpi_init: OK\r\n");
 
     if (!firmware_input) {
+        bootlog("[KRN] smp_init: start\r\n");
         smp_init();
         dmesg_log("SMP initialized");
+        bootlog("[KRN] smp_init: OK\r\n");
     } else {
+        bootlog("[KRN] smp_init_firmware_bsp: start\r\n");
         smp_init_firmware_bsp();
         dmesg_log("SMP initialized (firmware input mode)");
+        bootlog("[KRN] smp_init_firmware_bsp: OK\r\n");
     }
 
     if (!firmware_input) {
-        /* Timer-driven status updates and CPU accounting */
+        bootlog("[KRN] timer_init: start\r\n");
         timer_init();
         dmesg_log("timer initialized");
+        bootlog("[KRN] timer_init: OK\r\n");
+
+        bootlog("[KRN] idt_init: start\r\n");
         idt_init();
         dmesg_log("IDT initialized");
+        bootlog("[KRN] idt_init: OK\r\n");
+
+        bootlog("[KRN] ata_init: start\r\n");
         ata_init();
         dmesg_log("ATA initialized");
+        bootlog("[KRN] ata_init: OK\r\n");
+
+        bootlog("[KRN] irq_enable\r\n");
         irq_enable();
     } else {
         dmesg_log("skipping IDT/timer initialization (firmware input mode)");
-        /*
-         * We still need ATA initialized even if we don't use interrupts for it
-         * (ATA polling mode will be used if interrupts aren't available).
-         */
+        bootlog("[KRN] skipping IDT/timer/IRQ (firmware input mode)\r\n");
+
+        bootlog("[KRN] ata_init (polling): start\r\n");
         ata_init();
         dmesg_log("ATA initialized (polling mode)");
+        bootlog("[KRN] ata_init (polling): OK\r\n");
     }
 
+    bootlog("[KRN] battery_init: start\r\n");
     battery_init();
     dmesg_log("battery subsystem initialized");
+    bootlog("[KRN] battery_init: OK\r\n");
 
+    bootlog("[KRN] ramfs_init: start\r\n");
     ramfs_init();
     dmesg_log("RamFS initialized");
+    bootlog("[KRN] ramfs_init: OK\r\n");
+
+    bootlog("[KRN] vfs_init: start\r\n");
     vfs_init();
     vfs_mount("/", ramfs_get_backend());
-    dmesg_log("VFS initialized — ramfs mounted at /");
+    dmesg_log("VFS initialized - ramfs mounted at /");
+    bootlog("[KRN] vfs_init: OK\r\n");
+
+    bootlog("[KRN] fat32_init: start\r\n");
     fat32_init();
     if (fat32_is_available()) {
         vfs_mount("/fat32", fat32_get_backend());
         dmesg_log("FAT32 mounted at /fat32");
+        bootlog("[KRN] fat32_init: mounted at /fat32\r\n");
     } else {
         dmesg_log("FAT32 not available");
+        bootlog("[KRN] fat32_init: not available\r\n");
     }
 
+    bootlog("[KRN] btrfs_init: start\r\n");
     btrfs_init();
     if (btrfs_is_available()) {
         vfs_mount("/btrfs", btrfs_get_backend());
         dmesg_log("BTRFS mounted at /btrfs");
+        bootlog("[KRN] btrfs_init: mounted at /btrfs\r\n");
+    } else {
+        bootlog("[KRN] btrfs_init: not available\r\n");
     }
 
+    bootlog("[KRN] swap_init: start\r\n");
     swap_init();
     dmesg_log("SWAP initialized");
+    bootlog("[KRN] swap_init: OK\r\n");
 
-    /* PCI bus enumeration — discovers AMD SoC, QCA6174A Wi-Fi, eMMC */
+    /* PCI bus enumeration - discovers AMD SoC, QCA6174A Wi-Fi, eMMC */
+    bootlog("[KRN] pci_enumerate: start\r\n");
     pci_enumerate();
     dmesg_log("PCI bus enumerated");
+    bootlog("[KRN] pci_enumerate: OK\r\n");
+
+    bootlog("[KRN] sdhci_init: start\r\n");
     sdhci_init();
     dmesg_log("SDHCI initialized");
+    bootlog("[KRN] sdhci_init: OK\r\n");
+
+    bootlog("[KRN] net_init: start\r\n");
     net_init();
     dmesg_log("network subsystem initialized");
+    bootlog("[KRN] net_init: OK\r\n");
 
+    bootlog("[KRN] keyboard_init: start\r\n");
     keyboard_init();
     dmesg_log("keyboard initialized");
+    bootlog("[KRN] keyboard_init: OK\r\n");
+
+    bootlog("[KRN] status_init: start\r\n");
     status_init();
     dmesg_log("status bar initialized");
+    bootlog("[KRN] status_init: OK\r\n");
 
+    bootlog("[KRN] dmesg_load_persistent: start\r\n");
     dmesg_load_persistent();
     dmesg_log("persistent dmesg loaded");
+    bootlog("[KRN] dmesg_load_persistent: OK\r\n");
 
+    bootlog("[KRN] sched_init: start\r\n");
     sched_init();
     dmesg_log("scheduler initialized");
+    bootlog("[KRN] sched_init: OK\r\n");
 
-    /* Initialize system services */
     dmesg_log("init system starting");
+    bootlog("[KRN] sage_init_run: start\r\n");
     sage_init_run();
+    bootlog("[KRN] sage_init_run: OK\r\n");
 
     console_write("SageOS modular kernel v" SAGEOS_VERSION " entered.\n");
     console_write("Framebuffer console online.\n");
@@ -147,18 +213,19 @@ void kmain(SageOSBootInfo *info) {
 
     /*
      * Flush the back buffer to the physical framebuffer now.
-     * In firmware-input mode (boot_services_active=1) the PIT timer is not
-     * initialized, so timer_irq() / console_periodic_flip() never fires
-     * automatically.  Without this explicit flush the entire boot banner
-     * stays in the back buffer and the screen appears blank (only the
-     * status bar, which flips immediately, is visible).
+     * In firmware-input mode the PIT timer is not initialized so
+     * timer_irq() / console_periodic_flip() never fires automatically.
      */
     console_periodic_flip();
+    bootlog("[KRN] framebuffer flushed\r\n");
 
     dmesg_log("creating main shell thread");
+    bootlog("[KRN] creating shell thread\r\n");
 
-    /* Create main shell thread */
     sched_create_thread("shell-main", shell_main_thread, NULL, THREAD_PRIORITY_NORMAL);
+
+    bootlog("[KRN] sched_start - log ends here\r\n");
+    bootlog_close();
 
     /* Start scheduling - this will not return */
     sched_start();

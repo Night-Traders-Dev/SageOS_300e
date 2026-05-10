@@ -194,27 +194,35 @@ static void shell_redraw_line(
     int saved_serial_echo = console_get_serial_echo();
     if (console_has_fb()) console_set_serial_echo(0);
 
-    console_set_cursor(start_row, start_col);
-    console_write(line);
+    uint32_t avail = console_cols();
+    /* How many character cells remain on the prompt row */
+    uint32_t max_chars = (avail > start_col) ? (avail - start_col) : 0;
+    if (max_chars == 0) { if (console_has_fb()) console_set_serial_echo(saved_serial_echo); return; }
 
     size_t new_len = 0;
     while (line[new_len]) new_len++;
+    /* Clamp both lengths to the available width */
+    if (new_len  > max_chars) new_len  = max_chars;
+    if (erase_len > max_chars) erase_len = max_chars;
 
-    /* Only erase the leftover tail if the new line is shorter than the old one */
+    console_set_cursor(start_row, start_col);
+    /* Write only as many characters as fit on the row */
+    for (size_t i = 0; i < new_len; i++) console_putc(line[i]);
+
+    /* Erase leftover tail if old content was longer */
     if (erase_len > new_len) {
         for (size_t i = 0; i < erase_len - new_len; i++) console_putc(' ');
     }
 
-    uint32_t cursor_offset = start_col + (uint32_t)pos;
-    console_set_cursor(
-        start_row + cursor_offset / console_cols(),
-        cursor_offset % console_cols()
-    );
+    /* Clamp cursor position to the row as well */
+    uint32_t clamped_pos = (uint32_t)pos;
+    if (clamped_pos > max_chars) clamped_pos = max_chars;
+    uint32_t cursor_offset = start_col + clamped_pos;
+    console_set_cursor(start_row, cursor_offset);
 
     if (console_has_fb()) {
         console_set_serial_echo(saved_serial_echo);
-        /* Sync serial terminal: move to col 0, erase, reprint, reposition */
-        console_serial_redraw_line(line, (uint32_t)pos);
+        console_serial_redraw_line(line, clamped_pos);
     }
 }
 
@@ -735,6 +743,7 @@ void shell_run(void) {
                 if (shell_history_nav < 0) shell_history_nav = 0;
                 else if (shell_history_nav < shell_history_count - 1) shell_history_nav++;
                 shell_load_history(shell_history_nav, line, &len);
+                if (len > line_max) { len = line_max; line[len] = 0; }
                 pos = len;
                 shell_redraw_line(line, pos, start_row, start_col, displayed_len);
                 displayed_len = len;
@@ -744,6 +753,7 @@ void shell_run(void) {
                 if (shell_history_nav > 0) {
                     shell_history_nav--;
                     shell_load_history(shell_history_nav, line, &len);
+                    if (len > line_max) { len = line_max; line[len] = 0; }
                     pos = len;
                 } else {
                     shell_history_nav = -1;

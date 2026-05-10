@@ -30,9 +30,12 @@ extern MetalValue n_os_starts_with(MetalVM* vm, MetalValue* args, int argc);
 extern MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc);
 extern MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc);
 
+static void vfs_bridge_write_char(char c) { console_putc(c); }
+
 void vfs_bridge_init(void) {
     if (g_vfs_vm_inited) return;
     metal_vm_init(&g_vfs_vm);
+    g_vfs_vm.write_char = vfs_bridge_write_char;
     
     metal_vm_register_native(&g_vfs_vm, "len", n_len);
     metal_vm_register_native(&g_vfs_vm, "os_strlen", n_os_strlen);

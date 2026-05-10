@@ -31,6 +31,9 @@ static void shell_main_thread(void *arg) {
 
     dmesg_log("shell thread started");
     bootlog("[KRN] shell thread running\r\n");
+    /* Force a framebuffer flush immediately so the boot banner is visible
+     * before we block on the first keyboard_wait_event() call. */
+    console_periodic_flip();
     for (;;) {
         timer_poll();
         sage_shell_run();

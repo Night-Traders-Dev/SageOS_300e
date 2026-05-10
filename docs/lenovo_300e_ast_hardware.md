@@ -98,3 +98,37 @@ Driver bring-up order for SageOS:
 
 Pragmatic milestone: implement PCI discovery and report the QCA6174A vendor,
 device, BARs, and interrupt first. Do not start with full Wi-Fi association.
+
+## Confirmed Boot Log Values (v0.1.3)
+
+Observed on real Lenovo 300e hardware from `BOOTLOG.TXT`:
+
+```text
+GOP framebuffer base:  0xF0000000        (high MMIO, write-combined VRAM)
+GOP width:             0x556 = 1366 px
+GOP height:            0x300 = 768 px
+GOP pixel_format:      1 = PixelBluGreenRedReserved8BitPerColor (BGR)
+ACPI RSDP:             0xC74F9014
+system_table:          0xC74D4018
+boot_services:         0x04FF68A0
+Kernel load addr:      0x00100000  (1 MB — matches KERNEL_LOAD_ADDR)
+Kernel size:           ~5.1 MB
+Backbuffer:            0xC26E6000  (allocated in conventional DRAM below 4 GB)
+memory_total:          ~4 GB (0xFF080000)
+memory_usable:         ~3.9 GB (0xF617B000)
+```
+
+### Key observations
+
+- **Pixel format 1 (BGR)** — the framebuffer layout on this AMD SoC uses blue in
+  the lowest byte. `pack_rgb()` in `framebuffer.c` already handles this correctly:
+  format 0 → `r | g<<8 | b<<16`; format 1 (else) → `b | g<<8 | r<<16`.
+- **Framebuffer at 0xF0000000** — this is a high MMIO address. Writes to it are
+  write-combined (WC), so large sequential memcpy operations (console_flip) are
+  efficient but non-temporal stores may stall if not cache-line aligned.
+- **Boot services complete** — the v0.1.3 boot log shows all kernel init stages
+  completing normally through `sched_start`. The earlier apparent "hang" was a
+  framebuffer flush starvation: the back buffer was populated but never copied to
+  the physical framebuffer until the shell thread's first `timer_poll()` overflow.
+  Fixed by adding an explicit `console_periodic_flip()` at the start of
+  `shell_main_thread()`.

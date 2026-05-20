@@ -602,6 +602,10 @@ static MetalValue n_status_print(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_status_refresh(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; status_refresh(); return mv_nil();
 }
+static MetalValue n_draw_status_bar(MetalVM *vm, MetalValue *a, int c) {
+    console_draw_status_bar(arg_str(vm, a, c, 0));
+    return mv_nil();
+}
 static MetalValue n_sysinfo(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; sysinfo_cmd(); return mv_nil();
 }
@@ -745,6 +749,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_dmesg_get_char",  n_dmesg_get_char);
     REG("os_status_print",  n_status_print);
     REG("os_status_refresh",n_status_refresh);
+    REG("os_draw_status_bar",n_draw_status_bar);
     REG("os_sysinfo",       n_sysinfo);
     REG("os_timer_info",    n_timer_info);
     REG("os_smp_info",      n_smp_info);

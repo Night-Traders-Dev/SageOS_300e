@@ -8,7 +8,7 @@
 # =============================================================================
 
 proc shell_prompt():
-    os_status_refresh()
+    status_refresh()
     let old_color = os_get_color()
     os_set_color_hex(0x80C8FF)
     os_write_char(10)
@@ -17,6 +17,10 @@ proc shell_prompt():
 
 proc shell_dispatch(line):
     if os_strlen(line) == 0:
+        return nil
+    end
+    if os_streq(line, "status"):
+        cmd_status()
         return nil
     end
     if os_streq(line, "help"):

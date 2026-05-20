@@ -267,9 +267,207 @@ proc read_line():
                 history_nav = -1
                 displayed_len = redraw_line(line, pos, displayed_len)
     return line
-# Command implementations live in the kernel C dispatcher.
-# This file remains in the SageShell compile bundle to keep the build script
-# layout stable while the shell is reduced to prompt, history, and line editing.
+# =============================================================================
+# SageOS Shell - Ported Command Implementations
+# commands.sage
+# =============================================================================
+
+proc cmd_help():
+    os_write_char(10)
+    os_write_str("Commands:")
+    os_write_char(10)
+    os_write_str("  help              show this help")
+    os_write_char(10)
+    os_write_str("  clear             clear console")
+    os_write_char(10)
+    os_write_str("  neofetch          system information fetch")
+    os_write_char(10)
+    os_write_str("  btop              resource monitor")
+    os_write_char(10)
+    os_write_str("  version           show version")
+    os_write_char(10)
+    os_write_str("  uname             show system id")
+    os_write_char(10)
+    os_write_str("  about             project summary")
+    os_write_char(10)
+    os_write_str("  sysinfo           CPU frequency, RAM, and storage usage")
+    os_write_char(10)
+    os_write_str("  exit              exit QEMU (no-op on real hardware)")
+    os_write_char(10)
+    os_write_char(10)
+    os_write_str("Filesystem:")
+    os_write_char(10)
+    os_write_str("  pwd               print working directory")
+    os_write_char(10)
+    os_write_str("  ls [path]         list directory (default: /)")
+    os_write_char(10)
+    os_write_str("  cat <path>        print file contents")
+    os_write_char(10)
+    os_write_str("  cp <src> <dst>    copy file")
+    os_write_char(10)
+    os_write_str("  mkdir <path>      create a directory")
+    os_write_char(10)
+    os_write_str("  touch <path>      create an empty file")
+    os_write_char(10)
+    os_write_str("  rm <path>         remove a file or empty directory")
+    os_write_char(10)
+    os_write_str("  stat <path>       show file/directory info")
+    os_write_char(10)
+    os_write_str("  write <path> <s>  write text to a file")
+    os_write_char(10)
+    os_write_str("  hexdump <path>    hex dump file (first 4KB)")
+    os_write_char(10)
+    os_write_str("  nano <path>       edit a text file")
+    os_write_char(10)
+    os_write_str("  sh <path>         run a shell script")
+    os_write_char(10)
+    os_write_str("  source <path>     run a shell script")
+    os_write_char(10)
+    os_write_str("  execelf <path>    execute ELF binary")
+    os_write_char(10)
+    os_write_char(10)
+    os_write_str("Shell editing:")
+    os_write_char(10)
+    os_write_str("  Up/Down           history navigation (newest first)")
+    os_write_char(10)
+    os_write_str("  Left/Right        cursor move")
+    os_write_char(10)
+    os_write_str("  Home/End          jump to start/end of line")
+    os_write_char(10)
+    os_write_str("  Tab               autocomplete / show completions")
+    os_write_char(10)
+    os_write_str("  Ctrl-A / Ctrl-E   jump to start / end of line")
+    os_write_char(10)
+    os_write_str("  Ctrl-K            kill to end of line")
+    os_write_char(10)
+    os_write_str("  Ctrl-U            clear entire line")
+    os_write_char(10)
+    os_write_str("  Ctrl-W            delete word backwards")
+    os_write_char(10)
+    os_write_str("  Ctrl-C            cancel current line")
+    os_write_char(10)
+    os_write_char(10)
+    os_write_str("History:")
+    os_write_char(10)
+    os_write_str("  history           show command history list")
+    os_write_char(10)
+    os_write_char(10)
+    os_write_str("Display:")
+    os_write_char(10)
+    os_write_str("  echo <text>       print text")
+    os_write_char(10)
+    os_write_str("  color <name>      white green amber blue red cyan purple reset")
+    os_write_char(10)
+    os_write_str("  dmesg             early kernel log")
+    os_write_char(10)
+    os_write_str("  fb                framebuffer info")
+    os_write_char(10)
+    os_write_str("  input             input backend info")
+    os_write_char(10)
+    os_write_char(10)
+    os_write_str("Hardware & Platform:")
+    os_write_char(10)
+    os_write_str("  status            show top-bar metrics")
+    os_write_char(10)
+    os_write_str("  timer             show PIT timer info")
+    os_write_char(10)
+    os_write_str("  sched             show scheduler queues and threads")
+    os_write_char(10)
+    os_write_str("  smp               show CPU/APIC discovery")
+    os_write_char(10)
+    os_write_str("  acpi              show ACPI summary")
+    os_write_char(10)
+    os_write_str("  acpi tables       list ACPI tables")
+    os_write_char(10)
+    os_write_str("  acpi fadt         show FADT power fields")
+    os_write_char(10)
+    os_write_str("  acpi madt         show MADT/APIC fields")
+    os_write_char(10)
+    os_write_str("  battery           show battery/EC detector")
+    os_write_char(10)
+    os_write_str("  keydebug          raw keyboard scancode monitor")
+    os_write_char(10)
+    os_write_str("  pci               list PCI devices")
+    os_write_char(10)
+    os_write_str("  net               network stack and interface status")
+    os_write_char(10)
+    os_write_str("  net selftest      build sample ARP and DHCP frames")
+    os_write_char(10)
+    os_write_str("  wifi              QCA6174A Wi-Fi probe details")
+    os_write_char(10)
+    os_write_str("  sdhci             eMMC/SD controller info")
+    os_write_char(10)
+    os_write_str("  install           install to local drive")
+    os_write_char(10)
+    os_write_char(10)
+    os_write_str("SageLang:")
+    os_write_char(10)
+    os_write_str("  sage              interactive SageLang REPL")
+    os_write_char(10)
+    os_write_str("  sage run <path>   execute .sage or .sgvm file")
+    os_write_char(10)
+    os_write_str("  sageshell         launch SageShell")
+    os_write_char(10)
+    os_write_char(10)
+    os_write_str("Power:")
+    os_write_char(10)
+    os_write_str("  shutdown          ACPI S5 shutdown")
+    os_write_char(10)
+    os_write_str("  poweroff          alias for shutdown")
+    os_write_char(10)
+    os_write_str("  suspend           ACPI S3 suspend")
+    os_write_char(10)
+    os_write_str("  halt              halt CPU")
+    os_write_char(10)
+    os_write_str("  reboot            reboot via i8042")
+    os_write_char(10)
+end
+
+proc cmd_about():
+    os_write_char(10)
+    os_write_str("SageOS is a small POSIX-inspired OS target.")
+    os_write_char(10)
+    os_write_str("Current phase: modular kernel and hardware diagnostics.")
+    os_write_char(10)
+end
+
+proc cmd_version():
+    os_write_char(10)
+    os_write_str("SageOS version: ")
+    os_write_str(os_version_string())
+    os_write_char(10)
+end
+
+proc cmd_uname():
+    os_write_char(10)
+    os_write_str("SageOS ")
+    os_write_str(os_version_string())
+    os_write_str(" x86_64")
+    os_write_char(10)
+end
+
+proc cmd_fb():
+    os_write_char(10)
+    os_write_str("Framebuffer: ")
+    if os_fb_available() == 0.0:
+        os_write_str("not available")
+        os_write_char(10)
+        return nil
+    end
+    os_write_str("enabled")
+    os_write_char(10)
+    os_write_str("  base: ")
+    os_write_str(os_fb_base_str())
+    os_write_char(10)
+    os_write_str("  resolution: ")
+    os_write_str(os_fb_width_str())
+    os_write_str("x")
+    os_write_str(os_fb_height_str())
+    os_write_char(10)
+    os_write_str("  pixels_per_scanline: ")
+    os_write_str(os_fb_pps_str())
+    os_write_char(10)
+end
 # =============================================================================
 # SageOS dmesg implementation
 # dmesg.sage
@@ -438,18 +636,94 @@ proc shell_prompt():
 proc shell_dispatch(line):
     if os_strlen(line) == 0:
         return nil
+    end
+    if os_streq(line, "help"):
+        cmd_help()
+        return nil
+    end
+    if os_streq(line, "about"):
+        cmd_about()
+        return nil
+    end
+    if os_streq(line, "version"):
+        cmd_version()
+        return nil
+    end
+    if os_streq(line, "uname"):
+        cmd_uname()
+        return nil
+    end
+    if os_streq(line, "fb"):
+        cmd_fb()
+        return nil
+    end
     if os_streq(line, "dmesg"):
         cmd_dmesg()
         return nil
+    end
     if os_streq(line, "neofetch"):
         cmd_neofetch()
         return nil
+    end
+    if os_streq(line, "sysinfo"):
+        os_sysinfo()
+        return nil
+    end
+    if os_streq(line, "timer"):
+        os_timer_info()
+        return nil
+    end
+    if os_streq(line, "smp"):
+        os_smp_info()
+        return nil
+    end
+    if os_streq(line, "smp start"):
+        os_smp_boot_aps()
+        return nil
+    end
+    if os_streq(line, "battery"):
+        os_battery_info()
+        return nil
+    end
+    if os_streq(line, "pci"):
+        os_pci_info()
+        return nil
+    end
+    if os_streq(line, "sdhci"):
+        os_sdhci_info()
+        return nil
+    end
+    if os_streq(line, "acpi"):
+        os_acpi_summary()
+        return nil
+    end
+    if os_streq(line, "acpi tables"):
+        os_acpi_tables()
+        return nil
+    end
+    if os_streq(line, "acpi fadt"):
+        os_acpi_fadt()
+        return nil
+    end
+    if os_streq(line, "acpi madt"):
+        os_acpi_madt()
+        return nil
+    end
+    if os_streq(line, "acpi lid"):
+        os_acpi_lid()
+        return nil
+    end
+    if os_streq(line, "acpi battery"):
+        os_acpi_battery()
+        return nil
+    end
 
     # Hot Dispatch: Check for command script in /etc/commands/
     let cmd_path = "/etc/commands/" + line + ".sage"
     if os_path_exists(cmd_path):
         os_sage_exec(cmd_path)
         return nil
+    end
 
     let res = os_shell_exec(line)
     return res

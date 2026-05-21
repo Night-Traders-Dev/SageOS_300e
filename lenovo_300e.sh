@@ -140,15 +140,11 @@ download_firmware() {
 
     local base_url="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ath10k/QCA6174/hw3.0"
     
-    if [ ! -f "$hw30/firmware-6.bin" ]; then
-        echo "  Downloading firmware-6.bin..."
-        curl -L "$base_url/firmware-6.bin" -o "$hw30/firmware-6.bin"
-    fi
+    echo "  Downloading fresh firmware-6.bin..."
+    curl -L "$base_url/firmware-6.bin" -o "$hw30/firmware-6.bin"
 
-    if [ ! -f "$hw30/board-2.bin" ]; then
-        echo "  Downloading board-2.bin..."
-        curl -L "$base_url/board-2.bin" -o "$hw30/board-2.bin"
-    fi
+    echo "  Downloading fresh board-2.bin..."
+    curl -L "$base_url/board-2.bin" -o "$hw30/board-2.bin"
 
     echo "[OK] Firmware downloaded to $FW_DIR"
 }
@@ -270,6 +266,7 @@ build_kernel() {
 
 build_image() {
     check_tools
+    download_firmware
 
     mkdir -p "$BUILD" "$OBJ" "$BUILD/logs"
 

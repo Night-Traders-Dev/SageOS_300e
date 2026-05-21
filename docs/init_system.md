@@ -47,6 +47,8 @@ The init system has access to a variety of native APIs exposed by the kernel:
 
 ## Advantages
 
-*   **Programmable**: Logic can be as complex as needed using SageLang.
-*   **Decoupled**: Kernel bring-up and system configuration are separated.
-*   **Flexible**: Easy to add "Live" vs "Installer" detection logic.
+- **Programmable**: Logic can be as complex as needed using SageLang.
+- **Decoupled**: Kernel bring-up and system configuration are separated.
+- **Flexible**: Easy to add "Live" vs "Installer" detection logic.
+- **Resilient**: Benefits from formal memory management and a read-write capable VFS layer.
+

@@ -31,10 +31,11 @@ SageOS is a lightweight, x86_64 UEFI-based operating system project primarily ta
 
 - **UEFI-Native Boot**: Freestanding kernel execution with GOP framebuffer.
 - **SageShell & MetalVM**: A kernel-resident, SageLang-driven shell with fish-style line editing and high-performance bytecode execution.
-- **Graphics Acceleration**: flicker-free double buffering, optimized scrolling, and efficient dirty-region updates.
-- **Hardware Abstraction**: Early diagnostics for SMP, ACPI, battery/EC, keyboard, and PCI bus.
+- **Hardware Abstraction**: Early diagnostics for SMP, ACPI, battery/EC, and PCI bus.
 - **Programmable Init**: System initialization orchestrated via `init.sage`.
-- **Advanced Storage**: Minimal BTRFS superblock support and native VFS backend.
+- **Advanced Storage**: Full read-write FAT32 filesystem support and BTRFS superblock reader.
+- **Memory Management**: Formal physical memory allocator and virtual memory management (paging).
+- **Native Drivers**: Decoupled hardware (keyboard, boot logging) from UEFI runtime services using interrupt-driven I/O.
 
 ## Documentation
 

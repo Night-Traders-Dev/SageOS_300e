@@ -77,3 +77,4 @@ sageos_build/KERNEL.BIN
 
 # Build images
 *.img
+/firmware/

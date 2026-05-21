@@ -12,6 +12,7 @@ ESP="$BUILD/esp.img"
 IMG_LIVE="$ROOT/sageos-live.img"
 IMG_INSTALLER="$ROOT/sageos-installer.img"
 ESP="$BUILD/esp.img"
+FW_DIR="$ROOT/firmware"
 
 # Live Image Config
 LIVE_IMG_SIZE_MIB=512
@@ -130,6 +131,26 @@ gen_installer_image() {
     fi
 
     echo "[OK] Installer Image: $img"
+}
+
+download_firmware() {
+    echo "--- Downloading QCA6174A Wi-Fi Firmware ---"
+    local hw30="$FW_DIR/ath10k/QCA6174/hw3.0"
+    mkdir -p "$hw30"
+
+    local base_url="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ath10k/QCA6174/hw3.0"
+    
+    if [ ! -f "$hw30/firmware-6.bin" ]; then
+        echo "  Downloading firmware-6.bin..."
+        curl -L "$base_url/firmware-6.bin" -o "$hw30/firmware-6.bin"
+    fi
+
+    if [ ! -f "$hw30/board-2.bin" ]; then
+        echo "  Downloading board-2.bin..."
+        curl -L "$base_url/board-2.bin" -o "$hw30/board-2.bin"
+    fi
+
+    echo "[OK] Firmware downloaded to $FW_DIR"
 }
 
 build_kernel() {
@@ -340,6 +361,17 @@ STUBEOF
     mcopy -i "$ESP" "$BUILD/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
     mcopy -i "$ESP" "$BUILD/KERNEL.BIN" ::/KERNEL.BIN
 
+    if [ -d "$FW_DIR" ]; then
+        echo "--- Including firmware in ESP ---"
+        # Create directories on ESP
+        mmd -i "$ESP" ::/ath10k 2>/dev/null || true
+        mmd -i "$ESP" ::/ath10k/QCA6174 2>/dev/null || true
+        mmd -i "$ESP" ::/ath10k/QCA6174/hw3.0 2>/dev/null || true
+        
+        # Copy files recursively
+        mcopy -i "$ESP" -s "$FW_DIR"/* ::/
+    fi
+
     gen_live_image
     gen_installer_image
 
@@ -506,6 +538,7 @@ SageOS Lenovo 300e unified build tool
 
 Usage:
   ./lenovo_300e.sh build
+  ./lenovo_300e.sh download-firmware
   ./lenovo_300e.sh build-kernel
   ./lenovo_300e.sh qemu [live|installer]
   ./lenovo_300e.sh flash [live|installer] [/dev/sdX]
@@ -525,6 +558,9 @@ shift || true
 case "$cmd" in
     build)
         build_image
+        ;;
+    download-firmware)
+        download_firmware
         ;;
     build-kernel)
         check_tools

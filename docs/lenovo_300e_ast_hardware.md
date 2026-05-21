@@ -97,9 +97,10 @@ Driver bring-up order for SageOS:
    - WPA2/WPA3 supplicant support
 
 Pragmatic milestone: implement PCI discovery and report the QCA6174A vendor,
-device, BARs, and interrupt first. Do not start with full Wi-Fi association.
+device, BARs, and interrupt first. (Completed v0.1.84: Firmware loading from ESP
+integrated into build and driver).
 
-## Confirmed Boot Log Values (v0.1.83)
+## Confirmed Boot Log Values (v0.1.84)
 
 Observed on real Lenovo 300e hardware from `BOOTLOG.TXT`:
 

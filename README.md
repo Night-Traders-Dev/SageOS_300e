@@ -16,6 +16,7 @@ SageOS is a lightweight, x86_64 UEFI-based operating system project primarily ta
    ```
 2. **Build the OS image:**
    ```bash
+   ./lenovo_300e.sh download-firmware # Required for Wi-Fi
    ./lenovo_300e.sh build
    ```
 3. **Test in QEMU:**

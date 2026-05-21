@@ -886,8 +886,9 @@ static EFI_STATUS open_log_file(EFI_HANDLE image_handle) {
         );
     }
 
+    gBootInfo.root_dir = (UINT64)(uintptr_t)root;
+
     if (status != EFI_SUCCESS) {
-        root->Close(root);
         gLogFile = 0;
         return status;
     }
@@ -900,7 +901,6 @@ static EFI_STATUS open_log_file(EFI_HANDLE image_handle) {
 
     gBootInfo.log_file   = (UINT64)(uintptr_t)gLogFile;
     gBootInfo.log_offset = 0;
-    gBootInfo.root_dir   = (UINT64)(uintptr_t)root;
     return EFI_SUCCESS;
 }
 

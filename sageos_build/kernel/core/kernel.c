@@ -76,7 +76,9 @@ void kmain(SageOSBootInfo *info) {
     sage_kernel_early_init();
 
     phys_init(info);
-    vmm_init();
+    if (!firmware_input) {
+        vmm_init();
+    }
 
     serial_init();
     console_init(info);

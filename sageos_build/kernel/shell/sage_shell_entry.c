@@ -65,6 +65,8 @@ static void bridge_write_char(char c) { console_putc(c); }
 static int key_event_code(const KeyEvent *ev) {
     if (!ev || !ev->pressed) return -1;
     if (ev->extended) {
+        /* Debug: log the scancode */
+        // console_write("key sc="); console_hex64(ev->scancode); console_write("\n");
         switch (ev->scancode) {
         case 0x48: return SAGE_KEY_UP;
         case 0x50: return SAGE_KEY_DOWN;
@@ -84,7 +86,8 @@ static int bridge_read_char(void) {
     KeyEvent ev;
     for (;;) {
         if (!keyboard_wait_event(&ev)) return -1;
-        if (ev.pressed && ev.ascii) return (int)(unsigned char)ev.ascii;
+        int code = key_event_code(&ev);
+        if (code >= 0) return code;
     }
 }
 

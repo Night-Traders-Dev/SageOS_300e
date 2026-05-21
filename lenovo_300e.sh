@@ -86,7 +86,7 @@ gen_live_image() {
         echo "  Formatting BTRFS partition..."
         local btrfs_img="$BUILD/btrfs_live.img"
         truncate -s "${LIVE_BTRFS_SIZE_MIB}M" "$btrfs_img"
-        mkfs.btrfs -f -L SAGEOS_LIVE_ROOT "$btrfs_img" >/dev/null
+        mkfs.btrfs -f -s 4096 -L SAGEOS_LIVE_ROOT "$btrfs_img" >/dev/null
         dd if="$btrfs_img" of="$img" bs=512 seek="$btrfs_start" conv=notrunc status=none
         rm "$btrfs_img"
     fi
@@ -124,7 +124,7 @@ gen_installer_image() {
         echo "  Formatting BTRFS partition..."
         local btrfs_img="$BUILD/btrfs.img"
         truncate -s "${INSTALLER_BTRFS_SIZE_MIB}M" "$btrfs_img"
-        mkfs.btrfs -f -L SAGEOS_ROOT "$btrfs_img" >/dev/null
+        mkfs.btrfs -f -s 4096 -L SAGEOS_ROOT "$btrfs_img" >/dev/null
         dd if="$btrfs_img" of="$img" bs=512 seek="$btrfs_start" conv=notrunc status=none
         rm "$btrfs_img"
     fi

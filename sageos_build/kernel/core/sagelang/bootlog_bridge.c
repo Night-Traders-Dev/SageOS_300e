@@ -17,6 +17,7 @@ extern void bl_write_raw(const char *buf, uint64_t len);
 extern SageOSBootInfo* console_boot_info(void);
 
 static MetalValue native_bootlog_init(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm; (void)args; (void)argc;
     SageOSBootInfo* info = console_boot_info();
     if (info && info->log_file) {
         g_log_file = (EFI_FILE_PROTOCOL *)(uintptr_t)info->log_file;
@@ -28,14 +29,13 @@ static MetalValue native_bootlog_init(MetalVM* vm, MetalValue* args, int argc) {
 
 // Native function: bootlog(msg)
 static MetalValue native_bootlog(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm; (void)args; (void)argc;
     if (argc < 1 || args[0].type != MV_STR || !g_log_file) return mv_nil();
     
     const char* msg = metal_string_get(vm, args[0].as.str_idx);
     uint64_t len = 0;
     while (msg[len]) len++;
     
-    // Inline the write logic here or call a helper
-    // For now, I'll assume we can call the C implementation of bl_write_raw
     extern void bl_write_raw(const char *buf, uint64_t len);
     bl_write_raw(msg, len);
     return mv_nil();

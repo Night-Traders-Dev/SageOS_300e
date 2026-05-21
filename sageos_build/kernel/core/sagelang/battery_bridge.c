@@ -4,11 +4,13 @@
 
 // Native function: battery_percent(void)
 static MetalValue native_battery_percent(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm; (void)args; (void)argc;
     return mv_num(battery_percent());
 }
 
 // Native function: battery_init(void)
 static MetalValue native_battery_init(MetalVM* vm, MetalValue* args, int argc) {
+    (void)vm; (void)args; (void)argc;
     battery_init();
     return mv_nil();
 }

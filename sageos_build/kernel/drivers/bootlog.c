@@ -64,25 +64,26 @@ typedef EFI_STATUS (EFIAPI *EFI_FILE_FLUSH_FN)(
  *  10  Flush        ← slot 10
  *
  * We access them via a raw pointer array to avoid including the full struct
- * definition (which is already in uefi_loader.c under the MS ABI target).
- */
-#define EFI_FILE_VTABLE_WRITE        5
-#define EFI_FILE_VTABLE_SET_POSITION 7
-#define EFI_FILE_VTABLE_FLUSH        10
+ /*
+  * We only need the vtable slots we actually call.
+  */
+ #define EFI_FILE_VTABLE_WRITE        5
+ #define EFI_FILE_VTABLE_SET_POSITION 7
+ #define EFI_FILE_VTABLE_FLUSH        10
 
-/* ---------------------------------------------------------------------- */
-/* Module state                                                            */
-/* ---------------------------------------------------------------------- */
+ /* ---------------------------------------------------------------------- */
+ /* Module state                                                            */
+ /* ---------------------------------------------------------------------- */
 
-static EFI_FILE_PROTOCOL *g_log_file   = 0;
-static uint64_t           g_log_offset = 0;
+ static EFI_FILE_PROTOCOL *g_log_file   = 0;
+ static uint64_t           g_log_offset = 0;
 
-/* ---------------------------------------------------------------------- */
-/* Helpers                                                                 */
-/* ---------------------------------------------------------------------- */
+ /* ---------------------------------------------------------------------- */
+ /* Helpers                                                                 */
+ /* ---------------------------------------------------------------------- */
 
-static void bl_write_raw(const char *buf, uint64_t len) {
-    if (!g_log_file || len == 0) return;
+ void bl_write_raw(const char *buf, uint64_t len) {
+     if (!g_log_file || len == 0) return;
 
     /* Access vtable entries via raw pointer array.
      * The first entry in EFI_FILE_PROTOCOL is Revision (a UINT64, not a

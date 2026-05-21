@@ -10,6 +10,8 @@
 #include "version.h"
 #include "vfs.h"
 
+extern void register_timer_native_bindings(MetalVM* vm);
+
 #include <stdio.h>
 #include <string.h>
 
@@ -395,6 +397,7 @@ static void sage_register_repl_natives(MetalVM* vm) {
     metal_vm_register_native(vm, "os_shell_exec", n_os_shell_exec);
     metal_vm_register_native(vm, "os_get_c0", n_os_get_c0);
     metal_vm_register_native(vm, "os_get_color", n_os_get_color);
+    register_timer_native_bindings(vm);
 }
 
 static void sage_repl_reset_vm(void) {

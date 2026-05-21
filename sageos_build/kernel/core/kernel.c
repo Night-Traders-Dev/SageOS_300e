@@ -23,6 +23,9 @@
 #include "ata.h"
 #include "scheduler.h"
 #include "net.h"
+#include "metal_vm.h"
+
+extern void register_timer_native_bindings(MetalVM* vm);
 
 extern int fat32_init(void);
 

@@ -14,6 +14,7 @@ extern void register_timer_native_bindings(MetalVM* vm);
 extern void register_bootlog_native_bindings(MetalVM* vm);
 extern void register_power_native_bindings(MetalVM* vm);
 extern void register_status_native_bindings(MetalVM* vm);
+extern void register_battery_native_bindings(MetalVM* vm);
 
 #include <stdio.h>
 #include <string.h>
@@ -404,6 +405,7 @@ static void sage_register_repl_natives(MetalVM* vm) {
     register_bootlog_native_bindings(vm);
     register_power_native_bindings(vm);
     register_status_native_bindings(vm);
+    register_battery_native_bindings(vm);
 }
 
 static void sage_repl_reset_vm(void) {

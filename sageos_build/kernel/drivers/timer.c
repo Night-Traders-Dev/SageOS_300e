@@ -57,54 +57,19 @@ void timer_init(void) {
     cpu_history_count = 0;
 }
 
+#include <stdint.h>
+#include "io.h"
+#include "timer.h"
+#include "console.h"
+#include "scheduler.h"
+#include "metal_vm.h"
+#include "../core/sagelang/runtime.h"
+
+extern MetalVM g_repl_vm;
+
 void timer_irq(void) {
-    ticks++;
-
-    /* Handle ATA timeouts */
-    extern void ata_timer_tick(void);
-    ata_timer_tick();
-
-    /*
-     * Do NOT call serial_process_tx_buffer() here.
-     * Calling outb() from inside an IRQ handler re-enters QEMU's I/O
-     * mutex (already held for IRQ delivery) and triggers the TCG assertion:
-     *   qemu_mutex_lock_iothread_impl: assertion failed: (!qemu_mutex_iothread_locked())
-     * Serial TX is driven inline by serial_putc() / serial_write().
-     */
-
-    sched_timer_tick();
-
-    /* Periodically flip the framebuffer to update text output */
-    flip_counter++;
-    if (flip_counter >= 5) {  /* Flip every ~50ms (5 * 10ms) */
-        console_periodic_flip();
-        flip_counter = 0;
-    }
-
-    uint64_t idle_delta = idle_loops - last_idle_loops;
-    uint64_t total_delta = total_loops - last_total_loops;
-    uint32_t current_pct = 0;
-
-    if (total_delta > 0) {
-        uint64_t idle_pct = (idle_delta * 100ULL) / total_delta;
-        if (idle_pct > 100) idle_pct = 100;
-        current_pct = (uint32_t)(100 - (uint32_t)idle_pct);
-    } else {
-        current_pct = 100;
-    }
-
-    /* Update sliding window */
-    cpu_history_sum -= cpu_history[cpu_history_idx];
-    cpu_history[cpu_history_idx] = current_pct;
-    cpu_history_sum += current_pct;
-    cpu_history_idx = (cpu_history_idx + 1) % CPU_WINDOW_SIZE;
-    
-    if (cpu_history_count < CPU_WINDOW_SIZE) cpu_history_count++;
-    
-    cached_cpu_percent = cpu_history_sum / cpu_history_count;
-
-    last_idle_loops = idle_loops;
-    last_total_loops = total_loops;
+    // Direct call into SageLang timer_irq
+    metal_vm_call(&g_repl_vm, "timer_irq", NULL, 0);
 }
 
 void timer_poll(void) {

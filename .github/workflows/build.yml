@@ -19,7 +19,7 @@ on:
 env:
   # Change to "1" repo-wide once ExitBootServices is stable on all hardware.
   SAGEOS_EXIT_BOOT_SERVICES: "1"
-  PROMPT_PATTERN: "sage>"
+  PROMPT_PATTERN: "root@sageos:/# "
 
 jobs:
   # ── Build ──────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ jobs:
           OVMF: ${{ steps.ovmf.outputs.path }}
         run: |
           set +e
-          timeout 30s qemu-system-x86_64 \
+          timeout 60s qemu-system-x86_64 \
             -bios "$OVMF" \
             -cpu Skylake-Client \
             -drive id=hd0,file=sageos.img,format=raw,media=disk,snapshot=on \

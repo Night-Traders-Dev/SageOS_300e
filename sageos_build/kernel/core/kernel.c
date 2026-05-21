@@ -24,6 +24,8 @@
 #include "scheduler.h"
 #include "net.h"
 #include "metal_vm.h"
+#include "vmm.h"
+#include "phys_alloc.h"
 
 extern void register_timer_native_bindings(MetalVM* vm);
 extern void register_bootlog_native_bindings(MetalVM* vm);
@@ -65,6 +67,9 @@ void kmain(SageOSBootInfo *info) {
     int firmware_input = firmware_input_mode(info);
 
     sage_kernel_early_init();
+
+    phys_init(NULL, 0);
+    vmm_init();
 
     metal_vm_call(&g_repl_vm, "bootlog_init_driver", NULL, 0);
     bootlog("[KRN] kmain entered\r\n");

@@ -21,6 +21,10 @@
 static int btrfs_available = 0;
 static btrfs_super_block g_super;
 
+static int btrfs_read_sector(uint32_t lba, uint8_t *buffer) {
+    return ata_read_sector(lba, (uint16_t *)buffer);
+}
+
 static int btrfs_read_node(uint64_t logical_addr, void *buffer) {
     /* For now, assume logical address is directly mapped to sector offset 
        ignoring complex chunk mapping. */

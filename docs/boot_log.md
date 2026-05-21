@@ -1,6 +1,7 @@
 # SageOS Persistent USB Boot Log
 
-> Added in **v0.1.83** to diagnose hangs on real hardware (Lenovo 300e).
+> Added in **v0.1.83** to diagnose hangs on real hardware (Lenovo 300e).  
+> `bmesg` shell command added to read the log in-session without removing the USB.
 
 ## Overview
 
@@ -10,6 +11,17 @@ from the UEFI loader through the kernel's full `kmain()` sequence, is written an
 immediately flushed to disk. If the system hangs, remove the USB, mount it on any
 Linux/Windows/macOS machine, and open `BOOTLOG.TXT`. The last line shows exactly
 where boot stopped.
+
+## Reading the Log In-Shell
+
+After boot, the log can be read directly from the SageShell without removing the USB:
+
+```
+bmesg
+```
+
+This reads `/fat32/BOOTLOG.TXT` via VFS and prints it to the console, stripping `\r` for
+clean display.
 
 ## How It Works
 
@@ -39,6 +51,8 @@ where boot stopped.
 3. `bootlog_hex(label, value)` appends a label and a 64-bit hex value.
 4. All functions are **safe no-ops** when `log_file == 0`, which happens when
    `SAGEOS_EXIT_BOOT_SERVICES=1` (boot services were exited before the handoff).
+5. `bootlog_close()` is called just before `sched_start()` — the log ends cleanly
+   when the scheduler takes over.
 
 > **Why use the vtable directly?**  
 > The kernel is compiled as a freestanding ELF; it cannot include EFI headers.
@@ -81,6 +95,13 @@ compatibility):
 [KRN] battery_init: start
 [KRN] battery_init: OK
 ...
+[KRN] net_init: start
+[KRN] net_init: OK
+[KRN] wifi_auto_connect: start
+[KRN] wifi_auto_connect: done
+[KRN] keyboard_init: start
+[KRN] keyboard_init: OK
+...
 [KRN] sched_start - log ends here
 ```
 
@@ -88,7 +109,7 @@ compatibility):
 is the last entry, SMP init is the hang. If `[KRN] pci_enumerate: start` is last,
 the PCI scan hung.
 
-## Reading the Log
+## Reading the Log (offline)
 
 ### Linux
 
@@ -122,12 +143,14 @@ cat /mnt/esp/BOOTLOG.TXT
 | System triple-faults before `Flush` returns | Last entry may be truncated. Use the previous complete line. |
 | FAT32 write-protect | File open fails silently; no log is written. |
 
-## Files Changed (v0.1.83)
+## Files
 
-| File | Change |
+| File | Role |
 |---|---|
 | `boot/uefi_loader.c` | `open_log_file()`, `log_write()`, `log_hex64()`, `log_line()` helpers; full stage logging in `EfiMain` |
-| `kernel/include/bootinfo.h` | Added `log_file`, `log_offset` fields to `SageOSBootInfo` |
-| `kernel/include/bootlog.h` | New header — `bootlog_init`, `bootlog`, `bootlog_hex`, `bootlog_close` |
-| `kernel/drivers/bootlog.c` | New driver — EFI vtable access, MS-ABI, flush-on-write |
-| `kernel/core/kernel.c` | `bootlog()` calls at every `init: start` / `OK` pair in `kmain` |
+| `kernel/include/bootinfo.h` | `log_file`, `log_offset` fields in `SageOSBootInfo` |
+| `kernel/include/bootlog.h` | `bootlog_init`, `bootlog`, `bootlog_hex`, `bootlog_close` |
+| `kernel/drivers/bootlog.c` | EFI vtable access, MS-ABI, flush-on-write |
+| `kernel/core/kernel.c` | `bootlog()` calls at every `init: start` / `OK` pair in `kmain`, including `wifi_auto_connect` |
+| `kernel/shell/extra_cmds.c` | `cmd_bmesg()` — reads `/fat32/BOOTLOG.TXT` via VFS |
+| `kernel/shell/shell.c` | `bmesg` registered as shell command |

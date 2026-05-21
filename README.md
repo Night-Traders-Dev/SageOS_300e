@@ -16,8 +16,7 @@ SageOS is a lightweight, x86_64 UEFI-based operating system project primarily ta
    ```
 2. **Build the OS image:**
    ```bash
-   ./lenovo_300e.sh download-firmware # Required for Wi-Fi
-   ./lenovo_300e.sh build
+   ./lenovo_300e.sh build   # firmware is downloaded fresh on every build
    ```
 3. **Test in QEMU:**
    ```bash
@@ -30,17 +29,47 @@ SageOS is a lightweight, x86_64 UEFI-based operating system project primarily ta
 
 ## Key Features
 
-- **UEFI-Native Boot**: Freestanding kernel execution with GOP framebuffer.
+- **UEFI-Native Boot**: Freestanding kernel execution with GOP framebuffer console.
 - **SageShell & MetalVM**: A kernel-resident, SageLang-driven shell with fish-style line editing and high-performance bytecode execution.
+- **QCA6174A Wi-Fi Driver**: Full PCI enumeration, firmware staging (firmware-6.bin / board-2.bin downloaded fresh each build), WMI/HTT ring initialization, WPA2-PSK handshake, and DHCP. Credentials are saved to `/fat32/WIFI.CFG` and auto-reconnect on boot.
 - **Hardware Abstraction**: Early diagnostics for SMP, ACPI, battery/EC, and PCI bus.
 - **Programmable Init**: System initialization orchestrated via `init.sage`.
 - **Advanced Storage**: Full read-write FAT32 filesystem support and BTRFS superblock reader.
 - **Memory Management**: Formal physical memory allocator and virtual memory management (paging).
 - **Native Drivers**: Decoupled hardware (keyboard, boot logging) from UEFI runtime services using interrupt-driven I/O.
+- **Real-Time Resource Monitor (`btop`)**: Live CPU%, RAM, battery, storage, and scheduler stats. Runs on both the GOP framebuffer and serial terminal. Hardware-safe (no PIT-dependent sleep loops).
+- **Persistent Boot Log (`bmesg`)**: Full kernel boot sequence written to `/fat32/BOOTLOG.TXT`, readable via the `bmesg` shell command.
+- **Live dmesg**: Kernel messages logged throughout boot and runtime, persisted to ATA sectors, viewable with `dmesg`.
+
+## Shell Commands
+
+| Category | Commands |
+|---|---|
+| System Info | `neofetch`, `sysinfo`, `uname`, `version`, `status`, `timer`, `sched`, `smp`, `acpi`, `battery`, `pci`, `fb`, `input` |
+| Filesystem | `ls`, `cat`, `cp`, `rm`, `mkdir`, `touch`, `stat`, `hexdump`, `nano`, `write`, `pwd` |
+| Networking | `net`, `net selftest`, `wifi`, `wifi reset`, `wifi upload`, `wifi init-rings`, `wifi scan`, `wifi connect <ssid> <pass>` |
+| Diagnostics | `dmesg`, `bmesg`, `btop`, `keydebug` |
+| Power | `reboot`, `shutdown`, `poweroff`, `halt`, `suspend` |
+| SageLang | `sage <module>`, `sageshell`, `source <script>` |
+| Storage | `swap`, `sdhci`, `install` |
+| Scripting | `sh`, `echo`, `color`, `history`, `execelf` |
+
+## Wi-Fi Usage
+
+```
+wifi                        # Show hardware info / connected SSID
+wifi reset                  # Cold-reset target chipset
+wifi upload                 # Stage firmware-6.bin and board-2.bin from /fat32
+wifi init-rings             # Initialize WMI + HTT host rings (makes wlan0 READY)
+wifi scan                   # Active RF scan (reads live RTC state from MMIO)
+wifi connect <SSID> <pass>  # WPA2-PSK handshake + DHCP, saves to /fat32/WIFI.CFG
+```
+
+Credentials saved to `/fat32/WIFI.CFG` are automatically loaded on boot and a reconnect is attempted.
 
 ## Documentation
 
-- **[Boot Log](docs/boot_log.md)**: Persistent USB boot logging details.
+- **[Boot Log](docs/boot_log.md)**: Persistent USB boot logging — use `bmesg` to read in-shell.
 - **[Init System](docs/init_system.md)**: Deep dive into the programmable initialization process.
 - **[Hardware Support](docs/lenovo_300e_ast_hardware.md)**: Hardware-specific architectural details for the Lenovo 300e.
 
@@ -51,8 +80,13 @@ SageOS_300e/
 ├── lenovo_300e.sh           # Unified build/flash/qemu script
 ├── sageos_build/
 │   ├── kernel/              # Core kernel, drivers, VFS, shell
+│   │   ├── core/            # Kernel entry, scheduler, VMM, SageLang VM
+│   │   ├── drivers/         # PCI, Wi-Fi, keyboard, timer, battery, etc.
+│   │   ├── fs/              # FAT32, BTRFS, ramfs, VFS
+│   │   └── shell/           # SageShell, btop, nano, extra commands
 │   ├── sage_lang/           # SageLang toolchain
 │   └── scripts/             # Compilation and build helpers
+├── firmware/                # QCA6174A firmware blobs (downloaded at build time)
 └── docs/                    # Technical documentation
 ```
 

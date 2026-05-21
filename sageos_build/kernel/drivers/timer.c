@@ -66,6 +66,7 @@ void timer_init(void) {
 extern MetalVM g_repl_vm;
 
 void timer_irq(void) {
+    ticks++;
     // Direct call into SageLang timer_irq
     metal_vm_call(&g_repl_vm, "timer_irq", NULL, 0);
 }

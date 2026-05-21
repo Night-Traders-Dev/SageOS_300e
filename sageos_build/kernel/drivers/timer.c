@@ -73,13 +73,11 @@ void timer_irq(void) {
 void timer_poll(void) {
     total_loops++;
 
+    /* Update ticks in firmware mode */
+    ticks++;
+
     /*
      * Drive the framebuffer periodic flip in firmware-input mode.
-     * On real hardware each UEFI ConIn ReadKeyStroke call passes through
-     * SMM, costing roughly 0.5–2 ms per poll.  With a threshold of 500
-     * the flip fires every ~0.5–1 s at idle, keeping the display live
-     * without a busy-spin.  On QEMU the PIT IRQ already handles the flip;
-     * the counter path here is just a cheap no-op most of the time.
      */
     static volatile uint32_t fb_poll_counter = 0;
     if (++fb_poll_counter >= 500) {

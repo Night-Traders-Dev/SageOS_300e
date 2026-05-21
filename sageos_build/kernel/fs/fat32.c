@@ -760,6 +760,16 @@ static void ascii_to_utf16_path(const char *src, uint16_t *dst, int max_len) {
 static int fat32_be_stat(VfsBackend *self, const char *rel_path, VfsStat *out) {
     (void)self;
     SageOSBootInfo *info = kernel_get_boot_info();
+    console_write("\n[DEBUG] fat32_be_stat: rel_path=");
+    console_write(rel_path);
+    if (!info) {
+        console_write(" -> info is NULL!");
+    } else {
+        console_write(" active=");
+        console_u32(info->boot_services_active);
+        console_write(" root_dir=");
+        console_hex64(info->root_dir);
+    }
     if (info && info->boot_services_active && info->root_dir) {
         EfiFileProtocol *root = (EfiFileProtocol *)info->root_dir;
         uint16_t wpath[256];
@@ -767,6 +777,8 @@ static int fat32_be_stat(VfsBackend *self, const char *rel_path, VfsStat *out) {
 
         EfiFileProtocol *file = NULL;
         uint64_t status = root->Open(root, &file, wpath, 1 /* READ */, 0);
+        console_write(" Open_status=");
+        console_hex64(status);
         if (status != 0) {
             return -2; // ENOENT
         }

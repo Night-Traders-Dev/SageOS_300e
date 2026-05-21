@@ -13,13 +13,13 @@ static MetalValue native_status_refresh(MetalVM* vm, MetalValue* args, int argc)
 // Native function: ram_total_bytes(void)
 static MetalValue native_ram_total_bytes(MetalVM* vm, MetalValue* args, int argc) {
     (void)vm; (void)args; (void)argc;
-    return mv_num((double)status_ram_total());
+    return mv_num((double)ram_total_bytes());
 }
 
 // Native function: ram_used_bytes(void)
 static MetalValue native_ram_used_bytes(MetalVM* vm, MetalValue* args, int argc) {
     (void)vm; (void)args; (void)argc;
-    return mv_num((double)status_ram_used());
+    return mv_num((double)ram_used_bytes());
 }
 
 void register_status_native_bindings(MetalVM* vm) {

@@ -4,6 +4,7 @@
 #include "idt.h"
 #include "dmesg.h"
 #include "sage_alloc.h"
+#include "scheduler.h"
 
 /* Simple ATA PIO driver for the primary master */
 #define ATA_PRIMARY_DATA         0x1F0

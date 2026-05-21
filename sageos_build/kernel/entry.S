@@ -17,10 +17,10 @@ kernel_gdt_end:
 _start:
     /* 
      * RCX points to SageOSBootInfo (MS ABI).
-     * Check boot_services_active at offset 0x58.
+     * Check boot_services_active at offset 0x54.
      * If active, keep interrupts enabled so UEFI background tasks (USB) can run.
      */
-    cmpl $0, 0x58(%rcx)
+    cmpl $0, 0x54(%rcx)
     jne .Lkeep_irqs
     cli
 .Lkeep_irqs:
@@ -56,11 +56,11 @@ _start:
      * The sub/movw approach ensures the structure is correctly laid out.
      */
     /*
-     * Check if boot services are active (offset 0x58 in SageOSBootInfo).
+     * Check if boot services are active (offset 0x54 in SageOSBootInfo).
      * If they are, skip loading our GDT and IDT so we don't break UEFI's
      * interrupt handlers and timer (required for UEFI keyboard input).
      */
-    cmpl $0, 0x58(%rbx)
+    cmpl $0, 0x54(%rbx)
     jne .Lafter_lgdt
 
     lea kernel_gdt(%rip), %rax      /* base of GDT */

@@ -561,7 +561,30 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "pci"))          { pci_cmd_info(); return; }
     if (starts_word(cmd, "net selftest")) { net_cmd_selftest(); return; }
     if (starts_word(cmd, "net"))          { net_cmd_info(); return; }
-    if (starts_word(cmd, "wifi"))         { qca6174_cmd_info(); return; }
+    if (starts_word(cmd, "wifi"))         {
+        const char *sub = arg_after(cmd, "wifi");
+        if (starts_word(sub, "reset"))       { qca6174_cmd_reset(); return; }
+        if (starts_word(sub, "upload"))      { qca6174_cmd_upload(); return; }
+        if (starts_word(sub, "init-rings"))  { qca6174_cmd_init_rings(); return; }
+        if (starts_word(sub, "scan"))        { qca6174_cmd_scan(); return; }
+        if (starts_word(sub, "connect"))     {
+            const char *args = arg_after(sub, "connect");
+            char ssid[32];
+            char pass[32];
+            int i = 0, j = 0;
+            while (args[i] && args[i] == ' ') i++;
+            while (args[i] && args[i] != ' ' && j < 31) ssid[j++] = args[i++];
+            ssid[j] = 0;
+            while (args[i] && args[i] == ' ') i++;
+            j = 0;
+            while (args[i] && args[i] != ' ' && j < 31) pass[j++] = args[i++];
+            pass[j] = 0;
+            qca6174_cmd_connect(ssid, pass);
+            return;
+        }
+        qca6174_cmd_info();
+        return;
+    }
     if (starts_word(cmd, "sdhci"))        { sdhci_cmd_info(); return; }
     if (starts_word(cmd, "exit") || streq(cmd, "q")) { power_qemu_exit(); return; }
     if (starts_with(cmd, "ls")) {

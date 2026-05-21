@@ -165,6 +165,25 @@ int net_register_device(const NetDevice *device) {
     return 1;
 }
 
+int net_update_device_state(const char *name, NetDeviceState state, const uint8_t *mac) {
+    for (int i = 0; i < g_net_device_count; i++) {
+        int match = 1;
+        for (int j = 0; j < 16; j++) {
+            if (g_net_devices[i].name[j] != name[j]) { match = 0; break; }
+            if (name[j] == 0) break;
+        }
+        if (match) {
+            g_net_devices[i].state = state;
+            if (mac) {
+                for (int j = 0; j < 6; j++) g_net_devices[i].hwaddr[j] = mac[j];
+                g_net_devices[i].hwaddr_valid = 1;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int net_device_count(void) {
     return g_net_device_count;
 }

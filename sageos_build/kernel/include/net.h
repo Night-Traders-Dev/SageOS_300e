@@ -59,6 +59,10 @@ typedef struct {
     uint32_t        flags;
     uint8_t         hwaddr[NET_HWADDR_LEN];
     uint8_t         hwaddr_valid;
+    uint8_t         ip_addr[4];
+    uint8_t         ip_addr_valid;
+    uint8_t         netmask[4];
+    uint8_t         gateway[4];
     uint8_t         pci_backed;
     uint8_t         bus;
     uint8_t         device;

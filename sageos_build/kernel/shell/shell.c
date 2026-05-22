@@ -58,7 +58,7 @@ static int  shell_history_nav;
 
 static const char *const shell_commands[] = {
     "about", "acpi", "acpi battery", "acpi fadt", "acpi lid", "acpi madt",
-    "acpi tables", "battery", "bmesg", "btop", "cat", "clear", "color", "cp", "dmesg", "echo",
+    "acpi tables", "battery", "bmesg", "btop", "cat", "clear", "color", "cp", "curl", "dmesg", "echo",
     "execelf", "exit", "fb", "halt", "help", "hexdump", "history", "input", "install", "ipconfig",
     "keydebug", "ls", "mkdir", "nano", "neofetch", "net", "net selftest",
     "pci", "poweroff", "pwd", "q", "reboot", "rm", "sage", "sagepkg",
@@ -562,7 +562,7 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "swap"))         { extern void cmd_swap(void); cmd_swap(); return; }
     if (starts_word(cmd, "keydebug"))     { keyboard_keydebug(); return; }
     if (starts_word(cmd, "pci"))          { pci_cmd_info(); return; }
-    if (starts_word(cmd, "ipconfig"))     { net_cmd_info(); return; }
+    if (starts_word(cmd, "ipconfig"))     { extern void cmd_ipconfig(void); cmd_ipconfig(); return; }
     if (starts_word(cmd, "net selftest")) { net_cmd_selftest(); return; }
     if (starts_word(cmd, "net"))          { net_cmd_info(); return; }
     if (starts_word(cmd, "wifi"))         {
@@ -595,6 +595,11 @@ void shell_exec_command(const char *cmd) {
         const char *path = arg_after(cmd, "ls");
         if (!*path) path = "/";
         vfs_ls(path);
+        return;
+    }
+    if (starts_with(cmd, "curl")) {
+        extern void cmd_curl(const char *args);
+        cmd_curl(arg_after(cmd, "curl"));
         return;
     }
     if (starts_with(cmd, "cat")) {

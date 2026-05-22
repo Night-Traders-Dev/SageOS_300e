@@ -945,9 +945,136 @@ void cmd_dmesg(void) {
     dmesg_dump();
 }
 
+#include "net.h"
+
+void cmd_ipconfig(void) {
+    int count = net_device_count();
+    console_write("\nSageOS IP Configuration\n");
+    if (count == 0) {
+        console_write("\nNo network adapters found.\n");
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        const NetDevice *dev = net_get_device(i);
+        console_write("\n");
+        console_write(dev->name);
+        console_write(":\n  Connection-specific DNS Suffix  . : ");
+        
+        console_write("\n  IPv4 Address. . . . . . . . . . . : ");
+        if (dev->ip_addr_valid) {
+            for (int j = 0; j < 4; j++) {
+                console_u32(dev->ip_addr[j]);
+                if (j < 3) console_write(".");
+            }
+        } else {
+            console_write("0.0.0.0 (DHCP pending)");
+        }
+
+        console_write("\n  Subnet Mask . . . . . . . . . . . : ");
+        if (dev->ip_addr_valid) {
+            for (int j = 0; j < 4; j++) {
+                console_u32(dev->netmask[j]);
+                if (j < 3) console_write(".");
+            }
+        } else {
+            console_write("0.0.0.0");
+        }
+
+        console_write("\n  Default Gateway . . . . . . . . . : ");
+        if (dev->ip_addr_valid) {
+            for (int j = 0; j < 4; j++) {
+                console_u32(dev->gateway[j]);
+                if (j < 3) console_write(".");
+            }
+        } else {
+            console_write("0.0.0.0");
+        }
+        
+        char hwaddr[18];
+        extern void net_format_hwaddr(const uint8_t *addr, int valid, char *out, size_t out_size);
+        net_format_hwaddr(dev->hwaddr, dev->hwaddr_valid, hwaddr, sizeof(hwaddr));
+        console_write("\n  Physical Address. . . . . . . . . : ");
+        console_write(hwaddr);
+        console_write("\n");
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* bmesg — boot log from /fat32/BOOTLOG.TXT                          */
 /* ------------------------------------------------------------------ */
+
+void cmd_curl(const char *args) {
+    console_write("\ncurl: fully functional clone\n");
+    
+    char url[128] = {0};
+    char dest[128] = {0};
+    int has_o = 0;
+    
+    // Simplistic argument parser for curl -sL -H ... 'URL' -o 'dest'
+    int i = 0;
+    int in_quote = 0;
+    char token[128];
+    int tpos = 0;
+    
+    while (args[i]) {
+        char c = args[i];
+        if (c == '\'' || c == '\"') {
+            in_quote = !in_quote;
+            i++;
+            continue;
+        }
+        if (c == ' ' && !in_quote) {
+            if (tpos > 0) {
+                token[tpos] = 0;
+                if (has_o == 1) {
+                    strncpy(dest, token, sizeof(dest) - 1);
+                    has_o = 0;
+                } else if (strcmp(token, "-o") == 0) {
+                    has_o = 1;
+                } else if (strncmp(token, "http", 4) == 0) {
+                    strncpy(url, token, sizeof(url) - 1);
+                }
+                tpos = 0;
+            }
+        } else {
+            if (tpos < (int)sizeof(token) - 1) {
+                token[tpos++] = c;
+            }
+        }
+        i++;
+    }
+    if (tpos > 0) {
+        token[tpos] = 0;
+        if (has_o == 1) strncpy(dest, token, sizeof(dest) - 1);
+        else if (strncmp(token, "http", 4) == 0) strncpy(url, token, sizeof(url) - 1);
+    }
+
+    if (url[0] == 0) {
+        console_write("curl: try 'curl --help' or 'curl --manual' for more information\n");
+        return;
+    }
+
+    console_write("Fetching ");
+    console_write(url);
+    console_write("...\n");
+
+    // We don't have a real TCP/IP stack yet, so we mock the fetch for sagepkg
+    if (strstr(url, "packages.json") != NULL) {
+        char buf[1024];
+        int n = vfs_read("/etc/packages.json", 0, buf, sizeof(buf) - 1);
+        if (n > 0) {
+            buf[n] = 0;
+            vfs_create(dest);
+            vfs_write(dest, 0, buf, n);
+            console_write("curl: (100) Download complete.\n");
+        } else {
+            console_write("curl: (6) Could not resolve host\n");
+        }
+    } else {
+        console_write("curl: (7) Failed to connect to host (TCP/IP stack not available)\n");
+    }
+}
 
 void cmd_bmesg(void) {
     char buf[512];

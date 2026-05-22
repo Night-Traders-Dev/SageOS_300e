@@ -405,6 +405,7 @@ static void help(void) {
     console_write("\n\nSageLang:");
     console_write("\n  sage              interactive SageLang REPL");
     console_write("\n  sage run <path>   execute .sage or .sgvm file");
+    console_write("\n  sage reset        reset SageLang VM and heap");
     console_write("\n  sagepkg           SageOS package manager");
     console_write("\n  sageshell         launch SageShell");
     console_write("\n\nPower:");
@@ -718,6 +719,14 @@ void shell_exec_command(const char *cmd) {
             if (!*path) { console_write("\nusage: sage run <path>"); return; }
             extern void sage_run_file(const char *path);
             sage_run_file(path);
+            return;
+        }
+        if (starts_word(mod, "reset")) {
+            extern void sage_repl_init(void);
+            extern void sage_arena_reset(void);
+            sage_repl_init();
+            sage_arena_reset();
+            console_write("\nSageLang VM and heap reset.");
             return;
         }
         extern void sage_execute(const char *module_name);

@@ -213,8 +213,8 @@ build_kernel() {
           -D__sageos__ \
           -DMETAL_STACK_SIZE=128 \
           -DMETAL_POOL_SIZE=256 \
-          -DMETAL_STRING_POOL=32768 \
-          -DMETAL_HEAP_SIZE=65536 \
+          -DMETAL_STRING_POOL=65536 \
+          -DMETAL_HEAP_SIZE=262144 \
           -DMETAL_CONST_POOL=512 \
           -DMETAL_NATIVE_MAX=128 \
           -DSAGEOS_FIRMWARE_I8042_FALLBACK="${SAGEOS_FIRMWARE_I8042_FALLBACK:-1}" \

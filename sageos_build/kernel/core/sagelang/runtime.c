@@ -410,6 +410,7 @@ static void sage_register_repl_natives(MetalVM* vm) {
     register_core_drivers_native_bindings(vm);
 }
 static void sage_repl_reset_vm(void) {
+    sage_arena_reset();
     metal_vm_init(&g_repl_vm);
     g_repl_vm.write_char = metal_vm_write_char_bridge;
     sage_register_repl_natives(&g_repl_vm);

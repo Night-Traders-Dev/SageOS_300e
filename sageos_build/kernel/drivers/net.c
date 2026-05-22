@@ -141,8 +141,11 @@ void net_init(void) {
     g_net_stack.frame_helpers_ready = 1;
     g_net_stack.arp_ready = 1;
     g_net_stack.ipv4_ready = 1;
+    g_net_stack.icmp_ready = 1;
     g_net_stack.udp_ready = 1;
     g_net_stack.dhcp_ready = 1;
+    g_net_stack.dns_ready = 1;
+    g_net_stack.tcp_ready = 1;
 
     qca6174_init();
     e1000_init();
@@ -165,6 +168,20 @@ int net_register_device(const NetDevice *device) {
     memcpy(&g_net_devices[g_net_device_count], device, sizeof(*device));
     g_net_device_count++;
     return 1;
+}
+
+void net_update_device_ip(int index, const uint8_t *ip, const uint8_t *mask, const uint8_t *gw) {
+    if (index < 0 || index >= g_net_device_count) return;
+    if (ip) {
+        for (int i = 0; i < 4; i++) g_net_devices[index].ip_addr[i] = ip[i];
+        g_net_devices[index].ip_addr_valid = 1;
+    }
+    if (mask) {
+        for (int i = 0; i < 4; i++) g_net_devices[index].netmask[i] = mask[i];
+    }
+    if (gw) {
+        for (int i = 0; i < 4; i++) g_net_devices[index].gateway[i] = gw[i];
+    }
 }
 
 int net_update_device_state(const char *name, NetDeviceState state, const uint8_t *mac) {

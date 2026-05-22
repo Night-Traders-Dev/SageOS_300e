@@ -38,7 +38,6 @@ extern void sage_kernel_early_init(void);
 extern MetalVM g_repl_vm;
 
 extern int fat32_init(void);
-
 static void shell_main_thread(void *arg) {
     (void)arg;
 
@@ -48,12 +47,18 @@ static void shell_main_thread(void *arg) {
      * before we block on the first keyboard_wait_event() call. */
     console_periodic_flip();
     for (;;) {
-        timer_poll();
         sage_shell_run();
-        sched_yield();  /* Yield to allow other threads to run */
     }
 }
 
+static void net_stack_thread(void *arg) {
+    (void)arg;
+    extern void lwip_port_poll(void);
+    for (;;) {
+        lwip_port_poll();
+        sched_yield();
+    }
+}
 
 static SageOSBootInfo *g_boot_info = NULL;
 
@@ -257,6 +262,7 @@ void kmain(SageOSBootInfo *info) {
     bootlog("[KRN] creating shell thread\r\n");
 
     sched_create_thread("shell-main", shell_main_thread, NULL, THREAD_PRIORITY_NORMAL);
+    sched_create_thread("net-stack", net_stack_thread, NULL, THREAD_PRIORITY_HIGH);
 
     bootlog("[KRN] sched_start - log ends here\r\n");
     bootlog_close();

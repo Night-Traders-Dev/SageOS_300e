@@ -137,3 +137,36 @@ void e1000_init(void) {
     net_register_device(&netdev);
     dmesg_log("e1000: initialized");
 }
+
+int e1000_send_packet(const void *data, size_t len) {
+    if (!e1000_mmio_base) return -1;
+    if (len > 2048) len = 2048;
+
+    uint32_t old_tx = tx_cur;
+    memcpy(tx_buffers[old_tx], data, len);
+    tx_descs[old_tx].length = (uint16_t)len;
+    tx_descs[old_tx].status = 0;
+    tx_descs[old_tx].cmd = (1 << 0) | (1 << 1) | (1 << 3); // EOP, IFCS, RS
+
+    tx_cur = (tx_cur + 1) % E1000_NUM_TX_DESC;
+    e1000_write_reg(E1000_TXDESCTAIL, tx_cur);
+
+    while (!(tx_descs[old_tx].status & 0xF)); // Wait for transmission
+    return 0;
+}
+
+extern void lwip_port_input(const void *data, size_t len);
+
+void e1000_poll(void) {
+    if (!e1000_mmio_base) return;
+
+    while (rx_descs[rx_cur].status & (1 << 0)) { // DD (Descriptor Done)
+        size_t len = rx_descs[rx_cur].length;
+        lwip_port_input(rx_buffers[rx_cur], len);
+
+        rx_descs[rx_cur].status = 0;
+        uint32_t old_rx = rx_cur;
+        rx_cur = (rx_cur + 1) % E1000_NUM_RX_DESC;
+        e1000_write_reg(E1000_RXDESCTAIL, old_rx);
+    }
+}

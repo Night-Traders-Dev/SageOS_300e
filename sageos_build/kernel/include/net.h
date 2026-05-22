@@ -131,6 +131,7 @@ void net_init(void);
 int net_is_initialized(void);
 int net_register_device(const NetDevice *device);
 int net_update_device_state(const char *name, NetDeviceState state, const uint8_t *mac);
+void net_update_device_ip(int index, const uint8_t *ip, const uint8_t *mask, const uint8_t *gw);
 int net_device_count(void);
 const NetDevice *net_get_device(int index);
 uint16_t net_ipv4_checksum(const void *data, size_t len);

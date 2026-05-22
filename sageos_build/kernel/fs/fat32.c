@@ -114,11 +114,19 @@ static int fat32_read_sector(uint32_t lba, uint8_t *buffer) {
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) {
-        if (*a != *b) return 0;
+        char ca = *a;
+        char cb = *b;
+        if (ca >= 'a' && ca <= 'z') ca -= 32;
+        if (cb >= 'a' && cb <= 'z') cb -= 32;
+        if (ca != cb) return 0;
         a++;
         b++;
     }
-    return *a == 0 && *b == 0;
+    char ca = *a;
+    char cb = *b;
+    if (ca >= 'a' && ca <= 'z') ca -= 32;
+    if (cb >= 'a' && cb <= 'z') cb -= 32;
+    return ca == cb;
 }
 
 static uint32_t fat32_read_fat_entry(uint32_t cluster) {

@@ -48,7 +48,7 @@ SageOS is a lightweight, x86_64 UEFI-based operating system project primarily ta
 |---|---|
 | System Info | `neofetch`, `sysinfo`, `uname`, `version`, `status`, `timer`, `sched`, `smp`, `acpi`, `battery`, `pci`, `fb`, `input` |
 | Filesystem | `ls`, `cat`, `cp`, `rm`, `mkdir`, `touch`, `stat`, `hexdump`, `nano`, `write`, `pwd` |
-| Networking | `net`, `net selftest`, `wifi`, `wifi reset`, `wifi upload`, `wifi init-rings`, `wifi scan`, `wifi connect <ssid> <pass>` |
+| Networking | `net`, `net selftest`, `ipconfig`, `wifi`, `wifi reset`, `wifi upload`, `wifi init-rings`, `wifi scan`, `wifi connect <ssid> <pass>` |
 | Diagnostics | `dmesg`, `bmesg`, `btop`, `keydebug` |
 | Power | `reboot`, `shutdown`, `poweroff`, `halt`, `suspend` |
 | SageLang | `sage <module>`, `sageshell`, `source <script>`, `sagepkg` |
@@ -81,7 +81,7 @@ Credentials saved to `/fat32/WIFI.CFG` are automatically loaded on boot and a re
 ```text
 SageOS_300e/
 ├── lenovo_300e.sh           # Unified build/flash/qemu script
-├── VERSION                  # Current operating system version (0.1.9)
+├── VERSION                  # Current operating system version (0.1.92)
 ├── sageos_build/
 │   ├── kernel/              # Core kernel, drivers, VFS, shell
 │   │   ├── core/            # Kernel entry, scheduler, VMM, SageLang VM

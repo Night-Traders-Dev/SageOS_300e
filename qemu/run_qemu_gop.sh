@@ -7,4 +7,6 @@ qemu-system-x86_64 \
   -bios /usr/share/ovmf/OVMF.fd \
   -drive file=sageos.img,format=raw,snapshot=on \
   -m 256M \
-  -serial stdio
+  -serial stdio \
+  -netdev user,id=net0 \
+  -device e1000,netdev=net0

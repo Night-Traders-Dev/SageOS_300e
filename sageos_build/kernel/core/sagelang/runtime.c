@@ -392,11 +392,45 @@ static MetalValue n_sys_exec(MetalVM* vm, MetalValue* args, int argc) {
     return mv_nil();
 }
 
+static MetalValue n_string_substr(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 3 || args[0].type != MV_STR || args[1].type != MV_NUM || args[2].type != MV_NUM) return mv_nil();
+    const char* str = metal_string_get(vm, args[0].as.str_idx);
+    union { double d; uint64_t u; } st, l;
+    st.u = args[1].as.num_bits;
+    l.u = args[2].as.num_bits;
+    int start = (int)st.d;
+    int len = (int)l.d;
+    if (start < 0 || start >= (int)strlen(str)) return metal_vm_string_new(vm, "");
+    if (len <= 0) return metal_vm_string_new(vm, "");
+    char buf[512];
+    int max_len = sizeof(buf) - 1;
+    if (len > max_len) len = max_len;
+    if (start + len > (int)strlen(str)) len = (int)strlen(str) - start;
+    strncpy(buf, str + start, len);
+    buf[len] = '\0';
+    return metal_vm_string_new(vm, buf);
+}
+
+static MetalValue n_contains(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 2 || args[0].type != MV_STR || args[1].type != MV_STR) return mv_bool(0);
+    const char* haystack = metal_string_get(vm, args[0].as.str_idx);
+    const char* needle = metal_string_get(vm, args[1].as.str_idx);
+    return mv_bool(strstr(haystack, needle) != NULL);
+}
+
 static MetalValue n_sys_getenv(MetalVM* vm, MetalValue* args, int argc) {
     if (argc < 1 || args[0].type != MV_STR) return mv_nil();
     const char* var = metal_string_get(vm, args[0].as.str_idx);
     if (strcmp(var, "HOME") == 0) return metal_vm_string_new(vm, "/");
     return mv_nil();
+}
+
+static MetalValue n_sys_args_builtin(MetalVM* vm, MetalValue* args, int argc) {
+    (void)args; (void)argc;
+    int argv_idx = metal_array_new(vm);
+    metal_array_push(vm, argv_idx, metal_vm_string_new(vm, "sagepkg"));
+    MetalValue argv_val; argv_val.type = MV_ARR; argv_val.as.arr_idx = argv_idx;
+    return argv_val;
 }
 
 static MetalValue n_io_readfile(MetalVM* vm, MetalValue* args, int argc) {
@@ -408,6 +442,23 @@ static MetalValue n_io_readfile(MetalVM* vm, MetalValue* args, int argc) {
     if (n < 0) return mv_nil();
     buf[n] = '\0';
     return metal_vm_string_new(vm, buf);
+}
+
+static MetalValue n_io_writefile(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 2 || args[0].type != MV_STR || args[1].type != MV_STR) return mv_nil();
+    const char* path = metal_string_get(vm, args[0].as.str_idx);
+    const char* content = metal_string_get(vm, args[1].as.str_idx);
+    extern int vfs_write(const char *path, uint64_t offset, const void *buffer, size_t size);
+    int n = vfs_write(path, 0, content, strlen(content));
+    return mv_bool(n >= 0);
+}
+
+static MetalValue n_io_exists(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_bool(0);
+    const char* path = metal_string_get(vm, args[0].as.str_idx);
+    VfsStat st;
+    extern int vfs_stat(const char *path, VfsStat *st);
+    return mv_bool(vfs_stat(path, &st) == 0);
 }
 
 static MetalValue n_json_parse(MetalVM* vm, MetalValue* args, int argc) {
@@ -423,12 +474,18 @@ static MetalValue n_json_parse(MetalVM* vm, MetalValue* args, int argc) {
 static void sage_register_builtin_modules(MetalVM* vm) {
     // 1. Register the underlying natives globally
     metal_vm_register_native(vm, "_sys_exec", n_sys_exec);
+    metal_vm_register_native(vm, "sys_exec", n_sys_exec);
     metal_vm_register_native(vm, "_sys_getenv", n_sys_getenv);
+    metal_vm_register_native(vm, "sys_args_builtin", n_sys_args_builtin);
     metal_vm_register_native(vm, "_io_readfile", n_io_readfile);
+    metal_vm_register_native(vm, "io_readfile", n_io_readfile);
+    metal_vm_register_native(vm, "io_writefile", n_io_writefile);
+    metal_vm_register_native(vm, "io_exists", n_io_exists);
     metal_vm_register_native(vm, "_json_parse", n_json_parse);
+    metal_vm_register_native(vm, "string_substr", n_string_substr);
+    metal_vm_register_native(vm, "contains", n_contains);
     metal_vm_register_native(vm, "len", n_len);
     metal_vm_register_native(vm, "chr", n_os_get_c0); // Dummy chr for now
-
     // 2. Create the 'sys' module dictionary
     int sys_idx = metal_dict_new(vm);
     if (sys_idx >= 0) {

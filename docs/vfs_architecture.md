@@ -40,7 +40,7 @@ static VfsMount g_mounts[MAX_MOUNTS];
 static int g_mount_count = 0;
 ```
 
-### Handoff / Mount Layout (v0.1.9)
+### Handoff / Mount Layout (v0.1.92)
 1. **`/`** — Mounted to `ramfs_get_backend()`. Houses system tools, package indices (`/etc/packages.json`), system configuration (`/etc/init.sage`), and runtime diagnostics.
 2. **`/fat32`** — Mounted to `fat32_get_backend()`. Exposes the physical ESP partition of the boot USB or local storage. Used to load large binary drivers, blobs, and persist network/supplicant configurations (`WIFI.CFG`).
 3. **`/btrfs`** — Mounted to `btrfs_get_backend()`. Exposes high-capacity BTRFS partitions for robust primary storage.
@@ -63,9 +63,9 @@ When a high-level command like `ls /fat32` or a SageLang script opens a file:
 
 ---
 
-## 4. Case-Insensitive Resolution (v0.1.9 Fix)
+## 4. Case-Insensitive Resolution (v0.1.92 Fix)
 
-Prior to **v0.1.9**, path-matching on the native FAT32 driver used strict case-sensitive comparisons. When booting from a standard FAT32 partition, short filenames (SFN) are automatically capitalized by partitioning utilities (`ATH10K`, `QCA6174`, `BOARD-2.BIN`). 
+Prior to **v0.1.92**, path-matching on the native FAT32 driver used strict case-sensitive comparisons. When booting from a standard FAT32 partition, short filenames (SFN) are automatically capitalized by partitioning utilities (`ATH10K`, `QCA6174`, `BOARD-2.BIN`). 
 
 As a result:
 - Early boot queries (which used UEFI `EfiFileProtocol->Open` under active boot services) matched the directories successfully due to UEFI's internal case-insensitivity.

@@ -4,6 +4,7 @@
 #include "dmesg.h"
 #include "net.h"
 #include "wifi_qca6174.h"
+#include "e1000.h"
 
 typedef struct {
     int l2_registry_ready;
@@ -144,6 +145,7 @@ void net_init(void) {
     g_net_stack.dhcp_ready = 1;
 
     qca6174_init();
+    e1000_init();
 
     if (g_net_device_count == 0) {
         dmesg_log("net: no interfaces registered");
@@ -482,3 +484,4 @@ void net_cmd_selftest(void) {
     console_write("  udp=0x");
     net_print_hex16(net_be16_to_cpu(udp->checksum));
 }
+

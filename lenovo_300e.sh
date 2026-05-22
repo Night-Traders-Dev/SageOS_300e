@@ -318,6 +318,10 @@ build_image() {
     mkdir -p "$kernel_bin"
     cp "$BUILD/sage_pkg/packages/sagepkg/universal/sagepkg.sage" "$kernel_bin/sagepkg.sage"
     cp "$BUILD/sage_pkg/lib/json.sage" "$kernel_bin/json.sage"
+    cp "$BUILD/sage_lang/core/lib/string.sage" "$kernel_bin/string.sage"
+    cp "$BUILD/sage_lang/core/lib/strings.sage" "$kernel_bin/strings.sage"
+    cp "$BUILD/sage_lang/core/lib/sys.sage" "$kernel_bin/sys.sage" 2>/dev/null || true
+    cp "$BUILD/sage_lang/core/lib/io.sage" "$kernel_bin/io.sage" 2>/dev/null || true
     cp "$BUILD/sage_pkg/packages.json" "$KERNEL/etc/packages.json"
 
     # Generate embedded commands and etc files header
@@ -447,6 +451,8 @@ qemu_run() {
       -m 256M \
       -display none \
       -serial stdio \
+      -netdev user,id=net0 \
+      -device e1000,netdev=net0 \
       -device isa-debug-exit,iobase=0x501,iosize=2; then
         local rc=$?
         # rc=1 is the normal 'exit' command path (write 0x00 => (0<<1)|1 = 1)

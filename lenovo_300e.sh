@@ -211,11 +211,11 @@ build_kernel() {
           -I"$KERNEL/core/sagelang/compiler" \
           -include "$KERNEL/include/sage_libc_shim.h" \
           -D__sageos__ \
-          -DMETAL_STACK_SIZE=128 \
-          -DMETAL_POOL_SIZE=256 \
-          -DMETAL_STRING_POOL=65536 \
-          -DMETAL_HEAP_SIZE=262144 \
-          -DMETAL_CONST_POOL=512 \
+          -DMETAL_STACK_SIZE=1024 \
+          -DMETAL_POOL_SIZE=512 \
+          -DMETAL_STRING_POOL=131072 \
+          -DMETAL_HEAP_SIZE=1048576 \
+          -DMETAL_CONST_POOL=1024 \
           -DMETAL_NATIVE_MAX=128 \
           -DSAGEOS_FIRMWARE_I8042_FALLBACK="${SAGEOS_FIRMWARE_I8042_FALLBACK:-1}" \
           -c "$src" \
@@ -244,9 +244,11 @@ build_kernel() {
       "$OBJ/entry.o" \
       "${objs[@]}" \
       -o "$BUILD/kernel.elf"
-
-    llvm-objcopy -O binary --remove-section .bss "$BUILD/kernel.elf" "$BUILD/KERNEL.BIN"
-
+    # Extract binary sections into a flat image
+    # Note: we truncate the binary to kernel_extent so the UEFI loader
+    # allocates enough memory for the WHOLE kernel (including BSS).
+    llvm-objcopy -O binary "$BUILD/kernel.elf" "$BUILD/KERNEL.BIN"
+    
     local kernel_start=""
     local kernel_end=""
     kernel_start="$(llvm-nm "$BUILD/kernel.elf" | awk '$3 == "__kernel_start" { print "0x" $1 }')"
@@ -261,7 +263,7 @@ build_kernel() {
     truncate -s "$kernel_extent" "$BUILD/KERNEL.BIN"
 
     echo "[OK] $BUILD/kernel.elf"
-    echo "[OK] $BUILD/KERNEL.BIN"
+    echo "[OK] $BUILD/KERNEL.BIN (padded to $kernel_extent bytes)"
 }
 
 build_image() {

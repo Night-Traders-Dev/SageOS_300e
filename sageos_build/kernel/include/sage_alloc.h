@@ -16,7 +16,8 @@
 #include <stdint.h>
 
 /* Arena size: 1 MB */
-#define SAGE_ARENA_SIZE  (1024 * 1024)
+#define SAGE_ARENA_SIZE  (8 * 1024 * 1024)
+
 
 /* Bump allocator */
 void *sage_malloc(size_t size);

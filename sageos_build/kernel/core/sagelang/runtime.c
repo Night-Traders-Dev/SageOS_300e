@@ -384,8 +384,93 @@ MetalValue n_os_get_color(MetalVM* vm, MetalValue* args, int argc) {
     return mv_dbl((double)console_get_fg());
 }
 
-static void sage_register_repl_natives(MetalVM* vm) {
+static MetalValue n_sys_exec(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_nil();
+    const char* cmd = metal_string_get(vm, args[0].as.str_idx);
+    extern void shell_exec_command(const char *cmd);
+    shell_exec_command(cmd);
+    return mv_nil();
+}
+
+static MetalValue n_sys_getenv(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_nil();
+    const char* var = metal_string_get(vm, args[0].as.str_idx);
+    if (strcmp(var, "HOME") == 0) return metal_vm_string_new(vm, "/");
+    return mv_nil();
+}
+
+static MetalValue n_io_readfile(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_nil();
+    const char* path = metal_string_get(vm, args[0].as.str_idx);
+    extern int vfs_read(const char *path, uint64_t offset, void *buffer, size_t size);
+    static char buf[4096];
+    int n = vfs_read(path, 0, buf, sizeof(buf)-1);
+    if (n < 0) return mv_nil();
+    buf[n] = '\0';
+    return metal_vm_string_new(vm, buf);
+}
+
+static MetalValue n_json_parse(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_STR) return mv_nil();
+    // Simplified JSON parser placeholder
+    return metal_vm_lookup(vm, "os_get_mount_info"); // Dummy
+}
+
+// Forward declare scope_define (defined in metal_vm.c as static? No, I should make it public or export a helper)
+// Actually, I'll just use metal_vm_register_native and then manually fix up the scope in metal_vm.c if needed.
+// Wait, I already added scope_define to metal_vm.c but it was static.
+
+static void sage_register_builtin_modules(MetalVM* vm) {
+    // 1. Register the underlying natives globally
+    metal_vm_register_native(vm, "_sys_exec", n_sys_exec);
+    metal_vm_register_native(vm, "_sys_getenv", n_sys_getenv);
+    metal_vm_register_native(vm, "_io_readfile", n_io_readfile);
+    metal_vm_register_native(vm, "_json_parse", n_json_parse);
     metal_vm_register_native(vm, "len", n_len);
+    metal_vm_register_native(vm, "chr", n_os_get_c0); // Dummy chr for now
+
+    // 2. Create the 'sys' module dictionary
+    int sys_idx = metal_dict_new(vm);
+    if (sys_idx >= 0) {
+        metal_dict_set(vm, sys_idx, metal_string_intern(vm, "exec", 4), mv_str(vm, "_sys_exec", 9));
+        metal_dict_set(vm, sys_idx, metal_string_intern(vm, "getenv", 6), mv_str(vm, "_sys_getenv", 11));
+        
+        // sys.argv
+        int argv_idx = metal_array_new(vm);
+        metal_array_push(vm, argv_idx, metal_vm_string_new(vm, "sagepkg"));
+        MetalValue argv_val; argv_val.type = MV_ARR; argv_val.as.arr_idx = argv_idx;
+        metal_dict_set(vm, sys_idx, metal_string_intern(vm, "argv", 4), argv_val);
+
+        MetalValue sys_val; sys_val.type = MV_DICT; sys_val.as.dict_idx = sys_idx;
+        scope_define(vm, metal_fnv1a("sys"), -1, sys_val);
+    }
+
+    // 3. Create 'io' module
+    int io_idx = metal_dict_new(vm);
+    if (io_idx >= 0) {
+        metal_dict_set(vm, io_idx, metal_string_intern(vm, "readfile", 8), mv_str(vm, "_io_readfile", 12));
+        MetalValue io_val; io_val.type = MV_DICT; io_val.as.dict_idx = io_idx;
+        scope_define(vm, metal_fnv1a("io"), -1, io_val);
+    }
+
+    // 4. Create 'json' module
+    int json_idx = metal_dict_new(vm);
+    if (json_idx >= 0) {
+        metal_dict_set(vm, json_idx, metal_string_intern(vm, "parse", 5), mv_str(vm, "_json_parse", 11));
+        MetalValue json_val; json_val.type = MV_DICT; json_val.as.dict_idx = json_idx;
+        scope_define(vm, metal_fnv1a("json"), -1, json_val);
+    }
+
+    // 5. Create 'string' module (placeholder)
+    int str_idx = metal_dict_new(vm);
+    if (str_idx >= 0) {
+        MetalValue str_val; str_val.type = MV_DICT; str_val.as.dict_idx = str_idx;
+        scope_define(vm, metal_fnv1a("string"), -1, str_val);
+    }
+}
+
+static void sage_register_repl_natives(MetalVM* vm) {
+    sage_register_builtin_modules(vm);
     metal_vm_register_native(vm, "os_strlen", n_os_strlen);
     metal_vm_register_native(vm, "os_starts_with", n_os_starts_with);
     metal_vm_register_native(vm, "os_array_len", n_os_array_len);
@@ -564,33 +649,75 @@ static int sage_import_chunk_constants(MetalVM* vm, BytecodeChunk* chunk,
 }
 
 static void sage_patch_main_chunk_indices(BytecodeChunk* chunk, int const_offset) {
-    for (int i = 0; i < chunk->code_count; i++) {
+    if (const_offset == 0) return;
+    
+    for (int i = 0; i < chunk->code_count; ) {
         uint8_t op = chunk->code[i];
         int operands = 0;
 
-        if (op == BC_OP_CONSTANT ||
-            op == BC_OP_GET_GLOBAL || op == BC_OP_DEFINE_GLOBAL || op == BC_OP_SET_GLOBAL ||
-            op == BC_OP_GET_PROPERTY || op == BC_OP_SET_PROPERTY ||
-            op == BC_OP_CALL_METHOD) {
+        switch (op) {
+            case BC_OP_CONSTANT:
+            case BC_OP_GET_GLOBAL:
+            case BC_OP_DEFINE_GLOBAL:
+            case BC_OP_SET_GLOBAL:
+            case BC_OP_GET_PROPERTY:
+            case BC_OP_SET_PROPERTY:
+            case BC_OP_ARRAY:
+            case BC_OP_TUPLE:
+            case BC_OP_DICT:
+            case BC_OP_IMPORT:
+            case BC_OP_CLASS:
+            case BC_OP_METHOD:
+            {
+                uint16_t idx = (uint16_t)((chunk->code[i + 1] << 8) | chunk->code[i + 2]);
+                idx += (uint16_t)const_offset;
+                chunk->code[i + 1] = (uint8_t)((idx >> 8) & 0xff);
+                chunk->code[i + 2] = (uint8_t)(idx & 0xff);
+                operands = 2;
+                break;
+            }
 
-            uint16_t idx = (uint16_t)((chunk->code[i + 1] << 8) | chunk->code[i + 2]);
-            idx += (uint16_t)const_offset;
-            chunk->code[i + 1] = (uint8_t)((idx >> 8) & 0xff);
-            chunk->code[i + 2] = (uint8_t)(idx & 0xff);
-            operands = 2;
-        } else if (op == BC_OP_DEFINE_FUNCTION) {
-            uint16_t name_idx = (uint16_t)((chunk->code[i + 1] << 8) | chunk->code[i + 2]);
-            name_idx += (uint16_t)const_offset;
-            chunk->code[i + 1] = (uint8_t)((name_idx >> 8) & 0xff);
-            chunk->code[i + 2] = (uint8_t)(name_idx & 0xff);
-            operands = 4;
-        } else if (op == BC_OP_JUMP || op == BC_OP_JUMP_IF_FALSE || op == BC_OP_LOOP_BACK) {
-            operands = 2;
-        } else if (op == BC_OP_CALL || op == BC_OP_DUP) {
-            operands = 1;
+            case BC_OP_DEFINE_FUNCTION:
+            {
+                uint16_t name_idx = (uint16_t)((chunk->code[i + 1] << 8) | chunk->code[i + 2]);
+                name_idx += (uint16_t)const_offset;
+                chunk->code[i + 1] = (uint8_t)((name_idx >> 8) & 0xff);
+                chunk->code[i + 2] = (uint8_t)(name_idx & 0xff);
+                // Note: fn_idx (bytes 3,4) does not need patching
+                operands = 4;
+                break;
+            }
+
+            case BC_OP_CALL_METHOD:
+            {
+                // Format: OP (1), ARGC (1), NAME_IDX (2)
+                uint16_t idx = (uint16_t)((chunk->code[i + 2] << 8) | chunk->code[i + 3]);
+                idx += (uint16_t)const_offset;
+                chunk->code[i + 2] = (uint8_t)((idx >> 8) & 0xff);
+                chunk->code[i + 3] = (uint8_t)(idx & 0xff);
+                operands = 3;
+                break;
+            }
+
+            case BC_OP_JUMP:
+            case BC_OP_JUMP_IF_FALSE:
+            case BC_OP_LOOP_BACK:
+            case BC_OP_BREAK:
+            case BC_OP_CONTINUE:
+            case BC_OP_SETUP_TRY:
+                operands = 2;
+                break;
+
+            case BC_OP_CALL:
+                operands = 1;
+                break;
+
+            default:
+                operands = 0;
+                break;
         }
 
-        i += operands;
+        i += (1 + operands);
     }
 }
 
@@ -720,7 +847,7 @@ void sage_repl_step(const char* line) {
         int is_expression = (stmt->type == STMT_EXPRESSION);
 
         bytecode_chunk_init(&chunk);
-        if (!bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_HYBRID,
+        if (!bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_STRICT,
                                                        sage_repl_build_function, &g_repl_vm,
                                                        error, sizeof(error))) {
             if (!sage_exit_flag) {
@@ -919,7 +1046,7 @@ static void sage_repl_run(void) {
                     BytecodeChunk chunk;
                     bytecode_chunk_init(&chunk);
                     char error[128];
-                    if (bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_HYBRID,
+                    if (bytecode_compile_statement_with_functions(&chunk, stmt, BYTECODE_COMPILE_STRICT,
                                                                  sage_repl_build_function, &g_repl_vm,
                                                                  error, sizeof(error))) {
                         int const_offset = 0;
@@ -928,14 +1055,8 @@ static void sage_repl_run(void) {
                         sage_prepare_vm_for_step(&g_repl_vm);
                         metal_vm_load(&g_repl_vm, chunk.code, chunk.code_count);
                         metal_vm_run(&g_repl_vm);
-                        if (!g_repl_vm.error) {
-                            MetalValue val = metal_vm_peek(&g_repl_vm, 0);
-                            metal_print_value(&g_repl_vm, val);
-                            console_write(" : ");
-                            extern const char* metal_value_type_name(MetalValueType type);
-                            console_write(metal_value_type_name(val.type));
-                            console_write("\n");
-                        }
+                        bytecode_chunk_free(&chunk);
+
                         bytecode_chunk_free(&chunk);
                     }
                 } else {
@@ -1144,33 +1265,11 @@ static void sage_repl_run(void) {
     sage_clear_exit_state();
 }
 
-void sage_execute(const char* line) {
-    if (line == NULL || line[0] == '\0' || strcmp(line, "--repl") == 0) {
-        sage_repl_run();
-        return;
-    }
-
-    console_putc('\n');
-    sage_repl_step(line);
-}
-
 void sage_run_file(const char* path) {
-    if (!path || !*path) return;
-
-    VfsStat st;
-    int r = vfs_stat(path, &st);
-    if (r < 0) {
-        printf("sage: cannot access %s\n", path);
-        return;
-    }
-
-    /* 
-     * We use a fixed-size buffer for scripts in kernel space.
-     * 64KB is plenty for most SageLang scripts.
-     */
-    static uint8_t script_buffer[65536];
-    size_t to_read = (size_t)st.size;
-    if (to_read > 65535) to_read = 65535;
+    if (path == NULL) return;
+    
+    static char script_buffer[65536];
+    uint32_t to_read = 65535;
 
     int n = vfs_read(path, 0, script_buffer, to_read);
     if (n <= 0) return;
@@ -1178,6 +1277,7 @@ void sage_run_file(const char* path) {
     script_buffer[n] = '\0';
 
     /* Check for bytecode magic */
+
     if (n >= 4 && script_buffer[0] == 'S' && script_buffer[1] == 'G' &&
         script_buffer[2] == 'V' && script_buffer[3] == 'M') {
         
@@ -1186,7 +1286,7 @@ void sage_run_file(const char* path) {
         vm.write_char = metal_vm_write_char_bridge;
         sage_register_repl_natives(&vm);
         
-        if (metal_vm_load_binary(&vm, script_buffer, n)) {
+        if (metal_vm_load_binary(&vm, (const unsigned char*)script_buffer, n)) {
             metal_vm_run(&vm);
             if (vm.error) {
                 printf("Runtime error: %s\n", vm.error_msg ? vm.error_msg : "unknown");
@@ -1197,4 +1297,14 @@ void sage_run_file(const char* path) {
     } else {
         sage_execute((const char*)script_buffer);
     }
+}
+
+void sage_execute(const char* line) {
+    if (line == NULL || line[0] == '\0' || strcmp(line, "--repl") == 0) {
+        sage_repl_run();
+        return;
+    }
+
+    console_putc('\n');
+    sage_repl_step(line);
 }

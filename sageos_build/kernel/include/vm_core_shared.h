@@ -50,6 +50,7 @@ typedef enum {
     OP_TUPLE          = 39,
     OP_DICT           = 40,
     OP_PRINT          = 41,
+    OP_EXEC_AST_STMT  = 42,
     OP_RETURN         = 43,
     OP_PUSH_ENV       = 44,
     OP_POP_ENV        = 45,
@@ -58,6 +59,7 @@ typedef enum {
     OP_BREAK          = 48,
     OP_CONTINUE       = 49,
     OP_LOOP_BACK      = 50,
+    OP_IMPORT         = 51,
     OP_HALT           = 0xFF
 } OpCode;
 

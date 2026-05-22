@@ -1,0 +1,23 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn ./lenovo_300e.sh qemu live
+expect "root@sageos:/#"
+send "sage run /etc/import_test.sage\r"
+expect "IMPORT SUCCESS"
+expect "root@sageos:/#"
+send "sagepkg\r"
+expect {
+    "SagePkg v" {
+        send_user "\n[OK] SagePkg started successfully\n"
+        send "exit\r"
+    }
+    "Runtime error" {
+        send_user "\n[FAIL] SagePkg runtime error\n"
+        exit 1
+    }
+    timeout {
+        send_user "\n[FAIL] SagePkg did not start within timeout\n"
+        exit 1
+    }
+}
+expect eof

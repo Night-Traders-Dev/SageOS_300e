@@ -16,9 +16,18 @@ static uint8_t sage_heap[SAGE_ARENA_SIZE] __attribute__((aligned(16)));
 static size_t sage_bump = 0;
 
 void *sage_malloc(size_t size) {
+    size_t raw_size = size;
     size = (size + 15) & ~(size_t)15;
     if (sage_bump + size + 16 > SAGE_ARENA_SIZE) {
-        console_write("\nsage: out of memory");
+        console_write("\nsage: out of memory (request: ");
+        console_u32((uint32_t)raw_size);
+        console_write(" bytes, aligned: ");
+        console_u32((uint32_t)size);
+        console_write(", bump: ");
+        console_u32((uint32_t)sage_bump);
+        console_write("/");
+        console_u32((uint32_t)SAGE_ARENA_SIZE);
+        console_write(")\n");
         return (void *)0;
     }
     size_t *header = (size_t *)&sage_heap[sage_bump];
@@ -41,6 +50,17 @@ void *sage_realloc(void *ptr, size_t new_size) {
     size_t old_size = *header;
     
     if (new_size <= old_size) return ptr; // Already big enough
+
+    // Optimization: if this is the very last allocation, just grow it in place
+    if ((uint8_t *)ptr + old_size == &sage_heap[sage_bump]) {
+        size_t needed = (new_size + 15) & ~(size_t)15;
+        size_t extra = needed - old_size;
+        if (sage_bump + extra <= SAGE_ARENA_SIZE) {
+            *header = needed;
+            sage_bump += extra;
+            return ptr;
+        }
+    }
     
     void *np = sage_malloc(new_size);
     if (!np) return (void *)0;

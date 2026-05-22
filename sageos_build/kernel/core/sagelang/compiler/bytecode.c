@@ -672,8 +672,11 @@ static int compile_stmt(BytecodeCompiler* compiler, Stmt* stmt, int want_result)
             return 1;
         }
         case STMT_IMPORT: {
-            // Fall through to AST fallback for now — module loading requires interpreter
-            break;
+            ImportStmt* is = &stmt->as.import;
+            int name_idx = add_constant(compiler, val_string(is->module_name));
+            if (name_idx < 0) return 0;
+            return emit_op(compiler, BC_OP_IMPORT, 0, 0) &&
+                   emit_u16(compiler, (uint16_t)name_idx, 0, 0);
         }
         case STMT_TRY: {
             // Fall through to AST fallback — exception handling requires handler stack
@@ -734,6 +737,7 @@ int bytecode_compile_statement_with_functions(BytecodeChunk* chunk, Stmt* stmt, 
     compiler->allow_return = 0;
     compiler->error = error;
     compiler->error_size = error_size;
+
     if (error != NULL && error_size > 0) {
         error[0] = '\0';
     }

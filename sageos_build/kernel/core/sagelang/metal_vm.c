@@ -7,9 +7,14 @@
 
 #include "metal_vm.h"
 #include <stdint.h>
+#include <ctype.h>
 #include "console.h"
 #include "vm_core_shared.h"
 #include "vm_hal.h"
+
+#if OP_CALL == 8
+#error OP_CALL IS 8
+#endif
 
 // Bare-metal HAL implementations
 void* vm_memset(void* s, int c, size_t n) { return memset(s, c, n); }
@@ -108,6 +113,10 @@ MetalValue mv_str(MetalVM* vm, const char* s, int len) {
 
 MetalValue mv_ptr(void* p) {
     MetalValue v; v.type = MV_PTR; v.as.ptr = p; return v;
+}
+
+MetalValue metal_vm_string_new(MetalVM* vm, const char* s) {
+    return mv_str(vm, s, (int)strlen(s));
 }
 
 // ============================================================================
@@ -311,7 +320,6 @@ int metal_string_intern(MetalVM* vm, const char* s, int len) {
     }
 
     // Allocate new
-    // Check for integer overflow in size calculation
     if (len > 0x7FFFFFFF - 1) return -1; 
     if (vm->string_used + len + 1 > METAL_STRING_POOL) return -1;
     
@@ -337,7 +345,6 @@ void metal_string_concat(MetalVM* vm, int idx_a, int idx_b, int* out_idx) {
     int la = (int)strlen(a);
     int lb = (int)strlen(b);
     
-    // Check for overflow
     if (la < 0 || lb < 0 || la > 0x3FFFFFFF || lb > 0x3FFFFFFF) { *out_idx = -1; return; }
     int total = la + lb;
     
@@ -369,7 +376,7 @@ void metal_num_to_str(MetalVM* vm, long long n, int* out_idx) {
 // Native Function Dispatch Table
 // ============================================================================
 
-static void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, MetalValue value);
+void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, MetalValue value);
 
 int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
     if (vm->native_count >= METAL_NATIVE_MAX) {
@@ -382,12 +389,6 @@ int metal_vm_register_native(MetalVM* vm, const char* name, MetalNativeFn fn) {
     vm->natives[vm->native_count].name_hash = metal_fnv1a(name);
     vm->natives[vm->native_count].fn = fn;
     vm->native_count++;
-
-    /*
-     * Native calls are compiled like normal global calls. Bind each native
-     * name into the current scope as a self-named string so OP_CALL can
-     * resolve the registered callback from the callee value.
-     */
     scope_define(vm, metal_fnv1a(name), -1, mv_str(vm, name, (int)strlen(name)));
     return 1;
 }
@@ -452,16 +453,12 @@ void metal_dict_set(MetalVM* vm, int dict_idx, int key_idx, MetalValue val) {
     int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
     if (dict_idx < 0 || dict_idx >= max) return;
     MetalDict* d = &vm->dicts[dict_idx];
-
-    // Search for existing key
     for (int i = 0; i < d->count; i++) {
         if (d->key_str_idx[i] == key_idx) {
             d->values[i] = val;
             return;
         }
     }
-
-    // Add new key
     if (d->count < METAL_DICT_MAX_ENTRIES) {
         d->key_str_idx[d->count] = key_idx;
         d->values[d->count] = val;
@@ -473,7 +470,6 @@ MetalValue metal_dict_get(MetalVM* vm, int dict_idx, int key_idx) {
     int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
     if (dict_idx < 0 || dict_idx >= max) return mv_nil();
     MetalDict* d = &vm->dicts[dict_idx];
-
     for (int i = 0; i < d->count; i++) {
         if (d->key_str_idx[i] == key_idx) {
             return d->values[i];
@@ -486,7 +482,6 @@ int metal_dict_has(MetalVM* vm, int dict_idx, int key_idx) {
     int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
     if (dict_idx < 0 || dict_idx >= max) return 0;
     MetalDict* d = &vm->dicts[dict_idx];
-
     for (int i = 0; i < d->count; i++) {
         if (d->key_str_idx[i] == key_idx) {
             return 1;
@@ -499,7 +494,7 @@ int metal_dict_has(MetalVM* vm, int dict_idx, int key_idx) {
 // Environment (scope chain — flat array)
 // ============================================================================
 
-static int scope_lookup(MetalVM* vm, unsigned int hash, MetalValue* out) {
+int scope_lookup(MetalVM* vm, unsigned int hash, MetalValue* out) {
     for (int d = vm->scope_depth; d >= 0; d--) {
         MetalScope* s = &vm->scopes[d];
         for (int i = 0; i < s->count; i++) {
@@ -512,9 +507,8 @@ static int scope_lookup(MetalVM* vm, unsigned int hash, MetalValue* out) {
     return 0;
 }
 
-static void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, MetalValue value) {
+void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, MetalValue value) {
     MetalScope* s = &vm->scopes[vm->scope_depth];
-    // Check if exists in current scope
     for (int i = 0; i < s->count; i++) {
         if (s->name_hash[i] == (int)hash) {
             s->values[i] = value;
@@ -522,9 +516,8 @@ static void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, Met
         }
     }
     if (s->count >= METAL_VARS_PER_SCOPE) {
-        /* In bare-metal, we just drop it, but let's warn if we can. */
         extern void console_write(const char* s);
-        console_write("Metal VM: scope full, cannot define variable\n");
+        console_write("Metal VM: scope full\n");
         return;
     }
     s->name_hash[s->count] = (int)hash;
@@ -543,7 +536,6 @@ static void scope_assign(MetalVM* vm, unsigned int hash, MetalValue value) {
             }
         }
     }
-    // Not found — define in current scope
     scope_define(vm, hash, -1, value);
 }
 
@@ -575,8 +567,14 @@ void metal_print_value(MetalVM* vm, MetalValue value) {
             metal_print_str(vm, "]");
             break;
         }
+        case MV_DICT:
+            metal_print_str(vm, "{...}");
+            break;
         case MV_PTR:
             metal_print_str(vm, "<ptr>");
+            break;
+        case MV_FN:
+            metal_print_str(vm, "<proc>");
             break;
         case MV_NIL:
         default:
@@ -608,34 +606,19 @@ static int metal_truthy(MetalValue v) {
 
 int metal_vm_step(MetalVM* vm) {
     if (vm->halted || vm->error || vm->ip >= vm->code_length) return 0;
-
+    
     int op = read_u8(vm);
     if (vm->error) return 0;
-    
-    /*
-    static char debug_buf[128];
-    metal_print_str(vm, "[VM] IP:");
-    metal_print_int(vm, current_ip);
-    metal_print_str(vm, " OP:");
-    metal_print_int(vm, op);
-    metal_print_str(vm, "\n");
-    */
 
     switch (op) {
-        case OP_HALT:
-            vm->halted = 1;
-            return 0;
+        case OP_HALT: vm->halted = 1; return 0;
 
         case OP_CONSTANT: {
             int idx = read_u16(vm);
             if (vm->error) return 0;
             if (idx >= 0 && idx < vm->const_count)
                 metal_vm_push(vm, vm->constants[idx]);
-            else {
-                vm->error = 1;
-                vm->error_msg = "Metal VM: constant index out of bounds";
-                return 0;
-            }
+            else { vm->error = 1; vm->error_msg = "OP_CONSTANT index error"; return 0; }
             break;
         }
 
@@ -643,48 +626,38 @@ int metal_vm_step(MetalVM* vm) {
         case OP_TRUE:  metal_vm_push(vm, mv_bool(1)); break;
         case OP_FALSE: metal_vm_push(vm, mv_bool(0)); break;
         case OP_POP:   metal_vm_pop(vm); break;
+        
         case OP_DUP: {
-            int distance = read_u8(vm);
-            if (vm->error) return 0;
-            metal_vm_push(vm, metal_vm_peek(vm, distance));
+            if (vm->sp < 1) { vm->error = 1; vm->error_msg = "OP_DUP: stack underflow"; return 0; }
+            metal_vm_push(vm, vm->stack[vm->sp - 1]);
             break;
         }
 
         case OP_DEFINE_GLOBAL: {
-            int name_idx = read_u16(vm);
+            int idx = read_u16(vm);
             if (vm->error) return 0;
             MetalValue val = metal_vm_pop(vm);
-            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_DEFINE_GLOBAL: invalid const index"; return 0; }
-            const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = metal_fnv1a(name);
-            scope_define(vm, hash, name_idx, val);
+            const char* name = metal_string_get(vm, vm->constants[idx].as.str_idx);
+            scope_define(vm, metal_fnv1a(name), idx, val);
             break;
         }
 
         case OP_GET_GLOBAL: {
-            int name_idx = read_u16(vm);
+            int idx = read_u16(vm);
             if (vm->error) return 0;
-            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_GET_GLOBAL: invalid const index"; return 0; }
-            const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = metal_fnv1a(name);
-            
+            const char* name = metal_string_get(vm, vm->constants[idx].as.str_idx);
             MetalValue val;
-            if (scope_lookup(vm, hash, &val)) {
-                metal_vm_push(vm, val);
-            } else {
-                metal_vm_push(vm, mv_nil());
-            }
+            if (scope_lookup(vm, metal_fnv1a(name), &val)) metal_vm_push(vm, val);
+            else metal_vm_push(vm, mv_nil());
             break;
         }
 
         case OP_SET_GLOBAL: {
-            int name_idx = read_u16(vm);
+            int idx = read_u16(vm);
             if (vm->error) return 0;
             MetalValue val = metal_vm_pop(vm);
-            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_SET_GLOBAL: invalid const index"; return 0; }
-            const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = metal_fnv1a(name);
-            scope_assign(vm, hash, val);
+            const char* name = metal_string_get(vm, vm->constants[idx].as.str_idx);
+            scope_assign(vm, metal_fnv1a(name), val);
             break;
         }
 
@@ -692,30 +665,20 @@ int metal_vm_step(MetalVM* vm) {
             int name_idx = read_u16_be(vm);
             int fn_idx = read_u16_be(vm);
             if (vm->error) return 0;
-            if (name_idx >= vm->const_count) { vm->error = 1; vm->error_msg = "OP_DEFINE_FN: invalid const index"; return 0; }
             const char* name = metal_string_get(vm, vm->constants[name_idx].as.str_idx);
-            unsigned int hash = metal_fnv1a(name);
-
-            MetalValue val;
-            val.type = MV_FN;
-            val.as.fn_idx = fn_idx;
-            scope_define(vm, hash, name_idx, val);
+            MetalValue val; val.type = MV_FN; val.as.fn_idx = fn_idx;
+            scope_define(vm, metal_fnv1a(name), name_idx, val);
             break;
         }
 
-        // Arithmetic / String Concatenation
         case OP_ADD: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             if (a.type == MV_STR && b.type == MV_STR) {
-                // String concatenation
-                int out_idx;
-                metal_string_concat(vm, a.as.str_idx, b.as.str_idx, &out_idx);
-                MetalValue sv; sv.type = MV_STR; sv.as.str_idx = out_idx;
-                metal_vm_push(vm, sv);
+                int out; metal_string_concat(vm, a.as.str_idx, b.as.str_idx, &out);
+                MetalValue v; v.type = MV_STR; v.as.str_idx = out; metal_vm_push(vm, v);
             } else {
                 union { double d; uint64_t u; } va, vb, vr;
-                va.u = a.as.num_bits; vb.u = b.as.num_bits;
-                vr.d = va.d + vb.d;
+                va.u = a.as.num_bits; vb.u = b.as.num_bits; vr.d = va.d + vb.d;
                 metal_vm_push(vm, mv_num(vr.u));
             }
             break;
@@ -723,16 +686,14 @@ int metal_vm_step(MetalVM* vm) {
         case OP_SUB: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = va.d - vb.d;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits; vr.d = va.d - vb.d;
             metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_MUL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = va.d * vb.d;
+            va.u = a.as.num_bits; vb.u = b.as.num_bits; vr.d = va.d * vb.d;
             metal_vm_push(vm, mv_num(vr.u));
             break;
         }
@@ -740,422 +701,360 @@ int metal_vm_step(MetalVM* vm) {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb, vr;
             va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            if (vb.d == 0.0) { vm->error = 1; vm->error_msg = "division by zero"; return 0; }
-            vr.d = va.d / vb.d;
-            metal_vm_push(vm, mv_num(vr.u));
+            if (vb.d == 0.0) { vm->error = 1; vm->error_msg = "div zero"; return 0; }
+            vr.d = va.d / vb.d; metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_MOD: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb, vr;
             va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            if (vb.d == 0.0) { vm->error = 1; vm->error_msg = "modulo by zero"; return 0; }
-            long long la = (long long)va.d, lb = (long long)vb.d;
-            vr.d = (double)(la % lb);
+            if (vb.d == 0.0) { vm->error = 1; vm->error_msg = "mod zero"; return 0; }
+            vr.d = (double)((long long)va.d % (long long)vb.d);
             metal_vm_push(vm, mv_num(vr.u));
             break;
         }
         case OP_NEGATE: {
             MetalValue a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vr;
-            va.u = a.as.num_bits;
-            vr.d = -va.d;
-            metal_vm_push(vm, mv_num(vr.u));
+            va.u = a.as.num_bits; vr.d = -va.d; metal_vm_push(vm, mv_num(vr.u));
             break;
         }
 
-        // Comparison
         case OP_EQUAL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            int eq = (a.type == b.type) && (a.type == MV_NUM ? a.as.num_bits == b.as.num_bits :
-                     a.type == MV_BOOL ? a.as.boolean == b.as.boolean :
-                     a.type == MV_NIL ? 1 : 0);
+            int eq = (a.type == b.type) && (a.as.num_bits == b.as.num_bits);
             metal_vm_push(vm, mv_bool(eq));
             break;
         }
         case OP_NOT_EQUAL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            int eq = (a.type == b.type) && (a.type == MV_NUM ? a.as.num_bits == b.as.num_bits :
-                     a.type == MV_BOOL ? a.as.boolean == b.as.boolean :
-                     a.type == MV_NIL ? 1 : 0);
+            int eq = (a.type == b.type) && (a.as.num_bits == b.as.num_bits);
             metal_vm_push(vm, mv_bool(!eq));
             break;
         }
         case OP_GREATER: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            metal_vm_push(vm, mv_bool(va.d > vb.d));
+            va.u = a.as.num_bits; vb.u = b.as.num_bits; metal_vm_push(vm, mv_bool(va.d > vb.d));
             break;
         }
         case OP_GREATER_EQ: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            metal_vm_push(vm, mv_bool(va.d >= vb.d));
+            va.u = a.as.num_bits; vb.u = b.as.num_bits; metal_vm_push(vm, mv_bool(va.d >= vb.d));
             break;
         }
         case OP_LESS: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            metal_vm_push(vm, mv_bool(va.d < vb.d));
+            va.u = a.as.num_bits; vb.u = b.as.num_bits; metal_vm_push(vm, mv_bool(va.d < vb.d));
             break;
         }
         case OP_LESS_EQ: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
             union { double d; uint64_t u; } va, vb;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            metal_vm_push(vm, mv_bool(va.d <= vb.d));
+            va.u = a.as.num_bits; vb.u = b.as.num_bits; metal_vm_push(vm, mv_bool(va.d <= vb.d));
             break;
         }
-        case OP_NOT: {
-            MetalValue a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_bool(!metal_truthy(a)));
-            break;
-        }
-        case OP_TRUTHY: {
-            MetalValue a = metal_vm_pop(vm);
-            metal_vm_push(vm, mv_bool(metal_truthy(a)));
-            break;
-        }
+        case OP_NOT:    metal_vm_push(vm, mv_bool(!metal_truthy(metal_vm_pop(vm)))); break;
+        case OP_TRUTHY: metal_vm_push(vm, mv_bool(metal_truthy(metal_vm_pop(vm)))); break;
 
-        // Bitwise
         case OP_BIT_AND: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = (double)((long long)va.d & (long long)vb.d);
-            metal_vm_push(vm, mv_num(vr.u));
+            metal_vm_push(vm, mv_num(a.as.num_bits & b.as.num_bits));
             break;
         }
         case OP_BIT_OR: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = (double)((long long)va.d | (long long)vb.d);
-            metal_vm_push(vm, mv_num(vr.u));
+            metal_vm_push(vm, mv_num(a.as.num_bits | b.as.num_bits));
             break;
         }
         case OP_BIT_XOR: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = (double)((long long)va.d ^ (long long)vb.d);
-            metal_vm_push(vm, mv_num(vr.u));
+            metal_vm_push(vm, mv_num(a.as.num_bits ^ b.as.num_bits));
             break;
         }
         case OP_BIT_NOT: {
             MetalValue a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } va, vr;
-            va.u = a.as.num_bits;
-            vr.d = (double)(~(long long)va.d);
-            metal_vm_push(vm, mv_num(vr.u));
+            metal_vm_push(vm, mv_num(~a.as.num_bits));
             break;
         }
         case OP_SHIFT_LEFT: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = (double)((long long)va.d << (int)vb.d);
-            metal_vm_push(vm, mv_num(vr.u));
+            union { double d; uint64_t u; } vb; vb.u = b.as.num_bits;
+            metal_vm_push(vm, mv_num(a.as.num_bits << (int)vb.d));
             break;
         }
         case OP_SHIFT_RIGHT: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } va, vb, vr;
-            va.u = a.as.num_bits; vb.u = b.as.num_bits;
-            vr.d = (double)((long long)va.d >> (int)vb.d);
-            metal_vm_push(vm, mv_num(vr.u));
+            union { double d; uint64_t u; } vb; vb.u = b.as.num_bits;
+            metal_vm_push(vm, mv_num(a.as.num_bits >> (int)vb.d));
             break;
         }
 
-        // Control flow
-        case OP_JUMP: {
-            int offset = read_u16(vm);
-            if (vm->error) return 0;
-            vm->ip = offset;
-            break;
-        }
+        case OP_JUMP: vm->ip = read_u16(vm); break;
         case OP_JUMP_IF_FALSE: {
-            int offset = read_u16(vm);
-            if (vm->error) return 0;
-            MetalValue cond = metal_vm_pop(vm);
-            if (!metal_truthy(cond)) vm->ip = offset;
+            int off = read_u16(vm);
+            if (!metal_truthy(metal_vm_pop(vm))) vm->ip = off;
             break;
         }
-        case OP_LOOP_BACK: {
-            int offset = read_u16(vm);
-            if (vm->error) return 0;
-            vm->ip -= offset;
+        case OP_LOOP_BACK: vm->ip -= read_u16(vm); break;
+
+        case OP_IMPORT: {
+            int idx = read_u16(vm); (void)idx;
             break;
         }
-        case OP_BREAK: {
-            int offset = read_u16(vm);
-            if (vm->error) return 0;
-            vm->ip = offset;
-            break;
-        }
-        case OP_CONTINUE: {
-            int offset = read_u16(vm);
-            if (vm->error) return 0;
-            vm->ip = offset;
-            break;
+        case OP_EXEC_AST_STMT: {
+            read_u16(vm); vm->error = 1; vm->error_msg = "AST execution not supported"; return 0;
         }
 
-        case OP_CALL: {
-            int argc = read_u8(vm);
-            if (vm->error) return 0;
-            if (vm->sp < argc + 1) {
-                vm->error = 1;
-                vm->error_msg = "OP_CALL: stack underflow";
-                return 0;
-            }
-            MetalValue callee = vm->stack[vm->sp - argc - 1];
-            
-            if (callee.type == MV_STR) {
-                const char* name = metal_string_get(vm, callee.as.str_idx);
-                unsigned int hash = metal_fnv1a(name);
-                MetalNativeFn nfn = metal_vm_find_native(vm, hash);
-                if (nfn) {
-                    MetalValue args[16];
-                    int nargs = argc < 16 ? argc : 16;
-                    for (int i = 0; i < nargs; i++)
-                        args[i] = vm->stack[vm->sp - argc + i];
-                    vm->sp -= argc + 1;
-                    MetalValue result = nfn(vm, args, nargs);
-                    metal_vm_push(vm, result);
-                    break;
-                }
-            } else if (callee.type == MV_FN) {
-                int fn_idx = callee.as.fn_idx;
-                if (fn_idx >= 0 && fn_idx < vm->fn_count) {
-                    if (vm->frame_count >= METAL_CALL_STACK) {
-                        vm->error = 1;
-                        vm->error_msg = "Metal VM: call stack overflow";
-                        return 0;
-                    }
-                    
-                    MetalFunction* fn = &vm->functions[fn_idx];
-                    MetalFrame* frame = &vm->call_stack[vm->frame_count++];
-                    frame->ip = vm->ip;
-                    frame->code = vm->code;
-                    frame->code_length = vm->code_length;
-                    frame->sp_base = vm->sp - argc - 1;
-                    frame->constants = vm->constants;
-                    frame->const_count = vm->const_count;
-                    
-                    vm->code = fn->code;
-                    vm->code_length = fn->code_length;
-                    vm->ip = 0;
-                    vm->constants = fn->constants;
-                    vm->const_count = fn->const_count;
-                    
-                    if (vm->scope_depth < METAL_ENV_DEPTH - 1) {
-                        vm->scope_depth++;
-                        vm->scopes[vm->scope_depth].count = 0;
-                    }
-                    for (int p = 0; p < fn->param_count; p++) {
-                        MetalValue arg = mv_nil();
-                        if (p < argc) arg = vm->stack[vm->sp - argc + p];
-                        scope_define(vm, fn->param_name_hashes[p], -1, arg);
-                    }
-                    vm->sp = frame->sp_base;
-                    return 1;
-                }
-            }
-            if (callee.type != MV_STR && callee.type != MV_FN) {
-                console_write("OP_CALL: unsupported target type ");
-                console_u32(callee.type);
-                console_write(" at IP: ");
-                console_hex64((uint64_t)vm->ip);
-                console_write(" SP: ");
-                console_u32((uint32_t)vm->sp);
-                console_write("\nStack (top 5): ");
-                for (int i = 0; i < 5 && i < vm->sp; i++) {
-                    console_write("[");
-                    console_u32(vm->stack[vm->sp - 1 - i].type);
-                    console_write("] ");
-                }
-                console_write("\n");
-                vm->error = 1;
-                vm->error_msg = "Metal VM: unsupported call target";
-                return 0;
-            }
-            vm->error = 1;
-            vm->error_msg = "Metal VM: unsupported call target";
-            return 0;
-        }
-
-        // Scope
         case OP_PUSH_ENV:
             if (vm->scope_depth < METAL_ENV_DEPTH - 1) {
-                vm->scope_depth++;
-                vm->scopes[vm->scope_depth].count = 0;
+                vm->scope_depth++; vm->scopes[vm->scope_depth].count = 0;
             }
             break;
-        case OP_POP_ENV:
-            if (vm->scope_depth > 0) vm->scope_depth--;
-            break;
+        case OP_POP_ENV: if (vm->scope_depth > 0) vm->scope_depth--; break;
 
-        // I/O
         case OP_PRINT: {
-            MetalValue val = metal_vm_pop(vm);
-            if (val.type != MV_NIL) {
-                metal_print_value(vm, val);
-                if (vm->write_char) vm->write_char('\n');
-            }
+            MetalValue v = metal_vm_pop(vm);
+            metal_print_value(vm, v);
+            if (vm->write_char) vm->write_char('\n');
             break;
         }
 
-        // Arrays
-        case OP_ARRAY:
-        case OP_TUPLE: {
-            int count = read_u16(vm);
-            if (vm->error) return 0;
-            if (vm->sp < count) {
-                vm->error = 1;
-                vm->error_msg = "OP_ARRAY: stack underflow";
-                return 0;
-            }
-            int arr = metal_array_new(vm);
-            if (arr < 0) {
-                vm->error = 1;
-                vm->error_msg = "OP_ARRAY: array pool full";
-                return 0;
-            }
-            // Elements are on stack in reverse order
-            for (int i = count - 1; i >= 0; i--) {
-                MetalValue elem = vm->stack[vm->sp - count + i];
-                metal_array_push(vm, arr, elem);
-            }
-            vm->sp -= count;
-            MetalValue v; v.type = MV_ARR; v.as.arr_idx = arr;
-            metal_vm_push(vm, v);
-            break;
-        }
-        case OP_DICT: {
-            int count = read_u16(vm);
-            if (vm->error) return 0;
-            if (vm->sp < count * 2) {
-                vm->error = 1;
-                vm->error_msg = "OP_DICT: stack underflow";
-                return 0;
-            }
-            int dict = metal_dict_new(vm);
-            if (dict < 0) {
-                vm->error = 1;
-                vm->error_msg = "OP_DICT: dict pool full";
-                return 0;
-            }
-            // Pairs (key, val) are on stack in reverse order: [..., k1, v1, k2, v2]
-            // Wait, SageLang usually pushes k1, v1, k2, v2, so v2 is at top.
-            for (int i = 0; i < count; i++) {
-                MetalValue val = metal_vm_pop(vm);
-                MetalValue key = metal_vm_pop(vm);
-                if (key.type == MV_STR) {
-                    metal_dict_set(vm, dict, key.as.str_idx, val);
-                }
-            }
-            MetalValue v; v.type = MV_DICT; v.as.dict_idx = dict;
-            metal_vm_push(vm, v);
-            break;
-        }
-        case OP_ARRAY_LEN: {
-            MetalValue a = metal_vm_pop(vm);
-            union { double d; uint64_t u; } vr;
-            if (a.type == MV_ARR)
-                vr.d = (double)metal_array_len(vm, a.as.arr_idx);
-            else
-                vr.d = 0.0;
-            metal_vm_push(vm, mv_num(vr.u));
-            break;
-        }
-        case OP_GET_INDEX:
-        case OP_GET_PROPERTY: {
-            MetalValue idx = metal_vm_pop(vm);
-            MetalValue obj = metal_vm_pop(vm);
+        case OP_BREAK:
+        case OP_CONTINUE: vm->ip = read_u16(vm); break;
+
+        case OP_SLICE: {
+            MetalValue end = metal_vm_pop(vm), start = metal_vm_pop(vm), obj = metal_vm_pop(vm);
             if (obj.type == MV_ARR) {
-                union { double d; uint64_t u; } vi;
-                vi.u = idx.as.num_bits;
-                metal_vm_push(vm, metal_array_get(vm, obj.as.arr_idx, (int)vi.d));
-            } else if (obj.type == MV_DICT) {
-                if (idx.type == MV_STR) {
-                    metal_vm_push(vm, metal_dict_get(vm, obj.as.dict_idx, idx.as.str_idx));
-                } else {
-                    metal_vm_push(vm, mv_nil());
-                }
+                int arr = metal_array_new(vm);
+                if (arr >= 0) {
+                    union { double d; uint64_t u; } vs, ve;
+                    vs.u = start.as.num_bits; ve.u = end.as.num_bits;
+                    int s = (int)vs.d, e = (int)ve.d, len = metal_array_len(vm, obj.as.arr_idx);
+                    if (s < 0) s = 0; if (e > len) e = len;
+                    for (int i = s; i < e; i++) metal_array_push(vm, arr, metal_array_get(vm, obj.as.arr_idx, i));
+                    MetalValue r; r.type = MV_ARR; r.as.arr_idx = arr; metal_vm_push(vm, r);
+                } else { vm->error = 1; vm->error_msg = "array pool full"; return 0; }
+            } else if (obj.type == MV_STR) {
+                const char* s_ptr = metal_string_get(vm, obj.as.str_idx);
+                if (s_ptr) {
+                    union { double d; uint64_t u; } vs, ve;
+                    vs.u = start.as.num_bits; ve.u = end.as.num_bits;
+                    int s = (int)vs.d, e = (int)ve.d, len = (int)strlen(s_ptr);
+                    if (s < 0) s = 0; if (e > len) e = len; if (e < s) e = s;
+                    char buf[256]; int n = e - s; if (n > 255) n = 255;
+                    memcpy(buf, s_ptr + s, (size_t)n); buf[n] = '\0';
+                    metal_vm_push(vm, metal_vm_string_new(vm, buf));
+                } else metal_vm_push(vm, mv_nil());
+            } else metal_vm_push(vm, mv_nil());
+            break;
+        }
+
+        case OP_GET_PROPERTY: {
+            int idx = read_u16(vm);
+            if (vm->error) return 0;
+            MetalValue obj = metal_vm_pop(vm);
+            if (obj.type == MV_DICT) {
+                metal_vm_push(vm, metal_dict_get(vm, obj.as.dict_idx, idx));
             } else {
                 metal_vm_push(vm, mv_nil());
             }
             break;
         }
-        case OP_SET_INDEX:
+
         case OP_SET_PROPERTY: {
-            MetalValue val = metal_vm_pop(vm);
-            MetalValue idx = metal_vm_pop(vm);
-            MetalValue obj = metal_vm_pop(vm);
-            if (obj.type == MV_ARR) {
-                int ai = obj.as.arr_idx;
-                union { double d; uint64_t u; } vi;
-                vi.u = idx.as.num_bits;
-                int ii = (int)vi.d;
-                int max = (int)(sizeof(vm->arrays) / sizeof(vm->arrays[0]));
-                if (ai >= 0 && ai < max && ii >= 0 && ii < vm->arrays[ai].count)
-                    vm->arrays[ai].elems[ii] = val;
-            } else if (obj.type == MV_DICT) {
-                if (idx.type == MV_STR) {
-                    metal_dict_set(vm, obj.as.dict_idx, idx.as.str_idx, val);
-                }
+            int idx = read_u16(vm);
+            if (vm->error) return 0;
+            MetalValue val = metal_vm_pop(vm), obj = metal_vm_pop(vm);
+            if (obj.type == MV_DICT) {
+                metal_dict_set(vm, obj.as.dict_idx, idx, val);
             }
             metal_vm_push(vm, val);
             break;
         }
 
-        case OP_RETURN: {
-            MetalValue result = metal_vm_pop(vm);
-            if (vm->frame_count > 0) {
-                if (vm->scope_depth > 0) vm->scope_depth--;
-                
-                MetalFrame* frame = &vm->call_stack[--vm->frame_count];
-                vm->ip = frame->ip;
-                vm->code = frame->code;
-                vm->code_length = frame->code_length;
-                vm->constants = frame->constants;
-                vm->const_count = frame->const_count;
-                vm->sp = frame->sp_base;
-                
-                metal_vm_push(vm, result);
-                break;
-            } else {
-                vm->halted = 1;
-                return 0;
+        case OP_CALL_METHOD: {
+            int argc = read_u8(vm), name_idx = read_u16(vm);
+            const char* method_name = metal_string_get(vm, name_idx);
+            MetalValue receiver = vm->stack[vm->sp - argc - 1];
+            if (receiver.type == MV_ARR) {
+                if (method_name && strcmp(method_name, "push") == 0) {
+                    metal_array_push(vm, receiver.as.arr_idx, vm->stack[vm->sp - 1]);
+                    vm->sp -= (argc + 1); metal_vm_push(vm, mv_nil()); break;
+                }
+                if (method_name && strcmp(method_name, "len") == 0) {
+                    double l = (double)metal_array_len(vm, receiver.as.arr_idx);
+                    union { double d; uint64_t u; } v; v.d = l;
+                    vm->sp -= (argc + 1); metal_vm_push(vm, mv_num(v.u)); break;
+                }
+            } else if (receiver.type == MV_STR) {
+                const char* s = metal_string_get(vm, receiver.as.str_idx);
+                if (method_name && strcmp(method_name, "split") == 0) {
+                    console_write("[VM] string.split\n");
+                    int arr = metal_array_new(vm);
+                    if (arr >= 0) {
+                        const char* cur = s;
+                        while (*cur) {
+                            while (*cur && isspace((unsigned char)*cur)) cur++;
+                            if (!*cur) break;
+                            const char* token_start = cur;
+                            while (*cur && !isspace((unsigned char)*cur)) cur++;
+                            int tlen = (int)(cur - token_start);
+                            char tbuf[64]; if (tlen > 63) tlen = 63;
+                            memcpy(tbuf, token_start, (size_t)tlen); tbuf[tlen] = '\0';
+                            metal_array_push(vm, arr, metal_vm_string_new(vm, tbuf));
+                        }
+                        MetalValue res; res.type = MV_ARR; res.as.arr_idx = arr;
+                        vm->sp -= (argc + 1); metal_vm_push(vm, res); break;
+                    }
+                }
+                if (method_name && strcmp(method_name, "strip") == 0) {
+                    console_write("[VM] string.strip\n");
+                    char buf[256]; strcpy(buf, s ? s : "");
+                    char* st = buf; while (*st && isspace(*st)) st++;
+                    char* en = st + strlen(st) - 1; while (en > st && isspace(*en)) *en-- = '\0';
+                    vm->sp -= (argc + 1); metal_vm_push(vm, metal_vm_string_new(vm, st)); break;
+                }
+                if (method_name && (strcmp(method_name, "startswith") == 0 || strcmp(method_name, "endswith") == 0)) {
+                    console_write("[VM] string."); console_write(method_name); console_write("\n");
+                    MetalValue sub = vm->stack[vm->sp - 1];
+                    const char* prefix = (sub.type == MV_STR) ? metal_string_get(vm, sub.as.str_idx) : "";
+                    int res = 0;
+                    if (s && prefix) {
+                        if (method_name[0] == 's') res = (strncmp(s, prefix, strlen(prefix)) == 0);
+                        else { int slen = (int)strlen(s), plen = (int)strlen(prefix); if (slen >= plen) res = (strcmp(s + slen - plen, prefix) == 0); }
+                    }
+                    vm->sp -= (argc + 1); metal_vm_push(vm, mv_bool(res)); break;
+                }
             }
+            vm->error = 1; vm->error_msg = "method not found"; return 0;
         }
 
+        case OP_CALL: {
+            int argc = read_u8(vm);
+            MetalValue callee = vm->stack[vm->sp - argc - 1];
+            if (callee.type == MV_STR) {
+                const char* name = metal_string_get(vm, callee.as.str_idx);
+                MetalNativeFn nfn = metal_vm_find_native(vm, metal_fnv1a(name));
+                if (nfn) {
+                    MetalValue args[16]; int nargs = argc < 16 ? argc : 16;
+                    for (int i = 0; i < nargs; i++) args[i] = vm->stack[vm->sp - argc + i];
+                    vm->sp -= argc + 1; metal_vm_push(vm, nfn(vm, args, nargs)); break;
+                }
+            } else if (callee.type == MV_FN) {
+                int fn_idx = callee.as.fn_idx;
+                if (fn_idx >= 0 && fn_idx < vm->fn_count) {
+                    if (vm->frame_count >= METAL_CALL_STACK) { vm->error = 1; vm->error_msg = "stack overflow"; return 0; }
+                    MetalFunction* fn = &vm->functions[fn_idx];
+                    MetalFrame* frame = &vm->call_stack[vm->frame_count++];
+                    frame->ip = vm->ip; frame->code = vm->code; frame->code_length = vm->code_length;
+                    frame->sp_base = vm->sp - argc - 1; frame->constants = vm->constants; frame->const_count = vm->const_count;
+                    vm->code = fn->code; vm->code_length = fn->code_length; vm->ip = 0;
+                    vm->constants = fn->constants; vm->const_count = fn->const_count;
+                    if (vm->scope_depth < METAL_ENV_DEPTH - 1) { vm->scope_depth++; vm->scopes[vm->scope_depth].count = 0; }
+                    for (int p = 0; p < fn->param_count; p++) {
+                        MetalValue arg = mv_nil(); if (p < argc) arg = vm->stack[vm->sp - argc + p];
+                        scope_define(vm, fn->param_name_hashes[p], -1, arg);
+                    }
+                    vm->sp = frame->sp_base; return 1;
+                }
+            }
+            console_write("\nOP_CALL: unsupported target type "); console_u32(callee.type);
+            console_write(" at IP: "); console_hex64((uint64_t)(vm->ip - 1));
+            vm->error = 1; vm->error_msg = "unsupported call target"; return 0;
+        }
+
+        case OP_ARRAY:
+        case OP_TUPLE: {
+            int count = read_u16(vm);
+            int arr = metal_array_new(vm);
+            if (arr < 0) { vm->error = 1; vm->error_msg = "array pool full"; return 0; }
+            for (int i = count - 1; i >= 0; i--) metal_array_push(vm, arr, vm->stack[vm->sp - count + i]);
+            vm->sp -= count; MetalValue v; v.type = MV_ARR; v.as.arr_idx = arr; metal_vm_push(vm, v);
+            break;
+        }
+        case OP_DICT: {
+            int count = read_u16(vm);
+            int dict = metal_dict_new(vm);
+            if (dict < 0) { vm->error = 1; vm->error_msg = "dict pool full"; return 0; }
+            for (int i = 0; i < count; i++) {
+                MetalValue val = metal_vm_pop(vm), key = metal_vm_pop(vm);
+                if (key.type == MV_STR) metal_dict_set(vm, dict, key.as.str_idx, val);
+            }
+            MetalValue v; v.type = MV_DICT; v.as.dict_idx = dict; metal_vm_push(vm, v);
+            break;
+        }
+        case OP_ARRAY_LEN: {
+            MetalValue a = metal_vm_pop(vm);
+            double l = (a.type == MV_ARR) ? (double)metal_array_len(vm, a.as.arr_idx) : 0.0;
+            union { double d; uint64_t u; } vr; vr.d = l; metal_vm_push(vm, mv_num(vr.u));
+            break;
+        }
+        case OP_GET_INDEX: {
+            MetalValue idx = metal_vm_pop(vm), obj = metal_vm_pop(vm);
+            if (obj.type == MV_ARR) {
+                union { double d; uint64_t u; } vi; vi.u = idx.as.num_bits;
+                metal_vm_push(vm, metal_array_get(vm, obj.as.arr_idx, (int)vi.d));
+            } else if (obj.type == MV_DICT) {
+                if (idx.type == MV_STR) metal_vm_push(vm, metal_dict_get(vm, obj.as.dict_idx, idx.as.str_idx));
+                else metal_vm_push(vm, mv_nil());
+            } else metal_vm_push(vm, mv_nil());
+            break;
+        }
+        case OP_SET_INDEX: {
+            MetalValue val = metal_vm_pop(vm), idx = metal_vm_pop(vm), obj = metal_vm_pop(vm);
+            if (obj.type == MV_ARR) {
+                union { double d; uint64_t u; } vi; vi.u = idx.as.num_bits;
+                int ai = obj.as.arr_idx, ii = (int)vi.d, max = (int)(sizeof(vm->arrays)/sizeof(vm->arrays[0]));
+                if (ai >= 0 && ai < max && ii >= 0 && ii < vm->arrays[ai].count) vm->arrays[ai].elems[ii] = val;
+            } else if (obj.type == MV_DICT) {
+                if (idx.type == MV_STR) metal_dict_set(vm, obj.as.dict_idx, idx.as.str_idx, val);
+            }
+            metal_vm_push(vm, val); break;
+        }
+
+        case OP_RETURN: {
+            MetalValue res = metal_vm_pop(vm);
+            if (vm->frame_count > 0) {
+                if (vm->scope_depth > 0) vm->scope_depth--;
+                MetalFrame* f = &vm->call_stack[--vm->frame_count];
+                vm->ip = f->ip; vm->code = f->code; vm->code_length = f->code_length;
+                vm->constants = f->constants; vm->const_count = f->const_count; vm->sp = f->sp_base;
+                metal_vm_push(vm, res); break;
+            } else { vm->halted = 1; return 0; }
+        }
+
+        case 52: case 53: case 54: // OP_CLASS, OP_METHOD, OP_INHERIT
+            if (op == 52) { read_u16(vm); read_u16(vm); read_u16(vm); }
+            else if (op == 53) read_u16(vm);
+            else if (op == 54) metal_vm_pop(vm);
+            break;
+        case 55: read_u16(vm); read_u16(vm); break; // OP_SETUP_TRY
+        case 56: break; // OP_END_TRY
+        case 57: metal_vm_pop(vm); vm->error = 1; vm->error_msg = "exception raised"; return 0;
+
         default:
-            // Unknown opcode
             vm->error = 1;
             {
-                static char err_buf[64];
-                // basic itoa
-                int val = op;
-                char num[4];
-                num[0] = '0' + (val / 100) % 10;
-                num[1] = '0' + (val / 10) % 10;
-                num[2] = '0' + (val % 10);
-                num[3] = '\0';
-                int i = 0;
-                char* p = "unknown opcode: ";
-                while (*p) err_buf[i++] = *p++;
-                for (int j = 0; j < 3; j++) err_buf[i++] = num[j];
-                err_buf[i] = '\0';
-                vm->error_msg = err_buf;
+                static char err[64]; int val = op;
+                char num[4]; num[0] = '0' + (val/100)%10; num[1] = '0' + (val/10)%10; num[2] = '0' + (val%10); num[3] = '\0';
+                const char* p = "unknown opcode: "; int i = 0; while (*p) err[i++] = *p++;
+                for (int j = 0; j < 3; j++) err[i++] = num[j]; err[i] = '\0';
+                vm->error_msg = err;
+                console_write("\n[VM ERROR] Unknown Opcode: "); console_u32((uint32_t)op);
+                console_write(" at IP: "); console_hex64((uint64_t)(vm->ip - 1)); console_write("\n");
             }
             return 0;
     }
+    return 1;
+}
 
-    return 1; // Continue execution
+int metal_vm_run(MetalVM* vm) {
+    while (metal_vm_step(vm));
+    return vm->error ? -1 : 0;
 }
 
 const char* metal_value_type_name(MetalValueType type) {
@@ -1172,75 +1071,30 @@ const char* metal_value_type_name(MetalValueType type) {
     }
 }
 
-int metal_vm_run(MetalVM* vm) {
-    while (metal_vm_step(vm)) {
-        // Continue executing
-    }
-    return vm->error ? -1 : 0;
-}
-
 MetalValue metal_vm_lookup(MetalVM* vm, const char* name) {
-    unsigned int hash = metal_fnv1a(name);
     MetalValue val;
-    if (scope_lookup(vm, hash, &val)) return val;
+    if (scope_lookup(vm, metal_fnv1a(name), &val)) return val;
     return mv_nil();
 }
 
 MetalValue metal_vm_call(MetalVM* vm, const char* fn_name, MetalValue* args, int argc) {
     MetalValue callee = metal_vm_lookup(vm, fn_name);
     if (callee.type != MV_FN) return mv_nil();
-
-    int start_frame = vm->frame_count;
-    int was_halted = vm->halted;
-    vm->halted = 0;
-    
-    // Push callee and args for consistency with CALL frame setup
-    metal_vm_push(vm, callee);
-    for (int i = 0; i < argc; i++) {
-        metal_vm_push(vm, args[i]);
-    }
-
-    int fn_idx = callee.as.fn_idx;
-    MetalFunction* fn = &vm->functions[fn_idx];
-    
-    if (vm->frame_count >= METAL_CALL_STACK) {
-        vm->error = 1;
-        vm->error_msg = "Metal VM: call stack overflow in metal_vm_call";
-        vm->halted = was_halted;
-        return mv_nil();
-    }
-
+    int start_frame = vm->frame_count, was_halted = vm->halted; vm->halted = 0;
+    metal_vm_push(vm, callee); for (int i = 0; i < argc; i++) metal_vm_push(vm, args[i]);
+    int fn_idx = callee.as.fn_idx; MetalFunction* fn = &vm->functions[fn_idx];
+    if (vm->frame_count >= METAL_CALL_STACK) { vm->error = 1; vm->error_msg = "stack overflow"; vm->halted = was_halted; return mv_nil(); }
     MetalFrame* frame = &vm->call_stack[vm->frame_count++];
-    frame->ip = vm->ip;
-    frame->code = vm->code;
-    frame->code_length = vm->code_length;
-    frame->sp_base = vm->sp - argc - 1;
-    frame->constants = vm->constants;
-    frame->const_count = vm->const_count;
-    
-    vm->code = fn->code;
-    vm->code_length = fn->code_length;
-    vm->ip = 0;
-    vm->constants = fn->constants;
-    vm->const_count = fn->const_count;
-    
-    if (vm->scope_depth < METAL_ENV_DEPTH - 1) {
-        vm->scope_depth++;
-        vm->scopes[vm->scope_depth].count = 0;
-    }
+    frame->ip = vm->ip; frame->code = vm->code; frame->code_length = vm->code_length;
+    frame->sp_base = vm->sp - argc - 1; frame->constants = vm->constants; frame->const_count = vm->const_count;
+    vm->code = fn->code; vm->code_length = fn->code_length; vm->ip = 0;
+    vm->constants = fn->constants; vm->const_count = fn->const_count;
+    if (vm->scope_depth < METAL_ENV_DEPTH - 1) { vm->scope_depth++; vm->scopes[vm->scope_depth].count = 0; }
     for (int p = 0; p < fn->param_count; p++) {
-        MetalValue arg = mv_nil();
-        if (p < argc) arg = vm->stack[vm->sp - argc + p];
+        MetalValue arg = mv_nil(); if (p < argc) arg = vm->stack[vm->sp - argc + p];
         scope_define(vm, fn->param_name_hashes[p], -1, arg);
     }
     vm->sp = frame->sp_base;
-
-    // Run until this specific frame returns
-    while (vm->frame_count > start_frame && !vm->error && !vm->halted) {
-        if (!metal_vm_step(vm)) break;
-    }
-    
-    vm->halted = was_halted;
-    if (vm->error) return mv_nil();
-    return metal_vm_pop(vm);
+    while (vm->frame_count > start_frame && !vm->error && !vm->halted) metal_vm_step(vm);
+    vm->halted = was_halted; if (vm->error) return mv_nil(); return metal_vm_pop(vm);
 }

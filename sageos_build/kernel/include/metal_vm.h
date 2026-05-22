@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_POOL_SIZE
-#define METAL_POOL_SIZE       4096    // Object pool entries
+#define METAL_POOL_SIZE       1024    // Object pool entries
 #endif
 
 #ifndef METAL_STRING_POOL
@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_CONST_POOL
-#define METAL_CONST_POOL      2048    // Constant pool entries
+#define METAL_CONST_POOL      1024    // Constant pool entries
 #endif
 
 #ifndef METAL_ENV_DEPTH
@@ -46,7 +46,7 @@ extern "C" {
 #endif
 
 #ifndef METAL_VARS_PER_SCOPE
-#define METAL_VARS_PER_SCOPE  256     // Variables per scope level
+#define METAL_VARS_PER_SCOPE  512     // Variables per scope level
 #endif
 
 // ============================================================================
@@ -265,6 +265,8 @@ MetalValue metal_vm_call(MetalVM* vm, const char* fn_name, MetalValue* args, int
 
 // Look up a global variable by name
 MetalValue metal_vm_lookup(MetalVM* vm, const char* name);
+int scope_lookup(MetalVM* vm, unsigned int hash, MetalValue* out);
+void scope_define(MetalVM* vm, unsigned int hash, int name_const_idx, MetalValue value);
 
 // Get human-readable type name
 const char* metal_value_type_name(MetalValueType type);
@@ -274,6 +276,7 @@ MetalValue mv_nil(void);
 MetalValue mv_num(uint64_t v);
 MetalValue mv_bool(int v);
 MetalValue mv_str(MetalVM* vm, const char* s, int len);
+MetalValue metal_vm_string_new(MetalVM* vm, const char* s);
 MetalValue mv_ptr(void* p);
 
 // Stack operations

@@ -114,7 +114,7 @@ void timer_idle_poll(void) {
     uint32_t cpu = smp_current_cpu_index();
     idle_loops[cpu]++;
     total_loops[cpu]++;
-    cpu_hlt();
+    cpu_pause();
 }
 
 uint64_t timer_ticks(void) {

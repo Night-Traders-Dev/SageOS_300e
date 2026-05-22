@@ -141,7 +141,7 @@ static int parse_serial_escape(KeyEvent *ev) {
     while (wait++ < 2000) {
         if (serial_poll_char(&next)) break;
         status_tick_poll();
-        cpu_hlt();
+        cpu_pause();
     }
     if (next != '[') {
         ev->scancode = 0; ev->pressed = 1; ev->extended = 0; ev->ascii = 27; return 1;
@@ -150,7 +150,7 @@ static int parse_serial_escape(KeyEvent *ev) {
     while (wait++ < 2000) {
         if (serial_poll_char(&next)) break;
         status_tick_poll();
-        cpu_hlt();
+        cpu_pause();
     }
     if (next == 'A') { ev->scancode = 0x48; ev->pressed = 1; ev->extended = 1; ev->ascii = 0; return 1; }
     if (next == 'B') { ev->scancode = 0x50; ev->pressed = 1; ev->extended = 1; ev->ascii = 0; return 1; }

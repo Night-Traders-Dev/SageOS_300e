@@ -523,7 +523,7 @@ static void idle_thread_entry(void *arg) {
         if (cpu < managed_cpu_count && run_queues[cpu].count > 0) {
             sched_yield();
         } else {
-            cpu_hlt();
+            cpu_pause();
         }
     }
 }

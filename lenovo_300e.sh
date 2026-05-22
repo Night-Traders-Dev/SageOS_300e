@@ -168,7 +168,10 @@ build_kernel() {
         "$KERNEL/core" \
         "$KERNEL/drivers" \
         "$KERNEL/fs" \
-        "$KERNEL/shell"
+        "$KERNEL/shell" \
+        "$KERNEL/third_party/lwip/src/core" \
+        "$KERNEL/third_party/lwip/src/netif" \
+        "$KERNEL/third_party/lwip_port"
     do
         if [ -d "$dir" ]; then
             while IFS= read -r f; do
@@ -209,6 +212,8 @@ build_kernel() {
           -I"$KERNEL/include" \
           -I"$KERNEL/core/sagelang" \
           -I"$KERNEL/core/sagelang/compiler" \
+          -I"$KERNEL/third_party/lwip/src/include" \
+          -I"$KERNEL/third_party/lwip_port/include" \
           -include "$KERNEL/include/sage_libc_shim.h" \
           -D__sageos__ \
           -DMETAL_STACK_SIZE=1024 \

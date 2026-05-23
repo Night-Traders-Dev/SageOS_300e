@@ -27,6 +27,7 @@ static const uint32_t status_rows = 2;
 
 static uint32_t fg = 0xE8E8E8;
 static uint32_t bg = 0x05070A;
+static int inverted = 0;
 
 #define MAX_COLS 256
 #define MAX_ROWS 128
@@ -111,6 +112,9 @@ void console_set_cursor(uint32_t new_row, uint32_t new_col) {
 
 uint32_t console_get_fg(void) { return fg; }
 void console_set_fg(uint32_t rgb) { fg = rgb; }
+uint32_t console_get_bg(void) { return bg; }
+void console_set_bg(uint32_t rgb) { bg = rgb; }
+void console_set_inverted(int enable) { inverted = enable ? 1 : 0; }
 int console_get_serial_echo(void) { return serial_echo; }
 void console_set_serial_echo(int enabled) { serial_echo = enabled ? 1 : 0; }
 
@@ -237,8 +241,8 @@ static void draw_cell_fast(uint32_t cx, uint32_t cy, char ch, uint32_t color_rgb
     
     if (!g_back_buffer || px + char_w > FB_MAX_WIDTH || py + char_h > FB_MAX_HEIGHT) return;
 
-    uint32_t pfg = pack_rgb(color_rgb);
-    uint32_t pbg = pack_rgb(bg);
+    uint32_t pfg = pack_rgb(inverted ? bg : color_rgb);
+    uint32_t pbg = pack_rgb(inverted ? color_rgb : bg);
 
     const uint8_t *g = glyph(ch);
 

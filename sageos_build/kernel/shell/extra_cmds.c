@@ -677,10 +677,27 @@ void cmd_btop(void) {
 
 
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
 /* Nano                                                               */
 /* ------------------------------------------------------------------ */
 
-#define NANO_MAX_TEXT 4096
+#define NANO_MAX_TEXT (128 * 1024)
+#define NANO_PATH_MAX 256
+
+typedef struct {
+    char *buf;
+    char *kill_buf;      /* For Cut/Uncut */
+    int len;
+    int kill_len;
+    int pos;
+    int scroll_top;      /* Byte offset of the first character on screen */
+    int modified;
+    int running;
+    char path[NANO_PATH_MAX];
+    char status[128];
+    uint32_t rows, cols;
+    uint32_t edit_rows;  /* Number of rows available for text editing */
+} NanoContext;
 
 static int nano_line_start(const char *buf, int pos) {
     while (pos > 0 && buf[pos - 1] != '\n') pos--;
@@ -692,22 +709,18 @@ static int nano_line_end(const char *buf, int len, int pos) {
     return pos;
 }
 
-static int nano_col(const char *buf, int pos) {
-    return pos - nano_line_start(buf, pos);
-}
-
 static int nano_move_vertical(const char *buf, int len, int pos, int delta) {
-    int col = nano_col(buf, pos);
-    int start = nano_line_start(buf, pos);
+    int cur_start = nano_line_start(buf, pos);
+    int col = pos - cur_start;
     int target_start;
 
     if (delta < 0) {
-        if (start == 0) return pos;
-        target_start = nano_line_start(buf, start - 1);
+        if (cur_start == 0) return 0;
+        target_start = nano_line_start(buf, cur_start - 1);
     } else {
-        int end = nano_line_end(buf, len, pos);
-        if (end >= len) return pos;
-        target_start = end + 1;
+        int cur_end = nano_line_end(buf, len, pos);
+        if (cur_end >= len) return len;
+        target_start = cur_end + 1;
     }
 
     int target_end = nano_line_end(buf, len, target_start);
@@ -716,186 +729,291 @@ static int nano_move_vertical(const char *buf, int len, int pos, int delta) {
     return target;
 }
 
-static void nano_draw_console(const char *path, const char *buf, int len, int pos, int modified) {
-    uint32_t start_row = console_has_fb() ? 2 : 0;
-    uint32_t cols = console_cols();
-    uint32_t rows = console_rows();
-    if (cols == 0) cols = 80;
-    if (rows == 0) rows = 25;
-
-    for (uint32_t r = start_row; r < rows; r++) {
-        console_set_cursor(r, 0);
-        for (uint32_t c = 0; c < cols; c++) console_putc(' ');
-    }
-
-    uint32_t old_fg = console_get_fg();
-    console_set_cursor(start_row, 0);
-    console_set_fg(0x80C8FF);
-    console_write("nano ");
-    console_write(path);
-    if (modified) console_write(" *");
-    console_set_fg(old_fg);
-
-    uint32_t row = start_row + 2;
-    uint32_t col = 0;
-    uint32_t cursor_row = row;
-    uint32_t cursor_col = col;
-
-    for (int i = 0; i <= len && row + 2 < rows; i++) {
-        if (i == pos) {
-            cursor_row = row;
-            cursor_col = col;
-        }
-        if (i == len) break;
-        char ch = buf[i];
-        if (ch == '\n') {
-            row++;
-            col = 0;
-        } else {
-            console_set_cursor(row, col);
-            console_putc(ch);
-            col++;
-            if (col >= cols) {
-                row++;
-                col = 0;
-            }
-        }
-    }
-
-    console_set_cursor(rows - 2, 0);
-    console_set_fg(0x606060);
-    console_write("^S Save   ^X Exit   ^C Cancel");
-    console_set_fg(old_fg);
-    console_set_cursor(cursor_row, cursor_col);
+static void nano_draw_bar(NanoContext *ctx, uint32_t row, const char *text, int invert) {
+    console_set_cursor(row, 0);
+    if (invert) console_set_inverted(1);
+    
+    uint32_t len = 0;
+    while (text[len]) len++;
+    
+    console_write(text);
+    for (uint32_t i = len; i < ctx->cols; i++) console_putc(' ');
+    
+    if (invert) console_set_inverted(0);
 }
 
-static void nano_draw_serial(const char *path, const char *buf, int len, int pos, int modified) {
-    serial_raw("\033[2J\033[H");
-    serial_raw("nano ");
-    serial_raw(path);
-    if (modified) serial_raw(" *");
-    serial_raw("\r\n\r\n");
+static void nano_draw_shortcuts(NanoContext *ctx) {
+    uint32_t r = ctx->rows - 2;
+    nano_draw_bar(ctx, r, "^G Get Help  ^O Write Out  ^W Where Is   ^K Cut Text", 0);
+    nano_draw_bar(ctx, r + 1, "^X Exit      ^J Justify    ^C Cur Pos    ^U Uncut Text", 0);
+    
+    /* Highlight the carets */
+    for (uint32_t i = 0; i < 2; i++) {
+        for (uint32_t j = 0; j < ctx->cols; j += 14) {
+            console_set_cursor(r + i, j);
+            console_set_fg(0x79FFB0);
+            console_putc('^');
+            console_set_fg(0xE8E8E8);
+        }
+    }
+}
 
-    int row = 0;
-    int col = 0;
-    int cursor_row = 3;
+static void nano_update_scroll(NanoContext *ctx) {
+    /* Ensure pos is within [scroll_top, end_of_screen] */
+    if (ctx->pos < ctx->scroll_top) {
+        ctx->scroll_top = nano_line_start(ctx->buf, ctx->pos);
+        return;
+    }
+
+    int current = ctx->scroll_top;
+    uint32_t visible_lines = 0;
+    int pos_visible = 0;
+
+    while (visible_lines < ctx->edit_rows) {
+        int end = nano_line_end(ctx->buf, ctx->len, current);
+        if (ctx->pos >= current && ctx->pos <= end) {
+            pos_visible = 1;
+            break;
+        }
+        if (end >= ctx->len) break;
+        current = end + 1;
+        visible_lines++;
+    }
+
+    if (!pos_visible) {
+        ctx->scroll_top = nano_move_vertical(ctx->buf, ctx->len, ctx->scroll_top, 1);
+    }
+}
+
+static void nano_draw_console(NanoContext *ctx) {
+    uint32_t old_fg = console_get_fg();
+    
+    /* 1. Title Bar */
+    char title[160];
+    snprintf(title, sizeof(title), "  SageOS nano 1.0     File: %s%s", ctx->path, ctx->modified ? " [Modified]" : "");
+    nano_draw_bar(ctx, 0, title, 1);
+
+    /* 2. Editor Area */
+    int current = ctx->scroll_top;
+    uint32_t cursor_row = 1;
+    uint32_t cursor_col = 0;
+
+    for (uint32_t r = 0; r < ctx->edit_rows; r++) {
+        console_set_cursor(r + 1, 0);
+        int line_end = nano_line_end(ctx->buf, ctx->len, current);
+        
+        for (int i = current; i <= line_end; i++) {
+            if (i == ctx->pos) {
+                cursor_row = r + 1;
+                cursor_col = (uint32_t)(i - current);
+            }
+            if (i < line_end) {
+                if ((uint32_t)(i - current) < ctx->cols) {
+                    console_putc(ctx->buf[i]);
+                }
+            }
+        }
+        
+        uint32_t line_len = (uint32_t)(line_end - current);
+        for (uint32_t c = (line_len < ctx->cols ? line_len : ctx->cols); c < ctx->cols; c++) console_putc(' ');
+
+        if (line_end >= ctx->len) {
+            for (uint32_t rr = r + 1; rr < ctx->edit_rows; rr++) {
+                console_set_cursor(rr + 1, 0);
+                for (uint32_t cc = 0; cc < ctx->cols; cc++) console_putc(' ');
+            }
+            break;
+        }
+        current = line_end + 1;
+    }
+
+    /* 3. Status Bar */
+    nano_draw_bar(ctx, ctx->rows - 3, ctx->status, 0);
+
+    /* 4. Shortcut Bar */
+    nano_draw_shortcuts(ctx);
+
+    console_set_cursor(cursor_row, cursor_col);
+    console_set_fg(old_fg);
+}
+
+static void nano_draw_serial(NanoContext *ctx) {
+    serial_raw("\033[H");
+    serial_raw("\033[7m");
+    serial_raw("  SageOS nano 1.0     File: ");
+    serial_raw(ctx->path);
+    if (ctx->modified) serial_raw(" [Modified]");
+    serial_raw("\033[K\033[27m\r\n");
+
+    int current = ctx->scroll_top;
+    int cursor_row = 2;
     int cursor_col = 1;
 
-    for (int i = 0; i <= len && row < 18; i++) {
-        if (i == pos) {
-            cursor_row = row + 3;
-            cursor_col = col + 1;
-        }
-        if (i == len) break;
-        char ch = buf[i];
-        if (ch == '\n') {
-            serial_raw("\r\n");
-            row++;
-            col = 0;
-        } else {
-            serial_putc(ch);
-            col++;
-            if (col >= 78) {
-                serial_raw("\r\n");
-                row++;
-                col = 0;
+    for (uint32_t r = 0; r < ctx->edit_rows; r++) {
+        int line_end = nano_line_end(ctx->buf, ctx->len, current);
+        for (int i = current; i <= line_end; i++) {
+            if (i == ctx->pos) {
+                cursor_row = (int)r + 2;
+                cursor_col = i - current + 1;
+            }
+            if (i < line_end && (uint32_t)(i - current) < 79) {
+                serial_putc(ctx->buf[i]);
             }
         }
+        serial_raw("\033[K\r\n");
+        if (line_end >= ctx->len) {
+            for (uint32_t rr = r + 1; rr < ctx->edit_rows; rr++) serial_raw("~\033[K\r\n");
+            break;
+        }
+        current = line_end + 1;
     }
-
-    serial_raw("\r\n\r\n^S Save   ^X Exit   ^C Cancel");
-    serial_raw("\033[");
-    serial_u32((uint32_t)cursor_row);
-    serial_putc(';');
-    serial_u32((uint32_t)cursor_col);
-    serial_putc('H');
+    serial_raw(ctx->status);
+    serial_raw("\033[K\r\n");
+    serial_raw("\033[7m^G\033[27m Get Help  \033[7m^O\033[27m Write Out  \033[7m^W\033[27m Where Is   \033[7m^K\033[27m Cut Text\r\n");
+    serial_raw("\033[7m^X\033[27m Exit      \033[7m^J\033[27m Justify    \033[7m^C\033[27m Cur Pos    \033[7m^U\033[27m Uncut Text\033[K");
+    char move[32];
+    snprintf(move, sizeof(move), "\033[%d;%dH", cursor_row, cursor_col);
+    serial_raw(move);
 }
 
-static int nano_save(const char *path, const char *buf, int len) {
-    int r = vfs_create(path);
+static int nano_save(NanoContext *ctx) {
+    int r = vfs_create(ctx->path);
     if (r < 0 && r != VFS_EEXIST) return r;
-    return vfs_write(path, 0, buf, (size_t)len);
+    r = vfs_write(ctx->path, 0, ctx->buf, (size_t)ctx->len);
+    if (r >= 0) {
+        ctx->modified = 0;
+        snprintf(ctx->status, sizeof(ctx->status), "[ Wrote %d bytes ]", ctx->len);
+    } else {
+        snprintf(ctx->status, sizeof(ctx->status), "[ Error writing file: %s ]", vfs_strerror(r));
+    }
+    return r;
 }
 
 void cmd_nano(const char *path) {
-    char buf[NANO_MAX_TEXT];
-    int len = 0;
-    int pos = 0;
-    int modified = 0;
-    int running = 1;
+    NanoContext *ctx = (NanoContext *)sage_malloc(sizeof(NanoContext));
+    if (!ctx) return;
+    memset(ctx, 0, sizeof(NanoContext));
+    ctx->buf = (char *)sage_malloc(NANO_MAX_TEXT);
+    ctx->kill_buf = (char *)sage_malloc(NANO_MAX_TEXT);
+    if (!ctx->buf || !ctx->kill_buf) {
+        if (ctx->buf) sage_free(ctx->buf);
+        if (ctx->kill_buf) sage_free(ctx->kill_buf);
+        sage_free(ctx);
+        return;
+    }
+    strncpy(ctx->path, path, NANO_PATH_MAX - 1);
+    ctx->rows = console_rows();
+    ctx->cols = console_cols();
+    if (ctx->rows == 0) ctx->rows = 25;
+    if (ctx->cols == 0) ctx->cols = 80;
+    ctx->edit_rows = ctx->rows - 4;
+    int n = vfs_read(path, 0, ctx->buf, NANO_MAX_TEXT - 1);
+    if (n > 0) ctx->len = n;
+    ctx->buf[ctx->len] = 0;
+    ctx->running = 1;
     int saved_serial_echo = console_get_serial_echo();
+    console_set_serial_echo(0);
+    console_clear();
+    serial_raw("\033[2J\033[H");
 
-    int n = vfs_read(path, 0, buf, NANO_MAX_TEXT - 1);
-    if (n > 0) len = n;
-    buf[len] = 0;
-
-    while (running) {
-        if (console_has_fb()) console_set_serial_echo(0);
-        nano_draw_console(path, buf, len, pos, modified);
-        if (console_has_fb()) {
-            console_set_serial_echo(saved_serial_echo);
-            nano_draw_serial(path, buf, len, pos, modified);
-        }
-
+    while (ctx->running) {
+        nano_update_scroll(ctx);
+        nano_draw_console(ctx);
+        nano_draw_serial(ctx);
         KeyEvent ev;
         if (!keyboard_wait_event(&ev) || !ev.pressed) continue;
 
         if (ev.extended) {
-            if (ev.scancode == 0x4B && pos > 0) pos--;
-            else if (ev.scancode == 0x4D && pos < len) pos++;
-            else if (ev.scancode == 0x48) pos = nano_move_vertical(buf, len, pos, -1);
-            else if (ev.scancode == 0x50) pos = nano_move_vertical(buf, len, pos, 1);
-            else if (ev.scancode == 0x47) pos = nano_line_start(buf, pos);
-            else if (ev.scancode == 0x4F) pos = nano_line_end(buf, len, pos);
-            else if (ev.scancode == 0x53 && pos < len) {
-                memmove(buf + pos, buf + pos + 1, len - pos);
-                len--;
-                modified = 1;
+            if (ev.scancode == 0x4B && ctx->pos > 0) ctx->pos--;
+            else if (ev.scancode == 0x4D && ctx->pos < ctx->len) ctx->pos++;
+            else if (ev.scancode == 0x48) ctx->pos = nano_move_vertical(ctx->buf, ctx->len, ctx->pos, -1);
+            else if (ev.scancode == 0x50) ctx->pos = nano_move_vertical(ctx->buf, ctx->len, ctx->pos, 1);
+            else if (ev.scancode == 0x47) ctx->pos = nano_line_start(ctx->buf, ctx->pos);
+            else if (ev.scancode == 0x4F) ctx->pos = nano_line_end(ctx->buf, ctx->len, ctx->pos);
+            else if (ev.scancode == 0x49) { for (uint32_t i = 0; i < ctx->edit_rows; i++) ctx->pos = nano_move_vertical(ctx->buf, ctx->len, ctx->pos, -1); }
+            else if (ev.scancode == 0x51) { for (uint32_t i = 0; i < ctx->edit_rows; i++) ctx->pos = nano_move_vertical(ctx->buf, ctx->len, ctx->pos, 1); }
+            else if (ev.scancode == 0x53 && ctx->pos < ctx->len) {
+                memmove(ctx->buf + ctx->pos, ctx->buf + ctx->pos + 1, (size_t)(ctx->len - ctx->pos));
+                ctx->len--; ctx->modified = 1;
             }
             continue;
         }
 
         char c = ev.ascii;
-        if (c == 24) {
-            running = 0;
-        } else if (c == 19) {
-            int r = nano_save(path, buf, len);
-            if (r >= 0) modified = 0;
-        } else if (c == 3) {
-            running = 0;
-        } else if (c == 1) {
-            pos = nano_line_start(buf, pos);
-        } else if (c == 5) {
-            pos = nano_line_end(buf, len, pos);
+        if (c == 24) { /* ^X */
+            if (ctx->modified) {
+                nano_draw_bar(ctx, ctx->rows - 3, "Save modified buffer? (Answer y/n, ^C to cancel)", 0);
+                while(1) { if (keyboard_wait_event(&ev) && ev.pressed) {
+                    if (ev.ascii == 'y' || ev.ascii == 'Y') { nano_save(ctx); break; }
+                    if (ev.ascii == 'n' || ev.ascii == 'N') break;
+                    if (ev.ascii == 3) goto cancel_exit;
+                }}
+            }
+            ctx->running = 0;
+            cancel_exit:;
+            ctx->status[0] = 0;
+        } else if (c == 15) { nano_save(ctx); }
+        else if (c == 11) { /* ^K */
+            int start = nano_line_start(ctx->buf, ctx->pos);
+            int end = nano_line_end(ctx->buf, ctx->len, ctx->pos);
+            if (end < ctx->len) end++;
+            int cut_len = end - start;
+            memcpy(ctx->kill_buf, ctx->buf + start, (size_t)cut_len);
+            ctx->kill_len = cut_len;
+            memmove(ctx->buf + start, ctx->buf + end, (size_t)(ctx->len - end + 1));
+            ctx->len -= cut_len; ctx->pos = start; ctx->modified = 1;
+            snprintf(ctx->status, sizeof(ctx->status), "[ Cut %d characters ]", cut_len);
+        } else if (c == 21) { /* ^U */
+            if (ctx->kill_len > 0 && ctx->len + ctx->kill_len < NANO_MAX_TEXT) {
+                memmove(ctx->buf + ctx->pos + ctx->kill_len, ctx->buf + ctx->pos, (size_t)(ctx->len - ctx->pos + 1));
+                memcpy(ctx->buf + ctx->pos, ctx->kill_buf, (size_t)ctx->kill_len);
+                ctx->len += ctx->kill_len; ctx->pos += ctx->kill_len; ctx->modified = 1;
+                snprintf(ctx->status, sizeof(ctx->status), "[ Uncut %d characters ]", ctx->kill_len);
+            }
+        } else if (c == 3) { /* ^C */
+            int line = 1, total = 1;
+            for (int i = 0; i < ctx->pos; i++) if (ctx->buf[i] == '\n') line++;
+            for (int i = 0; i < ctx->len; i++) if (ctx->buf[i] == '\n') total++;
+            snprintf(ctx->status, sizeof(ctx->status), "line %d/%d, col %d, char %d/%d", line, total, ctx->pos - nano_line_start(ctx->buf, ctx->pos) + 1, ctx->pos, ctx->len);
+        } else if (c == 23) { /* ^W */
+            nano_draw_bar(ctx, ctx->rows - 3, "Search: ", 0);
+            char term[64]; int si = 0; term[0] = 0;
+            while(1) {
+                nano_draw_bar(ctx, ctx->rows - 3, "Search: ", 0); console_write(term);
+                if (keyboard_wait_event(&ev) && ev.pressed) {
+                    if (ev.ascii == '\r' || ev.ascii == '\n') break;
+                    if (ev.ascii == 3) { si = 0; break; }
+                    if ((ev.ascii == 8 || ev.ascii == 127) && si > 0) si--;
+                    else if (ev.ascii >= 32 && si < 63) term[si++] = ev.ascii;
+                    term[si] = 0;
+                }
+            }
+            if (si > 0) {
+                char *found = strstr(ctx->buf + ctx->pos + 1, term);
+                if (!found) found = strstr(ctx->buf, term);
+                if (found) { ctx->pos = (int)(found - ctx->buf); ctx->status[0] = 0; }
+                else snprintf(ctx->status, sizeof(ctx->status), "[ '%s' not found ]", term);
+            }
         } else if (c == 8 || c == 127) {
-            if (pos > 0) {
-                memmove(buf + pos - 1, buf + pos, len - pos + 1);
-                pos--;
-                len--;
-                modified = 1;
+            if (ctx->pos > 0) {
+                memmove(ctx->buf + ctx->pos - 1, ctx->buf + ctx->pos, (size_t)(ctx->len - ctx->pos + 1));
+                ctx->pos--; ctx->len--; ctx->modified = 1;
             }
         } else if (c == '\r' || c == '\n') {
-            if (len + 1 < NANO_MAX_TEXT) {
-                memmove(buf + pos + 1, buf + pos, len - pos + 1);
-                buf[pos] = '\n';
-                pos++;
-                len++;
-                modified = 1;
+            if (ctx->len + 1 < NANO_MAX_TEXT) {
+                memmove(ctx->buf + ctx->pos + 1, ctx->buf + ctx->pos, (size_t)(ctx->len - ctx->pos + 1));
+                ctx->buf[ctx->pos] = '\n'; ctx->pos++; ctx->len++; ctx->modified = 1;
             }
         } else if ((uint8_t)c >= 32 && (uint8_t)c <= 126) {
-            if (len + 1 < NANO_MAX_TEXT) {
-                memmove(buf + pos + 1, buf + pos, len - pos + 1);
-                buf[pos] = c;
-                pos++;
-                len++;
-                modified = 1;
+            if (ctx->len + 1 < NANO_MAX_TEXT) {
+                memmove(ctx->buf + ctx->pos + 1, ctx->buf + ctx->pos, (size_t)(ctx->len - ctx->pos + 1));
+                ctx->buf[ctx->pos] = c; ctx->pos++; ctx->len++; ctx->modified = 1;
             }
         }
     }
-
     console_set_serial_echo(saved_serial_echo);
-    console_clear();
-    serial_raw("\033[2J\033[H");
+    console_clear(); serial_raw("\033[2J\033[H");
+    sage_free(ctx->buf); sage_free(ctx->kill_buf); sage_free(ctx);
 }
 
 /* ------------------------------------------------------------------ */

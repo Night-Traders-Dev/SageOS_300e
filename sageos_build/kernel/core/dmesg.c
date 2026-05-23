@@ -61,36 +61,34 @@ void dmesg_printf(const char *fmt, ...) {
     dmesg_log(buf);
 }
 
+static int dmesg_at_bol = 1;
+
 void dmesg_log(const char *msg) {
-    uint64_t ticks = timer_ticks();
-    uint64_t sec = ticks / 100;
+    if (dmesg_at_bol) {
+        uint64_t ticks = timer_ticks();
+        uint64_t sec = ticks / 100;
 
-    append_char('[');
-    
-    char buf[20];
-    int i = 0;
-    uint64_t v = sec;
-    if (v == 0) buf[i++] = '0';
-    while (v > 0) { buf[i++] = (char)('0' + (v % 10)); v /= 10; }
-    while (i > 0) append_char(buf[--i]);
-
-    append_char('.');
-    
-    uint32_t csec = (uint32_t)(ticks % 100);
-    append_char((char)('0' + (csec / 10)));
-    append_char((char)('0' + (csec % 10)));
-    append_char('0');
-    append_char('0');
-    append_char('0');
-    append_char('0');
-
-    append_char(']');
-    append_char(' ');
+        append_char('[');
+        char buf[20];
+        int i = 0;
+        uint64_t v = sec;
+        if (v == 0) buf[i++] = '0';
+        while (v > 0) { buf[i++] = (char)('0' + (v % 10)); v /= 10; }
+        while (i > 0) append_char(buf[--i]);
+        append_char('.');
+        uint32_t csec = (uint32_t)(ticks % 100);
+        append_char((char)('0' + (csec / 10)));
+        append_char((char)('0' + (csec % 10)));
+        append_char('0'); append_char('0'); append_char('0'); append_char('0');
+        append_char(']'); append_char(' ');
+        dmesg_at_bol = 0;
+    }
 
     while (*msg) {
-        append_char(*msg++);
+        char c = *msg++;
+        append_char(c);
+        if (c == '\n') dmesg_at_bol = 1;
     }
-    append_char('\n');
     
     dmesg_save_persistent();
 }

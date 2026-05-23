@@ -190,13 +190,59 @@ int sage_vsnprintf(char *buf, size_t n, const char *fmt, __builtin_va_list ap) {
     while (*fmt && pos + 1 < n) {
         if (*fmt != '%') { buf[pos++] = *fmt++; continue; }
         fmt++;
-        if (*fmt == 's') { const char *s = __builtin_va_arg(ap, const char *); if (!s) s = "(null)"; while (*s && pos + 1 < n) buf[pos++] = *s++; }
-        else if (*fmt == 'd') { int v = __builtin_va_arg(ap, int); char tmp[21]; int tp = 20; tmp[tp] = 0; int neg = v < 0; uint64_t uv = neg ? (uint64_t)(-(int64_t)v) : (uint64_t)v; if (uv == 0) tmp[--tp] = '0'; while (uv > 0) { tmp[--tp] = '0' + (char)(uv % 10); uv /= 10; } if (neg) tmp[--tp] = '-'; const char *r = &tmp[tp]; while (*r && pos + 1 < n) buf[pos++] = *r++; }
-        else if (*fmt == 'u') { unsigned v = __builtin_va_arg(ap, unsigned); char tmp[21]; int tp = 20; tmp[tp] = 0; if (v == 0) tmp[--tp] = '0'; while (v > 0) { tmp[--tp] = '0' + (char)(v % 10); v /= 10; } const char *r = &tmp[tp]; while (*r && pos + 1 < n) buf[pos++] = *r++; }
-        else if (*fmt == 'x') { unsigned v = __builtin_va_arg(ap, unsigned); char tmp[17]; int tp = 16; tmp[tp] = 0; if (v == 0) tmp[--tp] = '0'; while (v > 0) { int d = v % 16; tmp[--tp] = (char)(d < 10 ? '0' + d : 'a' + d - 10); v /= 16; } const char *r = &tmp[tp]; while (*r && pos + 1 < n) buf[pos++] = *r++; }
-        else if (*fmt == '%') { buf[pos++] = '%'; }
-        else { (void)__builtin_va_arg(ap, int); }
-        fmt++;
+        
+        int width = 0;
+        int precision = -1;
+        int zero_pad = 0;
+        
+        while (*fmt == '0') { zero_pad = 1; fmt++; }
+        while (*fmt >= '0' && *fmt <= '9') { width = width * 10 + (*fmt - '0'); fmt++; }
+        if (*fmt == '.') {
+            fmt++;
+            precision = 0;
+            while (*fmt >= '0' && *fmt <= '9') { precision = precision * 10 + (*fmt - '0'); fmt++; }
+        }
+        while (*fmt == 'h' || *fmt == 'l' || *fmt == 'L' || *fmt == 'z' || *fmt == 'j' || *fmt == 't') fmt++;
+
+        if (*fmt == 's') {
+            const char *s = __builtin_va_arg(ap, const char *);
+            if (!s) s = "(null)";
+            while (*s && pos + 1 < n) buf[pos++] = *s++;
+        } else if (*fmt == 'd' || *fmt == 'u' || *fmt == 'x' || *fmt == 'X' || *fmt == 'p') {
+            uint64_t uv;
+            int neg = 0;
+            if (*fmt == 'd') {
+                int64_t v = __builtin_va_arg(ap, int);
+                if (v < 0) { neg = 1; uv = (uint64_t)(-v); } else { uv = (uint64_t)v; }
+            } else if (*fmt == 'p') {
+                uv = (uintptr_t)__builtin_va_arg(ap, void *);
+                zero_pad = 1; width = 16;
+            } else {
+                uv = __builtin_va_arg(ap, unsigned int);
+            }
+            
+            char tmp[32];
+            int tp = 0;
+            int base = (*fmt == 'x' || *fmt == 'X' || *fmt == 'p') ? 16 : 10;
+            const char *digits = (*fmt == 'X') ? "0123456789ABCDEF" : "0123456789abcdef";
+            
+            if (uv == 0) tmp[tp++] = '0';
+            while (uv > 0) { tmp[tp++] = digits[uv % base]; uv /= base; }
+            
+            int total_len = tp + neg;
+            if (width > total_len) {
+                int pad = width - total_len;
+                if (neg && zero_pad) { buf[pos++] = '-'; neg = 0; }
+                while (pad-- > 0 && pos + 1 < n) buf[pos++] = (char)(zero_pad ? '0' : ' ');
+            }
+            if (neg && pos + 1 < n) buf[pos++] = '-';
+            while (tp > 0 && pos + 1 < n) buf[pos++] = tmp[--tp];
+        } else if (*fmt == 'c') {
+            buf[pos++] = (char)__builtin_va_arg(ap, int);
+        } else if (*fmt == '%') {
+            buf[pos++] = '%';
+        }
+        if (*fmt) fmt++;
     }
     if (n > 0) buf[pos] = '\0';
     return (int)pos;

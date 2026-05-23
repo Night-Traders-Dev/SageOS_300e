@@ -4,3 +4,10 @@
 [submodule "sageos_build/sage_pkg"]
 	path = sageos_build/sage_pkg
 	url = https://github.com/Night-Traders-Dev/SagePkg
+
+[submodule "sageos_build/kernel/third_party/lwip"]
+	path = sageos_build/kernel/third_party/lwip
+	url = https://git.savannah.nongnu.org/git/lwip.git
+[submodule "sageos_build/kernel/third_party/mbedtls"]
+	path = sageos_build/kernel/third_party/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git

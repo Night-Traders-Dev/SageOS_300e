@@ -5,7 +5,7 @@
 #include "dmesg.h"
 #include "ata.h"
 
-#define DMESG_SIZE 16384
+#define DMESG_SIZE (128 * 1024)
 #define PERSISTENT_LBA 100
 #define PERSISTENT_SECTORS 32
 

@@ -81,7 +81,7 @@ Credentials saved to `/fat32/WIFI.CFG` are automatically loaded on boot and a re
 ```text
 SageOS_300e/
 ├── lenovo_300e.sh           # Unified build/flash/qemu script
-├── VERSION                  # Current operating system version (0.1.95)
+├── VERSION                  # Current operating system version (0.1.96)
 ├── sageos_build/
 │   ├── kernel/              # Core kernel, drivers, VFS, shell
 │   │   ├── core/            # Kernel entry, scheduler, VMM, SageLang VM

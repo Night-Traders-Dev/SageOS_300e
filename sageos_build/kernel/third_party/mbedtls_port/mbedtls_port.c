@@ -3,6 +3,7 @@
 #include <mbedtls/debug.h>
 #include <psa/crypto.h>
 #include "sage_libc_shim.h"
+#include "dmesg.h"
 #include "timer.h"
 #include "lwip/mem.h"
 
@@ -52,5 +53,10 @@ void mbedtls_port_init(void) {
     mbedtls_debug_set_threshold(4);
     
     /* Initialize PSA Crypto - REQUIRED for TLS 1.3 in MbedTLS 3.x */
-    psa_crypto_init();
+    psa_status_t status = psa_crypto_init();
+    if (status != PSA_SUCCESS) {
+        dmesg_printf("PSA: initialization failed (status=%d)", (int)status);
+    } else {
+        dmesg_log("PSA: initialization successful");
+    }
 }

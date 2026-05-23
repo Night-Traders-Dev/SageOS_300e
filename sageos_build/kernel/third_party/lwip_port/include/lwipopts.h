@@ -12,7 +12,7 @@
 
 /* Memory configuration */
 #define MEM_ALIGNMENT           8
-#define MEM_SIZE                (1024 * 1024)
+#define MEM_SIZE                (2048 * 1024)
 #define MEMP_NUM_PBUF           512
 #define MEMP_NUM_UDP_PCB        16
 #define MEMP_NUM_TCP_PCB        16

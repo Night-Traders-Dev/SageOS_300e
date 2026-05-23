@@ -102,6 +102,9 @@ int    sage_isspace(int c);
 #define isalnum(c)       sage_isalnum(c)
 #define isspace(c)       sage_isspace(c)
 
+int sage_vsnprintf(char *buf, size_t n, const char *fmt, __builtin_va_list ap);
+#define vsnprintf        sage_vsnprintf
+
 /* Suppress headers that would conflict */
 #define _STDIO_H 1
 #define _STDLIB_H 1

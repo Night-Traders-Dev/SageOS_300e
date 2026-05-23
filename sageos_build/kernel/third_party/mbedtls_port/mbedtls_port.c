@@ -1,5 +1,7 @@
 #include <mbedtls/platform.h>
 #include <mbedtls/entropy.h>
+#include <mbedtls/debug.h>
+#include <psa/crypto.h>
 #include "sage_libc_shim.h"
 #include "timer.h"
 #include "lwip/mem.h"
@@ -45,4 +47,10 @@ int mbedtls_hardware_poll(void *data, unsigned char *output, size_t len, size_t 
 void mbedtls_port_init(void) {
     /* Configure MbedTLS to use persistent lwIP memory functions */
     mbedtls_platform_set_calloc_free(mbedtls_port_calloc, mbedtls_port_free);
+    
+    /* Set debug threshold to maximum for deep diagnostics */
+    mbedtls_debug_set_threshold(4);
+    
+    /* Initialize PSA Crypto - REQUIRED for TLS 1.3 in MbedTLS 3.x */
+    psa_crypto_init();
 }

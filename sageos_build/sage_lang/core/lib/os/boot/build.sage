@@ -27,6 +27,7 @@ let NL = chr(10)
 comptime:
     let UART_X86_BASE = 1016
     let UART_AARCH64_BASE = 150994944
+    let UART_RPI4_BASE = 0xfe201000
     let UART_RISCV64_BASE = 268435456
     let UART_BAUD = 115200
 
@@ -57,7 +58,7 @@ proc get_assembler(arch):
     if arch == "x86_64":
         return AS_X86
     end
-    if arch == "aarch64":
+    if arch == "aarch64" or arch == "rpi4":
         return AS_AARCH64
     end
     if arch == "riscv64":
@@ -71,7 +72,7 @@ proc get_linker(arch):
     if arch == "x86_64":
         return LD_X86
     end
-    if arch == "aarch64":
+    if arch == "aarch64" or arch == "rpi4":
         return LD_AARCH64
     end
     if arch == "riscv64":
@@ -85,7 +86,7 @@ proc get_cc(arch):
     if arch == "x86_64":
         return CC_X86
     end
-    if arch == "aarch64":
+    if arch == "aarch64" or arch == "rpi4":
         return CC_AARCH64
     end
     if arch == "riscv64":
@@ -99,7 +100,7 @@ proc get_objcopy(arch):
     if arch == "x86_64":
         return OBJCOPY_X86
     end
-    if arch == "aarch64":
+    if arch == "aarch64" or arch == "rpi4":
         return OBJCOPY_AARCH64
     end
     if arch == "riscv64":
@@ -202,6 +203,56 @@ proc generate_serial_boot_aarch64():
     asm = asm + ".section .text" + NL
     asm = asm + ".global serial_init, serial_putchar, serial_puts" + NL
     # PL011 init
+    asm = asm + "serial_init:" + NL
+    asm = asm + "    ldr x1, =" + base + NL
+    asm = asm + "    # Disable UART" + NL
+    asm = asm + "    str wzr, [x1, #48]" + NL
+    asm = asm + "    # IBRD = 26 (48MHz / 16 / 115200)" + NL
+    asm = asm + "    mov w2, #26" + NL
+    asm = asm + "    str w2, [x1, #36]" + NL
+    asm = asm + "    # FBRD = 3" + NL
+    asm = asm + "    mov w2, #3" + NL
+    asm = asm + "    str w2, [x1, #40]" + NL
+    asm = asm + "    # LCRH: 8-bit, FIFO enable" + NL
+    asm = asm + "    mov w2, #0x70" + NL
+    asm = asm + "    str w2, [x1, #44]" + NL
+    asm = asm + "    # Enable UART, TX, RX" + NL
+    asm = asm + "    mov w2, #0x301" + NL
+    asm = asm + "    str w2, [x1, #48]" + NL
+    asm = asm + "    ret" + NL
+    asm = asm + NL
+    # serial_putchar: write byte in w0
+    asm = asm + "serial_putchar:" + NL
+    asm = asm + "    ldr x1, =" + base + NL
+    asm = asm + ".Lwait_tx:" + NL
+    asm = asm + "    ldr w2, [x1, #24]" + NL
+    asm = asm + "    tst w2, #0x20" + NL
+    asm = asm + "    b.ne .Lwait_tx" + NL
+    asm = asm + "    str w0, [x1]" + NL
+    asm = asm + "    ret" + NL
+    asm = asm + NL
+    # serial_puts: write null-terminated string at x0
+    asm = asm + "serial_puts:" + NL
+    asm = asm + "    stp x29, x30, [sp, #-16]!" + NL
+    asm = asm + "    mov x19, x0" + NL
+    asm = asm + ".Lputs_loop:" + NL
+    asm = asm + "    ldrb w0, [x19], #1" + NL
+    asm = asm + "    cbz w0, .Lputs_done" + NL
+    asm = asm + "    bl serial_putchar" + NL
+    asm = asm + "    b .Lputs_loop" + NL
+    asm = asm + ".Lputs_done:" + NL
+    asm = asm + "    ldp x29, x30, [sp], #16" + NL
+    asm = asm + "    ret" + NL
+    asm = asm + NL
+    return asm
+end
+
+proc generate_serial_boot_rpi4():
+    let base = "0xfe201000"
+    let asm = ""
+    asm = asm + ".section .text" + NL
+    asm = asm + ".global serial_init, serial_putchar, serial_puts" + NL
+    # PL011 init for RPi4
     asm = asm + "serial_init:" + NL
     asm = asm + "    ldr x1, =" + base + NL
     asm = asm + "    # Disable UART" + NL
@@ -383,7 +434,7 @@ proc build_commands(arch, boot_asm_path, kernel_c_path, linker_script_path, outp
     if arch == "x86_64":
         push(cmds, as_cmd + " --64 -o " + boot_obj + " " + boot_asm_path)
     end
-    if arch == "aarch64":
+    if arch == "aarch64" or arch == "rpi4":
         push(cmds, as_cmd + " -o " + boot_obj + " " + boot_asm_path)
     end
     if arch == "riscv64":
@@ -394,8 +445,8 @@ proc build_commands(arch, boot_asm_path, kernel_c_path, linker_script_path, outp
     if arch == "x86_64":
         push(cmds, cc + " -ffreestanding -nostdlib -mno-red-zone -c -o " + kernel_obj + " " + kernel_c_path)
     end
-    if arch == "aarch64":
-        push(cmds, cc + " -ffreestanding -nostdlib -c -o " + kernel_obj + " " + kernel_c_path)
+    if arch == "aarch64" or arch == "rpi4":
+        push(cmds, cc + " -ffreestanding -nostdlib -mgeneral-regs-only -c -o " + kernel_obj + " " + kernel_c_path)
     end
     if arch == "riscv64":
         push(cmds, cc + " -ffreestanding -nostdlib -march=rv64gc -mabi=lp64d -c -o " + kernel_obj + " " + kernel_c_path)
@@ -461,6 +512,9 @@ proc qemu_command(arch, kernel_path):
     if arch == "aarch64":
         return "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 128M -display none -serial mon:stdio -kernel " + kernel_path
     end
+    if arch == "rpi4":
+        return "qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 1G -display none -serial stdio -kernel " + kernel_path
+    end
     if arch == "riscv64":
         return "qemu-system-riscv64 -machine virt -m 128M -display none -serial mon:stdio -bios none -kernel " + kernel_path
     end
@@ -488,6 +542,10 @@ proc write_build_files(arch, output_dir, message):
         boot_asm = start.emit_start_aarch64("kmain", "stack_top")
         boot_asm = boot_asm + generate_serial_boot_aarch64()
     end
+    if arch == "rpi4":
+        boot_asm = start.emit_start_aarch64("kmain", "stack_top")
+        boot_asm = boot_asm + generate_serial_boot_rpi4()
+    end
     if arch == "riscv64":
         boot_asm = start.emit_start_riscv64("kmain", "stack_top")
         boot_asm = boot_asm + generate_serial_boot_riscv64()
@@ -500,6 +558,9 @@ proc write_build_files(arch, output_dir, message):
     let ld_config = linker.default_config()
     if arch == "aarch64":
         ld_config["base_address"] = 1073741824
+    end
+    if arch == "rpi4":
+        ld_config["base_address"] = 524288 # 0x80000
     end
     if arch == "riscv64":
         ld_config["base_address"] = 2147483648

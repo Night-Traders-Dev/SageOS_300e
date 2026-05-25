@@ -40,10 +40,10 @@ proc starts_with(s, prefix):
 
 proc substr(s, start, count):
     let r = ""
-    let end = start + count
-    if end > len(s):
-        end = len(s)
-    for i in range(end - start):
+    let end_idx = start + count
+    if end_idx > len(s):
+        end_idx = len(s)
+    for i in range(end_idx - start):
         r = r + s[start + i]
     return r
 

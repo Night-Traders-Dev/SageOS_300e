@@ -26,6 +26,9 @@ Storage systems register their specific driver hooks under this structure:
 - **RamFS** (`kernel/fs/ramfs.c`): In-memory volatile storage for system files, dynamically populated at boot.
 - **FAT32** (`kernel/fs/fat32.c`): Legacy EFI System Partition (ESP) support. Includes a fully native write path and partition management.
 - **BTRFS** (`kernel/fs/btrfs.c`): Modern Copy-On-Write (COW) fallback filesystem with full superblock reading capabilities.
+- **SWAP** (`kernel/drivers/swap.c`): Kernel-level swap device management for virtual memory.
+
+See **[Storage Layout](storage_layout.md)** for detailed partition information.
 
 ---
 

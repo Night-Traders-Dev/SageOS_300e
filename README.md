@@ -74,6 +74,7 @@ Credentials saved to `/fat32/WIFI.CFG` are automatically loaded on boot and a re
 - **[Init System](docs/init_system.md)**: Deep dive into the programmable initialization process.
 - **[Hardware Support](docs/lenovo_300e_ast_hardware.md)**: Hardware-specific architectural details for the Lenovo 300e AST.
 - **[VFS Architecture](docs/vfs_architecture.md)**: The Virtual Filesystem layer, SageLang bridge, mount table, and case-insensitive resolution.
+- **[Storage Layout](docs/storage_layout.md)**: Details on the GPT partition scheme, FAT32, BTRFS, and Swap.
 - **[Network Stack](docs/network_stack.md)**: Deep dive into the OS network architecture, lwIP port, and mbedTLS integration.
 - **[Wi-Fi Driver Architecture](docs/wifi_driver.md)**: Qualcomm QCA6174A PCI hardware support, staging sequence, and WPA2-PSK association.
 

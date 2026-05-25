@@ -4,18 +4,18 @@ SageOS is a lightweight, modular operating system project. This repository is th
 
 ## Project Structure
 
-- **`sageos_build/kernel/`**: The shared core components (SageLang, VFS, Shell, etc.).
+SageOS uses a modular structure to maximize code reuse across architectures.
+
+- **`sageos_build/`**: The **Source of Truth** for architecture-agnostic core components.
+  - `kernel/`: VFS, Shell, and common kernel logic.
+  - `sage_lang/`: The SageLang compiler and VM.
 - **`arch/`**: Architecture-specific ports (Git Submodules).
-  - **[x64](https://github.com/Night-Traders-Dev/SageOS_x64)**: Intel/AMD 64-bit.
-    - *Targets*: QEMU (q35), Physical PC.
-    - *Status*: Stable bootstrap, basic drivers.
-  - **[arm64](https://github.com/Night-Traders-Dev/SageOS_arm64)**: ARM 64-bit.
-    - *Targets*: Raspberry Pi 4 (RPi4), QEMU (virt).
-    - *Status*: RPi4 boot support (experimental), UART PL011.
-    - *Branch*: Use the `RPi4` branch for Raspberry Pi specific code.
-  - **[rv64](https://github.com/Night-Traders-Dev/SageOS_rv64)**: RISC-V 64-bit.
-    - *Targets*: QEMU (virt).
-    - *Status*: Initial port.
+  - Each port (e.g., `arch/arm64`) includes this main repository as a submodule named `core` to access the agnostic components.
+
+### Architecture Ports
+- **[x64](https://github.com/Night-Traders-Dev/SageOS_x64)**: Intel/AMD 64-bit.
+- **[arm64](https://github.com/Night-Traders-Dev/SageOS_arm64)**: ARM 64-bit (RPi4).
+- **[rv64](https://github.com/Night-Traders-Dev/SageOS_rv64)**: RISC-V 64-bit.
 
 ## Core Components (Agnostic)
 
@@ -32,30 +32,27 @@ To clone SageOS with all architecture ports:
 git clone --recursive https://github.com/Night-Traders-Dev/SageOS.git
 ```
 
-### Building for Raspberry Pi 4
+## Quick Start: Raspberry Pi 4 (QEMU)
 
-SageOS now includes a boot build pipeline for RPi4.
+SageOS includes a demo pipeline for RPi4.
 
-1.  **Generate the RPi4 Build Environment**:
+1.  **Build the Kernel**:
     ```bash
-    ./sageos_build/sage_lang/core/sage rpi4_demo.sage
+    ./sageos_build/sage_lang/core/sage examples/boot/rpi4_demo.sage
+    chmod +x build_rpi4.sh && ./build_rpi4.sh
     ```
-2.  **Compile the Kernel**:
+2.  **Run in QEMU**:
     ```bash
-    chmod +x build_rpi4.sh
-    ./build_rpi4.sh
-    ```
-3.  **Run in QEMU**:
-    ```bash
-    qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 1G -display none -serial stdio -kernel rpi4_boot_demo/kernel.elf
+    qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 1G -nographic -kernel rpi4_boot_demo/kernel.elf
     ```
 
 ### Developing for a Specific Architecture
-The architecture ports are located in the `arch/` directory. Each submodule points to its respective repository's `main` branch, designed to link against the agnostic core.
+The architecture ports are located in the `arch/` directory. Each port is an independent repository designed to link against the `core/` submodule (which points back to this repository).
 
-- **x64**: `arch/x64`
-- **ARM64**: `arch/arm64` (Switch to `RPi4` branch for RPi hardware support).
-- **RISC-V**: `arch/rv64`
+To build a specific architecture (e.g., ARM64):
+1.  Navigate to the port directory: `cd arch/arm64`
+2.  The agnostic code is available in `./core/sageos_build/`
+3.  Follow the port-specific instructions in `arch/*/README.md`.
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -14,9 +14,9 @@
 set -euo pipefail
 
 SAGE="${1:-sage}"
-OUT_DIR="${2:-kernel/shell}"
+OUT_DIR="${2:-sageos_build/kernel/shell}"
 
-SAGE_SHELL_DIR="sageos_build/kernel/shell"
+SAGE_SHELL_DIR="${OUT_DIR}"
 INPUT="${SAGE_SHELL_DIR}/sage_shell/shell.sage"
 COMMANDS="${SAGE_SHELL_DIR}/sage_shell/commands.sage"
 DMESG="${SAGE_SHELL_DIR}/sage_shell/dmesg.sage"
@@ -33,7 +33,8 @@ COMBINED="${SAGE_SHELL_DIR}/sage_shell_combined.sage"
 
 echo "[sage-shell] Combining .sage sources..."
 cat "${INPUT_HELPER}" "${COMMANDS}" "${DMESG}" "${NEOFETCH}" "${STATUS}" "${SWAP}" "${POWER}" "${SCHED}" "${KERNEL_INFO}" "${INPUT}" > "${COMBINED}"
-cp "${COMBINED}" "sageos_build/kernel/bin/sage_shell_combined.sage"
+mkdir -p "$(dirname "${OUT_DIR}")/bin"
+cp "${COMBINED}" "$(dirname "${OUT_DIR}")/bin/sage_shell_combined.sage"
 
 echo "[sage-shell] Compiling to bytecode..."
 # sage --compile-bytecode outputs a raw binary bytecode file

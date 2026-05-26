@@ -6,9 +6,10 @@
 set -euo pipefail
 
 SAGE="${1:-sage}"
-INPUT="sageos_build/kernel/fs/vfs_bridge.sage"
-BYTECODE="sageos_build/kernel/fs/vfs_bridge.bc"
-OUT_H="sageos_build/kernel/fs/vfs_bridge_bytecode.h"
+OUT_DIR="${2:-sageos_build/kernel/fs}"
+INPUT="${OUT_DIR}/vfs_bridge.sage"
+BYTECODE="${OUT_DIR}/vfs_bridge.bc"
+OUT_H="${OUT_DIR}/vfs_bridge_bytecode.h"
 
 echo "[vfs-bridge] Compiling to bytecode..."
 "${SAGE}" --emit-bytecode "${INPUT}" -o "${BYTECODE}"

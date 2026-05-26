@@ -109,14 +109,26 @@ case "$ARCH" in
     x64)
         case "$DEVICE" in
             q35|pc|lenovo_300e)
-                if [[ "$ACTION" == "build" ]]; then
-                    log_info "Building x64 kernel for $DEVICE..."
-                    # x64 build typically uses UEFI profile for 300e/modern PC
-                    $SAGE_BIN --compile-bare "$EXAMPLES_DIR/hello_kernel.sage" -o "$BUILD_DIR/x64_${DEVICE}_kernel.elf" --target x86_64
-                fi
-                if [[ "$ACTION" == "run" ]]; then
-                    log_info "Running x64 $DEVICE in QEMU..."
-                    qemu-system-x86_64 -machine q35 -m 128M -nographic -kernel "$BUILD_DIR/x64_${DEVICE}_kernel.elf"
+                if [[ "$DEVICE" == "lenovo_300e" && -f "arch/x64/lenovo_300e.sh" ]]; then
+                    if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
+                        log_info "Using dedicated Lenovo 300e script for build..."
+                        (cd arch/x64 && bash lenovo_300e.sh build)
+                        mkdir -p "$BUILD_DIR/x64_lenovo_300e"
+                        cp arch/x64/sageos-live.img "$BUILD_DIR/x64_lenovo_300e/"
+                    fi
+                    if [[ "$ACTION" == "run" ]]; then
+                        log_info "Running Lenovo 300e in QEMU..."
+                        (cd arch/x64 && bash lenovo_300e.sh qemu)
+                    fi
+                else
+                    if [[ "$ACTION" == "build" ]]; then
+                        log_info "Building x64 kernel for $DEVICE..."
+                        $SAGE_BIN --compile-bare "$EXAMPLES_DIR/hello_kernel.sage" -o "$BUILD_DIR/x64_${DEVICE}_kernel.elf" --target x86_64
+                    fi
+                    if [[ "$ACTION" == "run" ]]; then
+                        log_info "Running x64 $DEVICE in QEMU..."
+                        qemu-system-x86_64 -machine q35 -m 128M -nographic -kernel "$BUILD_DIR/x64_${DEVICE}_kernel.elf"
+                    fi
                 fi
                 ;;
             *)

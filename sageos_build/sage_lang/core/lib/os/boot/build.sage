@@ -566,16 +566,16 @@ end
 
 proc qemu_command(arch, kernel_path):
     if arch == "x86_64":
-        return "qemu-system-x86_64 -m 128M -display none -serial mon:stdio -kernel " + kernel_path
+        return "qemu-system-x86_64 -m 4G -display none -serial mon:stdio -kernel " + kernel_path
     end
     if arch == "aarch64":
-        return "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 128M -display none -serial mon:stdio -kernel " + kernel_path
+        return "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio -kernel " + kernel_path
     end
     if arch == "rpi4":
-        return "qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 1G -display none -serial stdio -kernel " + kernel_path
+        return "qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 4G -display none -serial stdio -kernel " + kernel_path
     end
     if arch == "riscv64":
-        return "qemu-system-riscv64 -machine virt -m 128M -display none -serial mon:stdio -bios none -kernel " + kernel_path
+        return "qemu-system-riscv64 -machine virt -m 4G -display none -serial mon:stdio -bios none -kernel " + kernel_path
     end
     return ""
 end

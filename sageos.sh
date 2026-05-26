@@ -74,7 +74,7 @@ case "$ARCH" in
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running RPi4 in QEMU..."
-                    qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 1G -nographic -kernel "$BUILD_DIR/arm64_rpi4/kernel.elf"
+                    qemu-system-aarch64 -machine raspi4b -cpu cortex-a72 -m 4G -nographic -kernel "$BUILD_DIR/arm64_rpi4/kernel.elf"
                 fi
                 
                 if [[ "$ACTION" == "flash" ]]; then
@@ -97,7 +97,7 @@ case "$ARCH" in
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running ARM64 virt in QEMU..."
-                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 128M -nographic -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
+                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -nographic -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
                 ;;
             *)
@@ -127,7 +127,7 @@ case "$ARCH" in
                     fi
                     if [[ "$ACTION" == "run" ]]; then
                         log_info "Running x64 $DEVICE in QEMU..."
-                        qemu-system-x86_64 -machine q35 -m 128M -nographic -kernel "$BUILD_DIR/x64_${DEVICE}_kernel.elf"
+                        qemu-system-x86_64 -machine q35 -m 4G -nographic -kernel "$BUILD_DIR/x64_${DEVICE}_kernel.elf"
                     fi
                 fi
                 ;;
@@ -161,10 +161,10 @@ case "$ARCH" in
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running $DEVICE in QEMU..."
                     if [[ "$DEVICE" == "virt" ]]; then
-                        qemu-system-riscv64 -machine virt -m 128M -nographic -bios none -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
+                        qemu-system-riscv64 -machine virt -m 4G -nographic -bios none -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
                     else
                         # Orange Pi RV 2
-                        qemu-system-riscv64 -machine virt -m 8G -nographic -bios none -kernel "$BUILD_DIR/rv64_orangepi_rv2/kernel.elf"
+                        qemu-system-riscv64 -machine virt -m 4G -nographic -bios none -kernel "$BUILD_DIR/rv64_orangepi_rv2/kernel.elf"
                     fi
                 fi
                 ;;

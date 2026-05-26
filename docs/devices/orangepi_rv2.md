@@ -24,4 +24,4 @@ Since a dedicated JH7110 machine model is not always available in stock QEMU, th
 ```bash
 ./sageos.sh rv64 orangepi_rv2 run
 ```
-Note: This uses the standard `virt` machine with 8GB RAM. For serial output to work in QEMU `virt`, the build must be configured for the `virt` UART address (`0x10000000`). The `orangepi_rv2` build target uses the real hardware address (`0x12030000`).
+Note: This uses the standard `virt` machine with 4GB RAM. For serial output to work in QEMU `virt`, the build must be configured for the `virt` UART address (`0x10000000`). The `orangepi_rv2` build target uses the real hardware address (`0x12030000`).

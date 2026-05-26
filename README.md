@@ -1,48 +1,60 @@
-# SageOS - The Multi-Architecture Operating System
+# SageOS - The Modular Hybrid Operating System
 
-SageOS is a lightweight, modular operating system project. This repository is the central hub containing the **architecture-agnostic core** and linking to architecture-specific ports via submodules.
+SageOS is a modern, modular, and multi-architecture operating system project. It leverages a low-level C kernel for performance-critical tasks and a high-level scripting language, **SageLang**, for system logic and the interactive shell.
 
-## Project Structure
+This repository is the central hub. It contains the **architecture-agnostic core** (`sageos_build/`) and links to architecture-specific hardware ports via Git submodules (`arch/`).
 
-SageOS uses a modular structure to maximize code reuse across architectures.
+## Comprehensive Documentation
+For a deep dive into the architecture, subsystems, and current status, please read **[The SageOS Book](SageOS_Book.md)**.
 
-- **`sageos_build/`**: The **Source of Truth** for architecture-agnostic core components.
-  - `kernel/`: VFS, Shell, and common kernel logic.
-  - `sage_lang/`: The SageLang compiler and VM.
-- **`docs/`**: [Comprehensive Documentation](docs/README.md) for all architectures and devices.
-- **`arch/`**: Architecture-specific ports (Git Submodules).
-  - Each port (e.g., `arch/arm64`) includes this main repository as a submodule named `core` to access the agnostic components.
+## Environment Setup
+SageOS utilizes a complex submodule tree. **Do not use a standard recursive clone.** Instead, clone the repository and run the optimized setup script to initialize the environment safely, avoid recursion loops, and link our custom-forked libraries (`lwip` and `mbedtls`):
 
-### Architecture Ports
-- **[x64](https://github.com/Night-Traders-Dev/SageOS_x64)**: Intel/AMD 64-bit.
-- **[arm64](https://github.com/Night-Traders-Dev/SageOS_arm64)**: ARM 64-bit (RPi4).
-- **[rv64](https://github.com/Night-Traders-Dev/SageOS_rv64)**: RISC-V 64-bit (Orange Pi RV 2).
-
-## Quick Start: Raspberry Pi 4 (QEMU)
-
-SageOS includes a master management script for easy building and testing.
-
-1.  **Build and Run**:
-    ```bash
-    ./sageos.sh arm64 rpi4 run
-    ```
-
-For detailed instructions on other targets, see the [Management Script Guide](docs/guides/management_script.md).
-
-## Getting Started
-
-To clone SageOS with all architecture ports:
 ```bash
-git clone --recursive https://github.com/Night-Traders-Dev/SageOS.git
+git clone https://github.com/Night-Traders-Dev/SageOS.git
+cd SageOS
+./setup_submodules.sh
 ```
 
-### Developing for a Specific Architecture
-The architecture ports are located in the `arch/` directory. Each port is an independent repository designed to link against the `core/` submodule.
+## Project Structure
+- **`sageos_build/`**: The **Source of Truth** for shared core components.
+  - `kernel/`: The C kernel, Virtual Filesystem (VFS), and Shell logic.
+  - `sage_lang/`: The SageLang compiler and MetalVM bytecode interpreter.
+- **`docs/`**: Supplemental documentation and guides.
+- **`arch/`**: Architecture-specific hardware ports.
+  - **[x64](https://github.com/Night-Traders-Dev/SageOS_x64)**: PC/Q35 and Lenovo 300e Chromebook support.
+  - **[arm64](https://github.com/Night-Traders-Dev/SageOS_arm64)**: Raspberry Pi 4 support (use the `RPi4` branch).
+  - **[rv64](https://github.com/Night-Traders-Dev/SageOS_rv64)**: RISC-V Orange Pi RV 2 support.
 
-To build a specific architecture (e.g., ARM64):
-1.  Navigate to the port directory: `cd arch/arm64`
-2.  The agnostic code is available in `./core/sageos_build/`
-3.  Follow the port-specific instructions in `arch/*/README.md`.
+## Building and Running
+SageOS includes a master management script for building the kernel and running it in QEMU.
+
+### Virtual Environments (QEMU `virt`/`q35`)
+You can build and run generic virtualized targets for any supported architecture. These targets compile the full C kernel and SageShell:
+```bash
+# x86_64
+./sageos.sh x64 virt build
+./sageos.sh x64 virt run
+
+# ARM64
+./sageos.sh arm64 virt build
+./sageos.sh arm64 virt run
+
+# RISC-V 64
+./sageos.sh rv64 virt build
+./sageos.sh rv64 virt run
+```
+
+### Hardware-Specific Targets
+To build for specific hardware, use the management script with the appropriate device identifier:
+```bash
+# Build and run the Lenovo 300e Chromebook target
+./sageos.sh x64 lenovo_300e build
+./sageos.sh x64 lenovo_300e run
+
+# Build and run the Raspberry Pi 4 target
+./sageos.sh arm64 rpi4 run
+```
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

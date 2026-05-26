@@ -32,7 +32,7 @@ show_help() {
     echo ""
     echo "Devices:"
     echo "  arm64: rpi4, virt"
-    echo "  x64:   q35, pc, lenovo_300e"
+    echo "  x64:   q35, pc, lenovo_300e, virt"
     echo "  rv64:  virt, orangepi_rv2"
     echo ""
     echo "Actions:"
@@ -87,20 +87,15 @@ case "$ARCH" in
                 ;;
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
-                    log_info "Generating ARM64 virt build environment..."
-                    mkdir -p boot_test_aarch64
-                    $SAGE_BIN "$EXAMPLES_DIR/gen_build.sage"
-                    log_info "Building ARM64 virt kernel..."
-                    chmod +x build_kernel.sh
-                    ./build_kernel.sh
-                    rm -rf "$BUILD_DIR/arm64_virt"
-                    mv boot_test_aarch64 "$BUILD_DIR/arm64_virt"
-                    rm build_kernel.sh
+                    log_info "Generating ARM64 virt interactive shell..."
+                    $SAGE_BIN sageos_build/sage_lang/core/lib/os/examples/shell.sage aarch64
+                    mkdir -p "$BUILD_DIR/arm64_virt"
+                    cp /tmp/sageos_shell_aarch64/kernel.elf "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running ARM64 virt in QEMU..."
-                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -nographic -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
+                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 128M -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
                 ;;
             *)
@@ -111,6 +106,19 @@ case "$ARCH" in
         ;;
     x64)
         case "$DEVICE" in
+            virt)
+                if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
+                    log_info "Generating x86_64 virt interactive shell..."
+                    $SAGE_BIN sageos_build/sage_lang/core/lib/os/examples/shell.sage x86_64
+                    mkdir -p "$BUILD_DIR/x64_virt"
+                    cp /tmp/sageos_shell_x86_64/kernel.elf "$BUILD_DIR/x64_virt/kernel.elf"
+                fi
+                
+                if [[ "$ACTION" == "run" ]]; then
+                    log_info "Running x86_64 virt in QEMU..."
+                    qemu-system-x86_64 -machine q35 -m 64M -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/x64_virt/kernel.elf"
+                fi
+                ;;
             q35|pc|lenovo_300e)
                 if [[ "$DEVICE" == "lenovo_300e" && -f "arch/x64/lenovo_300e.sh" ]]; then
                     if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
@@ -142,7 +150,20 @@ case "$ARCH" in
         ;;
     rv64)
         case "$DEVICE" in
-            virt|orangepi_rv2)
+            virt)
+                if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
+                    log_info "Generating RISCV64 virt interactive shell..."
+                    $SAGE_BIN sageos_build/sage_lang/core/lib/os/examples/shell.sage riscv64
+                    mkdir -p "$BUILD_DIR/rv64_virt"
+                    cp /tmp/sageos_shell_riscv64/kernel.elf "$BUILD_DIR/rv64_virt/kernel.elf"
+                fi
+                
+                if [[ "$ACTION" == "run" ]]; then
+                    log_info "Running RISCV64 virt in QEMU..."
+                    qemu-system-riscv64 -machine virt -m 128M -display none -serial mon:stdio -bios none -no-reboot -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
+                fi
+                ;;
+            orangepi_rv2)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
                     log_info "Generating $DEVICE build environment..."
                     mkdir -p "${DEVICE}_boot"
@@ -163,12 +184,7 @@ case "$ARCH" in
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running $DEVICE in QEMU..."
-                    if [[ "$DEVICE" == "virt" ]]; then
-                        qemu-system-riscv64 -machine virt -m 4G -nographic -bios none -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
-                    else
-                        # Orange Pi RV 2
-                        qemu-system-riscv64 -machine virt -m 4G -nographic -bios none -kernel "$BUILD_DIR/rv64_orangepi_rv2/kernel.elf"
-                    fi
+                    qemu-system-riscv64 -machine virt -m 4G -nographic -bios none -kernel "$BUILD_DIR/rv64_orangepi_rv2/kernel.elf"
                 fi
                 ;;
             *)

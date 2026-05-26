@@ -29,39 +29,75 @@ let TAB = chr(9)
 
 proc get_as(arch):
     if arch == "x86_64":
+        if sys.exec("command -v x86_64-linux-gnu-as >/dev/null 2>&1") == 0:
+            return "x86_64-linux-gnu-as"
+        end
         return "as"
     end
     if arch == "aarch64":
-        return "aarch64-linux-gnu-as"
+        if sys.exec("command -v aarch64-linux-gnu-as >/dev/null 2>&1") == 0:
+            return "aarch64-linux-gnu-as"
+        end
+        return "clang -target aarch64-unknown-elf -c"
     end
     if arch == "riscv64":
-        return "riscv64-unknown-elf-as"
+        if sys.exec("command -v riscv64-linux-gnu-as >/dev/null 2>&1") == 0:
+            return "riscv64-linux-gnu-as"
+        end
+        if sys.exec("command -v riscv64-unknown-elf-as >/dev/null 2>&1") == 0:
+            return "riscv64-unknown-elf-as"
+        end
+        return "clang -target riscv64-unknown-elf -c"
     end
     return "as"
 end
 
 proc get_cc(arch):
     if arch == "x86_64":
+        if sys.exec("command -v x86_64-linux-gnu-gcc >/dev/null 2>&1") == 0:
+            return "x86_64-linux-gnu-gcc"
+        end
         return "gcc"
     end
     if arch == "aarch64":
-        return "aarch64-linux-gnu-gcc"
+        if sys.exec("command -v aarch64-linux-gnu-gcc >/dev/null 2>&1") == 0:
+            return "aarch64-linux-gnu-gcc"
+        end
+        return "clang -target aarch64-unknown-elf"
     end
     if arch == "riscv64":
-        return "riscv64-unknown-elf-gcc"
+        if sys.exec("command -v riscv64-linux-gnu-gcc >/dev/null 2>&1") == 0:
+            return "riscv64-linux-gnu-gcc"
+        end
+        if sys.exec("command -v riscv64-unknown-elf-gcc >/dev/null 2>&1") == 0:
+            return "riscv64-unknown-elf-gcc"
+        end
+        return "clang -target riscv64-unknown-elf"
     end
     return "gcc"
 end
 
 proc get_ld(arch):
     if arch == "x86_64":
+        if sys.exec("command -v x86_64-linux-gnu-ld >/dev/null 2>&1") == 0:
+            return "x86_64-linux-gnu-ld"
+        end
         return "ld"
     end
     if arch == "aarch64":
-        return "aarch64-linux-gnu-ld"
+        if sys.exec("command -v aarch64-linux-gnu-ld >/dev/null 2>&1") == 0:
+            return "aarch64-linux-gnu-ld"
+        end
+        return "ld.lld"
     end
     if arch == "riscv64":
-        return "riscv64-unknown-elf-ld"
+        if sys.exec("command -v riscv64-linux-gnu-ld >/dev/null 2>&1") == 0:
+            return "riscv64-linux-gnu-ld"
+        end
+        if sys.exec("command -v riscv64-unknown-elf-ld >/dev/null 2>&1") == 0:
+            return "riscv64-unknown-elf-ld"
+        end
+        return "ld.lld"
     end
     return "ld"
 end
@@ -513,10 +549,10 @@ proc build_commands(arch, out_dir, boot_asm, kernel_c, ld_script):
         push(cmds, ld + " -m elf_i386 -T " + ld_script + " -o " + elf + " " + boot_o + " " + kernel_o)
     end
     if arch == "aarch64":
-        push(cmds, ld + " -T " + ld_script + " -o " + elf + " " + boot_o + " " + kernel_o)
+        push(cmds, ld + " -z max-page-size=4096 -T " + ld_script + " -o " + elf + " " + boot_o + " " + kernel_o)
     end
     if arch == "riscv64":
-        push(cmds, ld + " -m elf64lriscv -T " + ld_script + " -o " + elf + " " + boot_o + " " + kernel_o)
+        push(cmds, ld + " -z max-page-size=4096 -m elf64lriscv -T " + ld_script + " -o " + elf + " " + boot_o + " " + kernel_o)
     end
 
     return cmds

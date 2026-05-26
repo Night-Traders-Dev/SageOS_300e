@@ -87,17 +87,20 @@ case "$ARCH" in
                 ;;
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
-                    log_info "Generating ARM64 virt interactive shell..."
-                    $SAGE_BIN sageos_build/sage_lang/core/lib/os/examples/shell.sage aarch64
+                    log_info "Building actual SageOS Kernel for ARM64 virt..."
+                    mkdir -p build
+                    $SAGE_BIN scripts/build_virt.sage
+                    bash build/virt_aarch64/build.sh
                     mkdir -p "$BUILD_DIR/arm64_virt"
-                    cp /tmp/sageos_shell_aarch64/kernel.elf "$BUILD_DIR/arm64_virt/kernel.elf"
+                    cp build/virt_aarch64/kernel.elf "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
-                
+
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running ARM64 virt in QEMU..."
-                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
+                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
                 ;;
+
             *)
                 log_error "Unknown device '$DEVICE' for arch '$ARCH'"
                 exit 1
@@ -108,10 +111,12 @@ case "$ARCH" in
         case "$DEVICE" in
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
-                    log_info "Generating x86_64 virt interactive shell..."
-                    $SAGE_BIN sageos_build/sage_lang/core/lib/os/examples/shell.sage x86_64
+                    log_info "Building actual SageOS Kernel for x86_64 virt..."
+                    mkdir -p build
+                    $SAGE_BIN scripts/build_virt.sage
+                    bash build/virt_x86_64/build.sh
                     mkdir -p "$BUILD_DIR/x64_virt"
-                    cp /tmp/sageos_shell_x86_64/kernel.elf "$BUILD_DIR/x64_virt/kernel.elf"
+                    cp build/virt_x86_64/kernel.elf "$BUILD_DIR/x64_virt/kernel.elf"
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then
@@ -152,10 +157,12 @@ case "$ARCH" in
         case "$DEVICE" in
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
-                    log_info "Generating RISCV64 virt interactive shell..."
-                    $SAGE_BIN sageos_build/sage_lang/core/lib/os/examples/shell.sage riscv64
+                    log_info "Building actual SageOS Kernel for RISCV64 virt..."
+                    mkdir -p build
+                    $SAGE_BIN scripts/build_virt.sage
+                    bash build/virt_riscv64/build.sh
                     mkdir -p "$BUILD_DIR/rv64_virt"
-                    cp /tmp/sageos_shell_riscv64/kernel.elf "$BUILD_DIR/rv64_virt/kernel.elf"
+                    cp build/virt_riscv64/kernel.elf "$BUILD_DIR/rv64_virt/kernel.elf"
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then

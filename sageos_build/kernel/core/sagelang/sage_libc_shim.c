@@ -10,6 +10,9 @@
 #include "console.h"
 #include "sage_alloc.h"
 
+void *sage_memset(void *s, int c, size_t n);
+void *sage_memcpy(void *dest, const void *src, size_t n);
+
 /* --- Bump allocator implementation --- */
 
 static uint8_t sage_heap[SAGE_ARENA_SIZE] __attribute__((aligned(16)));

@@ -1,6 +1,9 @@
 #ifndef SAGE_METAL_VM_H
 #define SAGE_METAL_VM_H
 
+#include <stdint.h>
+#include <stddef.h>
+
 // ============================================================================
 // SageMetal VM — Freestanding Bytecode Virtual Machine
 // ============================================================================

@@ -395,8 +395,7 @@ int vfs_stat(const char *path, VfsStat *out) {
             
             if (v_name.type == MV_STR) {
                 const char* name = metal_string_get(&g_vfs_vm, v_name.as.str_idx);
-                extern char *sage_strncpy(char *dest, const char *src, size_t n);
-                sage_strncpy(out->name, name, VFS_NAME_MAX - 1);
+                strncpy(out->name, name, VFS_NAME_MAX - 1);
                 out->name[VFS_NAME_MAX-1] = 0;
             }
             if (v_type.type == MV_NUM) {
@@ -439,8 +438,7 @@ int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
                     MetalValue v_size = metal_dict_get(&g_vfs_vm, item.as.dict_idx, metal_string_intern(&g_vfs_vm, "size", 4));
                     if (v_name.type == MV_STR) {
                         const char* name = metal_string_get(&g_vfs_vm, v_name.as.str_idx);
-                        extern char *sage_strncpy(char *dest, const char *src, size_t n);
-                        sage_strncpy(entries[i].name, name, VFS_NAME_MAX - 1);
+                        strncpy(entries[i].name, name, VFS_NAME_MAX - 1);
                         entries[i].name[VFS_NAME_MAX-1] = 0;
                     }
                     if (v_type.type == MV_NUM) {
@@ -577,14 +575,14 @@ int vfs_rm_rf(const char *path) {
             if (vfs_strcmp(entries[i].name, ".") == 0 || vfs_strcmp(entries[i].name, "..") == 0) continue;
 
             char child_path[VFS_MAX_PATH];
-            sage_strcpy(child_path, path);
+            strcpy(child_path, path);
             int len = vfs_strlen(child_path);
             if (len > 0 && child_path[len-1] != '/') {
                 child_path[len] = '/';
                 child_path[len+1] = 0;
                 len++;
             }
-            sage_strcat(child_path, entries[i].name);
+            strcat(child_path, entries[i].name);
 
             res = vfs_rm_rf(child_path);
             if (res != VFS_OK) return res;

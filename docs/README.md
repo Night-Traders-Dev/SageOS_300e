@@ -16,3 +16,6 @@ Welcome to the comprehensive SageOS documentation.
 ## Development Guides
 - [Master Management Script (`sageos.sh`)](guides/management_script.md)
 - [SageLang OS Build Pipeline](guides/build_pipeline.md)
+
+### Virt Kernel Architecture
+SageOS now supports a minimalist kernel prototype for `virt` targets across x64, ARM64, and RISC-V. These builds use a shared `kernel_stubs.c` and `runtime_stub.c` to provide a base kernel environment for cross-platform driver and system development.

@@ -6369,28 +6369,3 @@ static const unsigned char embedded_file_etc_commands_version_sage[] = {
     0x00
 };
 
-static void ramfs_embed_commands(void) {
-    ramfs_create_file_ref("/etc/commands/curl.sage", embedded_file_etc_commands_curl_sage, sizeof(embedded_file_etc_commands_curl_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/dmesg.sage", embedded_file_etc_commands_dmesg_sage, sizeof(embedded_file_etc_commands_dmesg_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/hello.json", embedded_file_etc_commands_hello_json, sizeof(embedded_file_etc_commands_hello_json) - 1);
-    ramfs_create_file_ref("/etc/import_test.sage", embedded_file_etc_import_test_sage, sizeof(embedded_file_etc_import_test_sage) - 1);
-    ramfs_create_file_ref("/etc/init.sage", embedded_file_etc_init_sage, sizeof(embedded_file_etc_init_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/install.sage", embedded_file_etc_commands_install_sage, sizeof(embedded_file_etc_commands_install_sage) - 1);
-    ramfs_create_file_ref("/bin/io.sage", embedded_file_bin_io_sage, sizeof(embedded_file_bin_io_sage) - 1);
-    ramfs_create_file_ref("/bin/json.sage", embedded_file_bin_json_sage, sizeof(embedded_file_bin_json_sage) - 1);
-    ramfs_create_file_ref("/etc/packages.json", embedded_file_etc_packages_json, sizeof(embedded_file_etc_packages_json) - 1);
-    ramfs_create_file_ref("/bin/sage_shell_combined.sage", embedded_file_bin_sage_shell_combined_sage, sizeof(embedded_file_bin_sage_shell_combined_sage) - 1);
-    ramfs_create_file_ref("/bin/sagepkg.sage", embedded_file_bin_sagepkg_sage, sizeof(embedded_file_bin_sagepkg_sage) - 1);
-    ramfs_create_file_ref("/bin/sagepkg_mini.sage", embedded_file_bin_sagepkg_mini_sage, sizeof(embedded_file_bin_sagepkg_mini_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/sched.sage", embedded_file_etc_commands_sched_sage, sizeof(embedded_file_etc_commands_sched_sage) - 1);
-    ramfs_create_file_ref("/bin/string.sage", embedded_file_bin_string_sage, sizeof(embedded_file_bin_string_sage) - 1);
-    ramfs_create_file_ref("/bin/strings.sage", embedded_file_bin_strings_sage, sizeof(embedded_file_bin_strings_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/swap.sage", embedded_file_etc_commands_swap_sage, sizeof(embedded_file_etc_commands_swap_sage) - 1);
-    ramfs_create_file_ref("/bin/sys.sage", embedded_file_bin_sys_sage, sizeof(embedded_file_bin_sys_sage) - 1);
-    ramfs_create_file_ref("/etc/test.sage", embedded_file_etc_test_sage, sizeof(embedded_file_etc_test_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/test.sage", embedded_file_etc_commands_test_sage, sizeof(embedded_file_etc_commands_test_sage) - 1);
-    ramfs_create_file_ref("/etc/test_substr.sage", embedded_file_etc_test_substr_sage, sizeof(embedded_file_etc_test_substr_sage) - 1);
-    ramfs_create_file_ref("/etc/test_suite.sage", embedded_file_etc_test_suite_sage, sizeof(embedded_file_etc_test_suite_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/uname.sage", embedded_file_etc_commands_uname_sage, sizeof(embedded_file_etc_commands_uname_sage) - 1);
-    ramfs_create_file_ref("/etc/commands/version.sage", embedded_file_etc_commands_version_sage, sizeof(embedded_file_etc_commands_version_sage) - 1);
-}

@@ -49,23 +49,11 @@ def generate_header(etc_dir, output_header):
                 chunk = bytes_data[i:i+12]
                 f.write("    " + ", ".join(f"0x{b:02x}" for b in chunk) + ",\n")
             
-            # Add null terminator for safety if it's a script/json, 
-            # though ramfs_create_file_ref uses size.
+            # Add null terminator for safety if it's a script/json
             if target_path.endswith('.sage') or target_path.endswith('.json'):
                 f.write("    0x00\n")
             
             f.write("};\n\n")
-        
-        f.write("static void ramfs_embed_commands(void) {\n")
-        for filename, src_dir, target_path in all_files:
-            clean_name = target_path.replace("/", "_").replace(".", "_").replace("-", "_")
-            var_name = f"embedded_file{clean_name}"
-            size_expr = f"sizeof({var_name})"
-            if target_path.endswith('.sage') or target_path.endswith('.json'):
-                size_expr = f"sizeof({var_name}) - 1"
-                
-            f.write(f'    ramfs_create_file_ref("{target_path}", {var_name}, {size_expr});\n')
-        f.write("}\n")
 
 if __name__ == "__main__":
     generate_header(sys.argv[1], sys.argv[2])

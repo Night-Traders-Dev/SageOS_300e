@@ -4,6 +4,8 @@
 #include "keyboard.h"
 #include "fat32.h"
 #include "vfs.h"
+
+extern const char* vfs_get_embedded_data(const char* path, uint64_t* out_size);
 #include "power.h"
 #include "bootinfo.h"
 #include "shell.h"
@@ -692,8 +694,8 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "execelf")) {
         const char *path = arg_after(cmd, "execelf");
         if (!*path) { console_write("\nusage: execelf <path>"); return; }
-        const char *file_data;
-        uint64_t file_size = ramfs_find_size(path, &file_data);
+        uint64_t file_size = 0;
+        const char *file_data = vfs_get_embedded_data(path, &file_size);
         if (!file_data) { console_write("\nexecelf: no such file: "); console_write(path); return; }
         elf_exec(file_data, file_size);
         return;

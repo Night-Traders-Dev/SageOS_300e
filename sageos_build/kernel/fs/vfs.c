@@ -1,5 +1,4 @@
 #include "vfs.h"
-#include "ramfs.h"
 #include "console.h"
 #include <stddef.h>
 #include <string.h>

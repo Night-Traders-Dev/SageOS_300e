@@ -28,6 +28,7 @@ comptime:
     let UART_X86_BASE = 1016
     let UART_AARCH64_BASE = 150994944
     let UART_RPI4_BASE = 0xfe201000
+    let UART_ORANGEPI_RV2_BASE = 0x12030000
     let UART_RISCV64_BASE = 268435456
     let UART_BAUD = 115200
 
@@ -61,7 +62,7 @@ proc get_assembler(arch):
     if arch == "aarch64" or arch == "rpi4":
         return AS_AARCH64
     end
-    if arch == "riscv64":
+    if arch == "riscv64" or arch == "orangepi_rv2":
         return AS_RISCV64
     end
     return "as"
@@ -75,7 +76,7 @@ proc get_linker(arch):
     if arch == "aarch64" or arch == "rpi4":
         return LD_AARCH64
     end
-    if arch == "riscv64":
+    if arch == "riscv64" or arch == "orangepi_rv2":
         return LD_RISCV64
     end
     return "ld"
@@ -89,7 +90,7 @@ proc get_cc(arch):
     if arch == "aarch64" or arch == "rpi4":
         return CC_AARCH64
     end
-    if arch == "riscv64":
+    if arch == "riscv64" or arch == "orangepi_rv2":
         return CC_RISCV64
     end
     return "gcc"
@@ -103,7 +104,7 @@ proc get_objcopy(arch):
     if arch == "aarch64" or arch == "rpi4":
         return OBJCOPY_AARCH64
     end
-    if arch == "riscv64":
+    if arch == "riscv64" or arch == "orangepi_rv2":
         return OBJCOPY_RISCV64
     end
     return "objcopy"
@@ -356,6 +357,65 @@ proc generate_serial_boot_riscv64():
     return asm
 end
 
+proc generate_serial_boot_orangepi_rv2():
+    let base = "0x12030000"
+    let asm = ""
+    asm = asm + ".section .text" + NL
+    asm = asm + ".global serial_init, serial_putchar, serial_puts" + NL
+    # 16550 MMIO init
+    asm = asm + "serial_init:" + NL
+    asm = asm + "    li t0, " + base + NL
+    asm = asm + "    # Disable interrupts" + NL
+    asm = asm + "    sb zero, 1(t0)" + NL
+    asm = asm + "    # Enable DLAB" + NL
+    asm = asm + "    li t1, 0x80" + NL
+    asm = asm + "    sb t1, 3(t0)" + NL
+    asm = asm + "    # Divisor = 1 (115200 baud at 1.8432MHz)" + NL
+    asm = asm + "    li t1, 1" + NL
+    asm = asm + "    sb t1, 0(t0)" + NL
+    asm = asm + "    sb zero, 1(t0)" + NL
+    asm = asm + "    # 8N1" + NL
+    asm = asm + "    li t1, 3" + NL
+    asm = asm + "    sb t1, 3(t0)" + NL
+    asm = asm + "    # Enable FIFO" + NL
+    asm = asm + "    li t1, 0xC7" + NL
+    asm = asm + "    sb t1, 2(t0)" + NL
+    asm = asm + "    # DTR + RTS + OUT2" + NL
+    asm = asm + "    li t1, 0x0B" + NL
+    asm = asm + "    sb t1, 4(t0)" + NL
+    asm = asm + "    ret" + NL
+    asm = asm + NL
+    # serial_putchar: write byte in a0
+    asm = asm + "serial_putchar:" + NL
+    asm = asm + "    li t0, " + base + NL
+    asm = asm + ".Lwait_tx:" + NL
+    asm = asm + "    lb t1, 5(t0)" + NL
+    asm = asm + "    andi t1, t1, 0x20" + NL
+    asm = asm + "    beqz t1, .Lwait_tx" + NL
+    asm = asm + "    sb a0, 0(t0)" + NL
+    asm = asm + "    ret" + NL
+    asm = asm + NL
+    # serial_puts: write null-terminated string at a0
+    asm = asm + "serial_puts:" + NL
+    asm = asm + "    addi sp, sp, -16" + NL
+    asm = asm + "    sd ra, 8(sp)" + NL
+    asm = asm + "    sd s0, 0(sp)" + NL
+    asm = asm + "    mv s0, a0" + NL
+    asm = asm + ".Lputs_loop:" + NL
+    asm = asm + "    lbu a0, 0(s0)" + NL
+    asm = asm + "    beqz a0, .Lputs_done" + NL
+    asm = asm + "    call serial_putchar" + NL
+    asm = asm + "    addi s0, s0, 1" + NL
+    asm = asm + "    j .Lputs_loop" + NL
+    asm = asm + ".Lputs_done:" + NL
+    asm = asm + "    ld ra, 8(sp)" + NL
+    asm = asm + "    ld s0, 0(sp)" + NL
+    asm = asm + "    addi sp, sp, 16" + NL
+    asm = asm + "    ret" + NL
+    asm = asm + NL
+    return asm
+end
+
 # ============================================================================
 # Minimal C kernel template generation
 # ============================================================================
@@ -437,7 +497,7 @@ proc build_commands(arch, boot_asm_path, kernel_c_path, linker_script_path, outp
     if arch == "aarch64" or arch == "rpi4":
         push(cmds, as_cmd + " -o " + boot_obj + " " + boot_asm_path)
     end
-    if arch == "riscv64":
+    if arch == "riscv64" or arch == "orangepi_rv2":
         push(cmds, as_cmd + " -march=rv64gc -mabi=lp64d -o " + boot_obj + " " + boot_asm_path)
     end
 
@@ -448,7 +508,7 @@ proc build_commands(arch, boot_asm_path, kernel_c_path, linker_script_path, outp
     if arch == "aarch64" or arch == "rpi4":
         push(cmds, cc + " -ffreestanding -nostdlib -mgeneral-regs-only -c -o " + kernel_obj + " " + kernel_c_path)
     end
-    if arch == "riscv64":
+    if arch == "riscv64" or arch == "orangepi_rv2":
         push(cmds, cc + " -ffreestanding -nostdlib -march=rv64gc -mabi=lp64d -c -o " + kernel_obj + " " + kernel_c_path)
     end
 
@@ -550,6 +610,10 @@ proc write_build_files(arch, output_dir, message):
         boot_asm = start.emit_start_riscv64("kmain", "stack_top")
         boot_asm = boot_asm + generate_serial_boot_riscv64()
     end
+    if arch == "orangepi_rv2":
+        boot_asm = start.emit_start_riscv64("kmain", "stack_top")
+        boot_asm = boot_asm + generate_serial_boot_orangepi_rv2()
+    end
 
     # Generate minimal kernel
     let kernel_c = generate_kernel_c(arch, message)
@@ -564,6 +628,9 @@ proc write_build_files(arch, output_dir, message):
     end
     if arch == "riscv64":
         ld_config["base_address"] = 2147483648
+    end
+    if arch == "orangepi_rv2":
+        ld_config["base_address"] = 0x40000000 # Typical RAM start for JH7110
     end
     let linker_script = linker.generate_script(ld_config)
 

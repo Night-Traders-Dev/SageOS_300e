@@ -30,7 +30,7 @@ show_help() {
     echo "Devices:"
     echo "  arm64: rpi4, virt"
     echo "  x64:   q35, pc"
-    echo "  rv64:  virt"
+    echo "  rv64:  virt, orangepi_rv2"
     echo ""
     echo "Actions:"
     echo "  build, flash, run"
@@ -127,14 +127,33 @@ case "$ARCH" in
         ;;
     rv64)
         case "$DEVICE" in
-            virt)
-                if [[ "$ACTION" == "build" ]]; then
-                    log_info "Building RV64 kernel (Stub)..."
-                    $SAGE_BIN --compile-bare "$EXAMPLES_DIR/hello_kernel.sage" -o "$BUILD_DIR/rv64_kernel.elf" --target rv64
+            virt|orangepi_rv2)
+                if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
+                    log_info "Generating $DEVICE build environment..."
+                    mkdir -p "${DEVICE}_boot"
+                    echo "import io" > gen_rv64.sage
+                    echo "import os.boot.build as bb" >> gen_rv64.sage
+                    echo "let arch = \"$DEVICE\"" >> gen_rv64.sage
+                    echo "if arch == \"virt\": arch = \"riscv64\" end" >> gen_rv64.sage
+                    echo "let build_script = bb.generate_build_script(arch, \"${DEVICE}_boot\", \"SageOS $DEVICE Booting...\")" >> gen_rv64.sage
+                    echo "io.writefile(\"build_rv64.sh\", build_script)" >> gen_rv64.sage
+                    $SAGE_BIN gen_rv64.sage
+                    log_info "Building $DEVICE kernel..."
+                    chmod +x build_rv64.sh
+                    ./build_rv64.sh
+                    rm -rf "$BUILD_DIR/rv64_$DEVICE"
+                    mv "${DEVICE}_boot" "$BUILD_DIR/rv64_$DEVICE"
+                    rm build_rv64.sh gen_rv64.sage
                 fi
+                
                 if [[ "$ACTION" == "run" ]]; then
-                    log_info "Running RV64 in QEMU..."
-                    qemu-system-riscv64 -machine virt -m 128M -nographic -bios none -kernel "$BUILD_DIR/rv64_kernel.elf"
+                    log_info "Running $DEVICE in QEMU..."
+                    if [[ "$DEVICE" == "virt" ]]; then
+                        qemu-system-riscv64 -machine virt -m 128M -nographic -bios none -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
+                    else
+                        # Orange Pi RV 2
+                        qemu-system-riscv64 -machine virt -m 8G -nographic -bios none -kernel "$BUILD_DIR/rv64_orangepi_rv2/kernel.elf"
+                    fi
                 fi
                 ;;
             *)

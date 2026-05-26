@@ -16,7 +16,7 @@ SageOS uses a modular structure to maximize code reuse across architectures.
 ### Architecture Ports
 - **[x64](https://github.com/Night-Traders-Dev/SageOS_x64)**: Intel/AMD 64-bit.
 - **[arm64](https://github.com/Night-Traders-Dev/SageOS_arm64)**: ARM 64-bit (RPi4).
-- **[rv64](https://github.com/Night-Traders-Dev/SageOS_rv64)**: RISC-V 64-bit.
+- **[rv64](https://github.com/Night-Traders-Dev/SageOS_rv64)**: RISC-V 64-bit (Orange Pi RV 2).
 
 ## Quick Start: Raspberry Pi 4 (QEMU)
 

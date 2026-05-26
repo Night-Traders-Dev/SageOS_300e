@@ -37,6 +37,15 @@ shell_c = shell_c + "};" + NL
 shell_c = shell_c + "static char history[HISTORY_MAX][CMD_MAX];" + NL
 shell_c = shell_c + "static int history_count = 0;" + NL
 shell_c = shell_c + "static int history_idx = -1;" + NL
+shell_c = shell_c + "static int cursor_pos = 0;" + NL
+
+if arch == "x86_64":
+    shell_c = shell_c + "static inline int serial_avail() { return inb(COM1+5) & 1; }" + NL
+elif arch == "aarch64":
+    shell_c = shell_c + "static inline int serial_avail() { return !(UART_FR & 0x10); }" + NL
+elif arch == "riscv64":
+    shell_c = shell_c + "static inline int serial_avail() { return uart_read(5) & 1; }" + NL
+end
 
 shell_c = shell_c + "static int strncmp(const char *s1, const char *s2, int n) {" + NL
 shell_c = shell_c + "    for (int i = 0; i < n; i++) {" + NL
@@ -66,22 +75,20 @@ shell_c = shell_c + "        }" + NL
 shell_c = shell_c + "    }" + NL
 shell_c = shell_c + "    return \"\"; }" + NL
 
-shell_c = shell_c + "static void redraw_line(const char* prompt, const char* cmd, int cmd_len, const char* suggestion) {" + NL
-shell_c = shell_c + "    serial_raw(\"\\033[K\");" + NL
-shell_c = shell_c + "    serial_putc('\\r');" + NL
+shell_c = shell_c + "static void redraw_line(const char* prompt, const char* cmd, int len, int pos, const char* suggestion) {" + NL
+shell_c = shell_c + "    serial_raw(\"\\r\\033[K\");" + NL
 shell_c = shell_c + "    serial_raw(prompt);" + NL
 shell_c = shell_c + "    serial_raw(\"\\033[1;32m\");" + NL
 shell_c = shell_c + "    serial_raw(cmd);" + NL
 shell_c = shell_c + "    serial_raw(\"\\033[0m\");" + NL
 shell_c = shell_c + "    int sug_len = _strlen(suggestion);" + NL
-shell_c = shell_c + "    if (sug_len > cmd_len && strncmp(suggestion, cmd, cmd_len) == 0) {" + NL
+shell_c = shell_c + "    if (sug_len > len && strncmp(suggestion, cmd, len) == 0) {" + NL
 shell_c = shell_c + "        serial_raw(\"\\033[90m\");" + NL
-shell_c = shell_c + "        serial_raw(suggestion + cmd_len);" + NL
+shell_c = shell_c + "        serial_raw(suggestion + len);" + NL
 shell_c = shell_c + "        serial_raw(\"\\033[0m\");" + NL
-shell_c = shell_c + "        for (int i = 0; i < sug_len - cmd_len; i++) {" + NL
-shell_c = shell_c + "            serial_putc('\\b');" + NL
-shell_c = shell_c + "        }" + NL
 shell_c = shell_c + "    }" + NL
+shell_c = shell_c + "    serial_putc('\\r');" + NL
+shell_c = shell_c + "    for (int i = 0; i < _strlen(prompt) + pos; i++) serial_raw(\"\\033[C\");" + NL
 shell_c = shell_c + "}" + NL
 
 shell_c = shell_c + "#define ARCH_STRING \"" + arch + "\"" + NL
@@ -111,9 +118,9 @@ shell_c = shell_c + "static void cmd_mem(void) {" + NL
 if arch == "x86_64":
     shell_c = shell_c + "    serial_puts(\"VGA Text Memory: 0xB8000 (VGA active)\\n\");" + NL
     shell_c = shell_c + "    serial_puts(\"Base Memory: \"); serial_putdec(mem_lower_kb); serial_puts(\" KB, Extended Memory: \");" + NL
-    shell_c = shell_c + "    serial_putdec(mem_upper_kb); serial_puts(\" KB\\n\");" + NL
+    shell_c = shell_c + "    serial_putdec(mem_upper_kb); serial_puts(\" KB (4 GB total physical)\\n\");" + NL
 else:
-    shell_c = shell_c + "    serial_puts(\"Physical RAM: 128 MB (QEMU Virt Memory Space)\\n\");" + NL
+    shell_c = shell_c + "    serial_puts(\"Physical RAM: 4096 MB (QEMU Virt Memory Space)\\n\");" + NL
     shell_c = shell_c + "    serial_puts(\"Kernel Segments loaded successfully.\\n\");" + NL
 end
 shell_c = shell_c + "}" + NL
@@ -130,21 +137,37 @@ shell_c = shell_c + "    serial_puts(\"\\033[1;33mOS\\033[0m:        SageOS v0.3
 shell_c = shell_c + "    serial_puts(\"\\033[1;33mKernel\\033[0m:    AOT-Compiled Freestanding SageLang\\n\");" + NL
 shell_c = shell_c + "    serial_puts(\"\\033[1;33mArch\\033[0m:      \" ARCH_STRING \"\\n\");" + NL
 shell_c = shell_c + "    serial_puts(\"\\033[1;33mCPU\\033[0m:       QEMU Virt System\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;33mMemory\\033[0m:    128 MB RAM (virt default)\\n\");" + NL
+shell_c = shell_c + "    serial_puts(\"\\033[1;33mMemory\\033[0m:    4096 MB RAM (virt default)\\n\");" + NL
 shell_c = shell_c + "    serial_puts(\"\\033[1;33mUptime\\033[0m:    Active and running\\n\"); }" + NL
 
 shell_c = shell_c + "static void cmd_btop(void) {" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m┌────────────────────────────────────────────────────────┐\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m│\\033[0m \\033[1;32mSageOS System Monitor (btop-lite)\\033[0m                      \\033[1;35m│\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m├────────────────────────────────────────────────────────┤\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m│\\033[0m \\033[1;33mCPU Utilization\\033[0m: [████████████████░░░░░░░░░] 64%        \\033[1;35m│\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m│\\033[0m \\033[1;33mMEM Utilization\\033[0m: [██████░░░░░░░░░░░░░░░░░░] 25%        \\033[1;35m│\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m├────────────────────────────────────────────────────────┤\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m│\\033[0m \\033[1;34mSystem Information\\033[0m                                     \\033[1;35m│\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m│\\033[0m   Arch:     \" ARCH_STRING \"                                     \\033[1;35m│\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m│\\033[0m   Uptime:   Running successfully                       \\033[1;35m│\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m│\\033[0m   Tasks:    1 active (SageShell)                       \\033[1;35m│\\033[0m\\n\");" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;35m└────────────────────────────────────────────────────────┘\\033[0m\\n\"); }" + NL
+shell_c = shell_c + "    serial_puts(\"\\033[2J\\033[H\");" + NL
+shell_c = shell_c + "    int frame = 0;" + NL
+shell_c = shell_c + "    while (1) {" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[H\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m┌────────────────────────────────────────────────────────┐\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m│\\033[0m \\033[1;32mSageOS System Monitor (btop-interactive)\\033[0m           \\033[1;35m│\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m├────────────────────────────────────────────────────────┤\\033[0m\\n\");" + NL
+shell_c = shell_c + "        int cpu = 40 + (frame % 30);" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m│\\033[0m \\033[1;33mCPU Utilization\\033[0m: [\");" + NL
+shell_c = shell_c + "        for(int i=0; i<25; i++) if(i < cpu/4) serial_raw(\"█\"); else serial_raw(\"░\");" + NL
+shell_c = shell_c + "        serial_puts(\"] \"); serial_putdec(cpu); serial_puts(\"%        \\033[1;35m│\\033[0m\\n\");" + NL
+shell_c = shell_c + "        int mem = 20 + (frame % 10);" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m│\\033[0m \\033[1;33mMEM Utilization\\033[0m: [\");" + NL
+shell_c = shell_c + "        for(int i=0; i<25; i++) if(i < mem/4) serial_raw(\"█\"); else serial_raw(\"░\");" + NL
+shell_c = shell_c + "        serial_puts(\"] \"); serial_putdec(mem); serial_puts(\"%        \\033[1;35m│\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m├────────────────────────────────────────────────────────┤\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m│\\033[0m \\033[1;34mSystem Information\\033[0m                                     \\033[1;35m│\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m│\\033[0m   Arch:     \" ARCH_STRING \"                                     \\033[1;35m│\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m│\\033[0m   Frame:    \"); serial_putdec(frame); serial_puts(\"                                    \\033[1;35m│\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m│\\033[0m   Press 'q' to exit.                                   \\033[1;35m│\\033[0m\\n\");" + NL
+shell_c = shell_c + "        serial_puts(\"\\033[1;35m└────────────────────────────────────────────────────────┘\\033[0m\\n\");" + NL
+shell_c = shell_c + "        for (int d=0; d<1000000; d++) {" + NL
+shell_c = shell_c + "            if (serial_avail()) if (serial_getc() == 'q') { serial_puts(\"\\033[2J\\033[H\"); return; }" + NL
+shell_c = shell_c + "        }" + NL
+shell_c = shell_c + "        frame++;" + NL
+shell_c = shell_c + "    }" + NL
+shell_c = shell_c + "}" + NL
 
 if arch == "x86_64":
     shell_c = shell_c + "void shell_main(uint32_t magic, mb_t *mbi) {" + NL
@@ -154,11 +177,12 @@ else:
 end
 
 shell_c = shell_c + "    serial_init();" + NL
-shell_c = shell_c + "    serial_puts(\"\\033[1;36mSageOS Shell v0.3.0 \" ARCH_STRING \"\\033[0m\\n\");" + NL
+shell_c = shell_c + "    serial_puts(\"\\033[1;36mSageOS Premium Shell v0.3.0 \" ARCH_STRING \"\\033[0m\\n\");" + NL
 shell_c = shell_c + "    serial_puts(\"Type \\033[1;33mhelp\\033[0m for commands. Autocomplete with \\033[1;33mTab\\033[0m or \\033[1;33mRight Arrow\\033[0m.\\n\\n\");" + NL
 shell_c = shell_c + "    char cmd[CMD_MAX];" + NL
 shell_c = shell_c + "    int len = 0;" + NL
 shell_c = shell_c + "    cmd[0] = '\\0';" + NL
+shell_c = shell_c + "    cursor_pos = 0;" + NL
 shell_c = shell_c + "    const char* prompt = \"sage@os:~$ \";" + NL
 shell_c = shell_c + "    serial_raw(prompt);" + NL
 shell_c = shell_c + "    while (1) {" + NL
@@ -171,33 +195,39 @@ shell_c = shell_c + "                if (c3 == 65) { // Up Arrow" + NL
 shell_c = shell_c + "                    if (history_count > 0 && history_idx < history_count - 1 && history_idx < HISTORY_MAX - 1) {" + NL
 shell_c = shell_c + "                        history_idx++;" + NL
 shell_c = shell_c + "                        strcpy(cmd, history[(history_count - 1 - history_idx) % HISTORY_MAX]);" + NL
-shell_c = shell_c + "                        len = _strlen(cmd);" + NL
-shell_c = shell_c + "                        redraw_line(prompt, cmd, len, \"\");" + NL
+shell_c = shell_c + "                        len = _strlen(cmd); cursor_pos = len;" + NL
+shell_c = shell_c + "                        redraw_line(prompt, cmd, len, cursor_pos, \"\");" + NL
 shell_c = shell_c + "                    }" + NL
-shell_c = shell_c + "                    continue;" + NL
 shell_c = shell_c + "                }" + NL
 shell_c = shell_c + "                else if (c3 == 66) { // Down Arrow" + NL
 shell_c = shell_c + "                    if (history_idx > 0) {" + NL
 shell_c = shell_c + "                        history_idx--;" + NL
 shell_c = shell_c + "                        strcpy(cmd, history[(history_count - 1 - history_idx) % HISTORY_MAX]);" + NL
-shell_c = shell_c + "                        len = _strlen(cmd);" + NL
-shell_c = shell_c + "                        redraw_line(prompt, cmd, len, \"\");" + NL
+shell_c = shell_c + "                        len = _strlen(cmd); cursor_pos = len;" + NL
+shell_c = shell_c + "                        redraw_line(prompt, cmd, len, cursor_pos, \"\");" + NL
 shell_c = shell_c + "                    } else if (history_idx == 0) {" + NL
 shell_c = shell_c + "                        history_idx = -1;" + NL
-shell_c = shell_c + "                        cmd[0] = '\\0';" + NL
-shell_c = shell_c + "                        len = 0;" + NL
-shell_c = shell_c + "                        redraw_line(prompt, cmd, len, \"\");" + NL
+shell_c = shell_c + "                        cmd[0] = '\\0'; len = 0; cursor_pos = 0;" + NL
+shell_c = shell_c + "                        redraw_line(prompt, cmd, len, cursor_pos, \"\");" + NL
 shell_c = shell_c + "                    }" + NL
-shell_c = shell_c + "                    continue;" + NL
 shell_c = shell_c + "                }" + NL
 shell_c = shell_c + "                else if (c3 == 67) { // Right Arrow" + NL
-shell_c = shell_c + "                    const char* sug = find_suggestion(cmd, len);" + NL
-shell_c = shell_c + "                    if (_strlen(sug) > len) {" + NL
-shell_c = shell_c + "                        strcpy(cmd, sug);" + NL
-shell_c = shell_c + "                        len = _strlen(cmd);" + NL
-shell_c = shell_c + "                        redraw_line(prompt, cmd, len, \"\");" + NL
+shell_c = shell_c + "                    if (cursor_pos < len) {" + NL
+shell_c = shell_c + "                        cursor_pos++;" + NL
+shell_c = shell_c + "                        redraw_line(prompt, cmd, len, cursor_pos, find_suggestion(cmd, len));" + NL
+shell_c = shell_c + "                    } else {" + NL
+shell_c = shell_c + "                        const char* sug = find_suggestion(cmd, len);" + NL
+shell_c = shell_c + "                        if (_strlen(sug) > len) {" + NL
+shell_c = shell_c + "                            strcpy(cmd, sug); len = _strlen(cmd); cursor_pos = len;" + NL
+shell_c = shell_c + "                            redraw_line(prompt, cmd, len, cursor_pos, \"\");" + NL
+shell_c = shell_c + "                        }" + NL
 shell_c = shell_c + "                    }" + NL
-shell_c = shell_c + "                    continue;" + NL
+shell_c = shell_c + "                }" + NL
+shell_c = shell_c + "                else if (c3 == 68) { // Left Arrow" + NL
+shell_c = shell_c + "                    if (cursor_pos > 0) {" + NL
+shell_c = shell_c + "                        cursor_pos--;" + NL
+shell_c = shell_c + "                        redraw_line(prompt, cmd, len, cursor_pos, find_suggestion(cmd, len));" + NL
+shell_c = shell_c + "                    }" + NL
 shell_c = shell_c + "                }" + NL
 shell_c = shell_c + "            }" + NL
 shell_c = shell_c + "            continue;" + NL
@@ -207,8 +237,7 @@ shell_c = shell_c + "            serial_puts(\"\\n\");" + NL
 shell_c = shell_c + "            cmd[len] = '\\0';" + NL
 shell_c = shell_c + "            if (len > 0) {" + NL
 shell_c = shell_c + "                strcpy(history[history_count % HISTORY_MAX], cmd);" + NL
-shell_c = shell_c + "                history_count++;" + NL
-shell_c = shell_c + "                history_idx = -1;" + NL
+shell_c = shell_c + "                history_count++; history_idx = -1;" + NL
 shell_c = shell_c + "                if (streq(cmd, \"help\")) cmd_help();" + NL
 shell_c = shell_c + "                else if (streq(cmd, \"about\")) cmd_about();" + NL
 shell_c = shell_c + "                else if (streq(cmd, \"uptime\")) cmd_uptime();" + NL
@@ -218,14 +247,12 @@ shell_c = shell_c + "                else if (streq(cmd, \"neofetch\")) cmd_neof
 shell_c = shell_c + "                else if (streq(cmd, \"btop\")) cmd_btop();" + NL
 shell_c = shell_c + "                else if (streq(cmd, \"clear\")) serial_puts(\"\\033[2J\\033[H\");" + NL
 shell_c = shell_c + "                else if (streq(cmd, \"halt\")) {" + NL
-shell_c = shell_c + "                    serial_puts(\"Halting QEMU...\\n\");" + NL
+shell_c = shell_c + "                    serial_puts(\"Halting system...\\n\");" + NL
 if arch == "x86_64":
     shell_c = shell_c + "                    __asm__ volatile(\"cli; hlt\");" + NL
-end
-if arch == "aarch64":
+elif arch == "aarch64":
     shell_c = shell_c + "                    while(1) __asm__ volatile(\"wfe\");" + NL
-end
-if arch == "riscv64":
+elif arch == "riscv64":
     shell_c = shell_c + "                    while(1) __asm__ volatile(\"wfi\");" + NL
 end
 shell_c = shell_c + "                }" + NL
@@ -235,34 +262,31 @@ shell_c = shell_c + "                } else {" + NL
 shell_c = shell_c + "                    serial_puts(\"Unknown command: \"); serial_puts(cmd); serial_puts(\"\\n\");" + NL
 shell_c = shell_c + "                }" + NL
 shell_c = shell_c + "            }" + NL
-shell_c = shell_c + "            len = 0;" + NL
-shell_c = shell_c + "            cmd[0] = '\\0';" + NL
+shell_c = shell_c + "            len = 0; cursor_pos = 0; cmd[0] = '\\0';" + NL
 shell_c = shell_c + "            serial_raw(prompt);" + NL
 shell_c = shell_c + "            continue;" + NL
 shell_c = shell_c + "        }" + NL
 shell_c = shell_c + "        if (c == 9) { // Tab autocomplete" + NL
 shell_c = shell_c + "            const char* sug = find_suggestion(cmd, len);" + NL
 shell_c = shell_c + "            if (_strlen(sug) > len) {" + NL
-shell_c = shell_c + "                strcpy(cmd, sug);" + NL
-shell_c = shell_c + "                len = _strlen(cmd);" + NL
-shell_c = shell_c + "                redraw_line(prompt, cmd, len, \"\");" + NL
+shell_c = shell_c + "                strcpy(cmd, sug); len = _strlen(cmd); cursor_pos = len;" + NL
+shell_c = shell_c + "                redraw_line(prompt, cmd, len, cursor_pos, \"\");" + NL
 shell_c = shell_c + "            }" + NL
 shell_c = shell_c + "            continue;" + NL
 shell_c = shell_c + "        }" + NL
 shell_c = shell_c + "        if (c == 127 || c == 8) { // Backspace" + NL
-shell_c = shell_c + "            if (len > 0) {" + NL
-shell_c = shell_c + "                len--; cmd[len] = '\\0';" + NL
-shell_c = shell_c + "                const char* sug = find_suggestion(cmd, len);" + NL
-shell_c = shell_c + "                redraw_line(prompt, cmd, len, sug);" + NL
+shell_c = shell_c + "            if (cursor_pos > 0) {" + NL
+shell_c = shell_c + "                for (int i = cursor_pos - 1; i < len; i++) cmd[i] = cmd[i+1];" + NL
+shell_c = shell_c + "                len--; cursor_pos--;" + NL
+shell_c = shell_c + "                redraw_line(prompt, cmd, len, cursor_pos, find_suggestion(cmd, len));" + NL
 shell_c = shell_c + "            }" + NL
 shell_c = shell_c + "            continue;" + NL
 shell_c = shell_c + "        }" + NL
 shell_c = shell_c + "        if (c >= 32 && c <= 126) {" + NL
 shell_c = shell_c + "            if (len < CMD_MAX - 1) {" + NL
-shell_c = shell_c + "                cmd[len++] = c;" + NL
-shell_c = shell_c + "                cmd[len] = '\\0';" + NL
-shell_c = shell_c + "                const char* sug = find_suggestion(cmd, len);" + NL
-shell_c = shell_c + "                redraw_line(prompt, cmd, len, sug);" + NL
+shell_c = shell_c + "                for (int i = len; i > cursor_pos; i--) cmd[i] = cmd[i-1];" + NL
+shell_c = shell_c + "                cmd[cursor_pos++] = c; len++; cmd[len] = '\\0';" + NL
+shell_c = shell_c + "                redraw_line(prompt, cmd, len, cursor_pos, find_suggestion(cmd, len));" + NL
 shell_c = shell_c + "            }" + NL
 shell_c = shell_c + "        }" + NL
 shell_c = shell_c + "    }" + NL

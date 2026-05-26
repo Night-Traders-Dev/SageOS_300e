@@ -111,10 +111,10 @@ proc _gen_boot_x86_64(entry):
     let asm = ""
     asm = asm + "# x86_64 boot stub — Multiboot1 + 32-bit entry" + NL
     asm = asm + ".set MB_MAGIC,    0x1BADB002" + NL
-    asm = asm + ".set MB_FLAGS,    0x00000000" + NL
+    asm = asm + ".set MB_FLAGS,    0x00000001" + NL
     asm = asm + ".set MB_CHECKSUM, -(MB_MAGIC + MB_FLAGS)" + NL
     asm = asm + NL
-    asm = asm + ".section .multiboot" + NL
+    asm = asm + ".section .multiboot, \"a\"" + NL
     asm = asm + ".align 4" + NL
     asm = asm + ".long MB_MAGIC" + NL
     asm = asm + ".long MB_FLAGS" + NL
@@ -138,6 +138,9 @@ proc _gen_boot_x86_64(entry):
     asm = asm + "    shrl $2, %ecx" + NL
     asm = asm + "    xorl %eax, %eax" + NL
     asm = asm + "    rep stosl" + NL
+    asm = asm + "    # Push multiboot info" + NL
+    asm = asm + "    pushl %ebx" + NL
+    asm = asm + "    pushl %eax" + NL
     asm = asm + "    call " + entry + NL
     asm = asm + ".Lhalt:" + NL
     asm = asm + "    cli" + NL
@@ -462,12 +465,12 @@ proc gen_linker_script(arch):
         s = s + "ENTRY(_start)" + NL
         s = s + "OUTPUT_FORMAT(\"elf32-i386\")" + NL
         s = s + "SECTIONS {" + NL
-        s = s + "    . = 1048576;" + NL
-        s = s + "    .multiboot ALIGN(4) : { *(.multiboot) }" + NL
-        s = s + "    .text ALIGN(16) : { *(.text .text.*) }" + NL
-        s = s + "    .rodata ALIGN(16) : { *(.rodata .rodata.*) }" + NL
-        s = s + "    .data ALIGN(16) : { *(.data .data.*) }" + NL
-        s = s + "    .bss ALIGN(16) : {" + NL
+        s = s + "    . = 0x100000;" + NL
+        s = s + "    .multiboot : { *(.multiboot) }" + NL
+        s = s + "    .text : { *(.text .text.*) }" + NL
+        s = s + "    .rodata : { *(.rodata .rodata.*) }" + NL
+        s = s + "    .data : { *(.data .data.*) }" + NL
+        s = s + "    .bss : {" + NL
         s = s + "        __bss_start = .;" + NL
         s = s + "        *(.bss .bss.*) *(COMMON)" + NL
         s = s + "        __bss_end = .;" + NL
@@ -575,13 +578,13 @@ end
 
 proc qemu_cmd(arch, elf_path):
     if arch == "x86_64":
-        return "qemu-system-x86_64 -machine q35 -m 64M -display none -serial mon:stdio -no-reboot -kernel " + elf_path
+        return "qemu-system-x86_64 -machine q35 -m 4G -display none -serial mon:stdio -no-reboot -kernel " + elf_path
     end
     if arch == "aarch64":
-        return "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 128M -display none -serial mon:stdio -no-reboot -kernel " + elf_path
+        return "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio -no-reboot -kernel " + elf_path
     end
     if arch == "riscv64":
-        return "qemu-system-riscv64 -machine virt -m 128M -display none -serial mon:stdio -bios none -no-reboot -kernel " + elf_path
+        return "qemu-system-riscv64 -machine virt -m 4G -display none -serial mon:stdio -bios none -no-reboot -kernel " + elf_path
     end
     return ""
 end

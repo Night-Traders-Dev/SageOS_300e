@@ -95,7 +95,7 @@ case "$ARCH" in
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running ARM64 virt in QEMU..."
-                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 128M -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
+                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
                 ;;
             *)
@@ -116,7 +116,7 @@ case "$ARCH" in
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running x86_64 virt in QEMU..."
-                    qemu-system-x86_64 -machine q35 -m 64M -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/x64_virt/kernel.elf"
+                    qemu-system-x86_64 -machine q35 -m 4G -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/x64_virt/kernel.elf"
                 fi
                 ;;
             q35|pc|lenovo_300e)
@@ -160,7 +160,7 @@ case "$ARCH" in
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running RISCV64 virt in QEMU..."
-                    qemu-system-riscv64 -machine virt -m 128M -display none -serial mon:stdio -bios none -no-reboot -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
+                    qemu-system-riscv64 -machine virt -m 4G -display none -serial mon:stdio -bios none -no-reboot -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
                 fi
                 ;;
             orangepi_rv2)

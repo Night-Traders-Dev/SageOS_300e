@@ -18,4 +18,4 @@ Welcome to the comprehensive SageOS documentation.
 - [SageLang OS Build Pipeline](guides/build_pipeline.md)
 
 ### Virt Kernel Architecture
-SageOS now supports a minimalist kernel prototype for `virt` targets across x64, ARM64, and RISC-V. These builds use a shared `kernel_stubs.c` and `runtime_stub.c` to provide a base kernel environment for cross-platform driver and system development.
+SageOS provides unified virtual target support for `virt` environments across `x86_64` (x64), `aarch64` (ARM64), and `riscv64` (RV64). These virtual kernels are fully functional, interactive, and automatically execute the pure-SageLang **SageShell** via our MetalVM bytecode interpreter, offering a highly responsive developer playground across all three major system architectures.

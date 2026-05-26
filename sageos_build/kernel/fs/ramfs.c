@@ -36,22 +36,20 @@ static void r_memcpy(void *d, const void *s, size_t n) {
  * ----------------------------------------------------------------------- */
 
 typedef struct {
-    char         name[RAMFS_NAME_MAX];  /* entry name (not full path) */
-    VfsNodeType  type;
-    uint64_t     size;
-
-    /* For files: pointer to data (either in pool or external const) */
-    const void  *data;
-    int          data_in_pool;  /* 1 = data lives in g_data_pool, writable */
-
-    /* For directories: child inode indices */
-    int          children[RAMFS_MAX_CHILDREN];
-    int          child_count;
-
-    /* Parent inode index (-1 for root) */
-    int          parent;
-
-    int          active;        /* 1 = in use */
+    char         name[RAMFS_NAME_MAX];  /* offset 0 */
+    VfsNodeType  type;                  /* offset 64 */
+    int          pad1;                  /* offset 68 - pads to 72 */
+    
+    uint64_t     size;                  /* offset 72 */
+    const void  *data;                  /* offset 80 */
+    
+    int          data_in_pool;          /* offset 88 */
+    int          child_count;           /* offset 92 */
+    
+    int          children[RAMFS_MAX_CHILDREN]; /* offset 96 - size 128. Ends at 224! */
+    
+    int          parent;                /* offset 224 - 8-byte aligned! */
+    int          active;                /* offset 228 */
 } RamfsInode;
 
 static RamfsInode  g_inodes[RAMFS_MAX_INODES];

@@ -6,11 +6,10 @@
 #include "bootinfo.h"
 #include "version.h"
 
-// External SageLang runtime init (dummy for now)
-void sage_kernel_early_init(void) {}
+#include "vfs.h"
+#include "ramfs.h"
 
 void power_reboot(void) {
-
     console_write("Rebooting...\n");
     while (1) {
 #if defined(__x86_64__)
@@ -36,11 +35,20 @@ void power_shutdown(void) {
     }
 }
 
+extern void serial_init(void);
+
 void kmain(SageOSBootInfo *info) {
-    // Confirm reachability via UART
-    volatile uint8_t *uart = (volatile uint8_t *)0x10000000;
-    uart[0] = 'K';
+    serial_init();
     
-    // Minimal spin
-    while(1);
+    // Initialize console, keyboard, VFS, RamFS
+    console_init(info);
+    console_clear();
+    console_write("SageOS Virt Kernel Booting...\n");
+    
+    keyboard_init();
+    vfs_init();
+    ramfs_init();
+    
+    // Launch interactive C shell
+    shell_run();
 }

@@ -3,7 +3,11 @@
 #include "console.h"
 #include "serial.h"
 
-#define UART_BASE 0x10000000
+#if defined(__x86_64__)
+static inline void outb(uint16_t port, uint8_t data) {
+    __asm__ volatile ("outb %0, %1" :: "a"(data), "Nd"(port));
+}
+#endif
 
 static int serial_echo = 1;
 
@@ -26,9 +30,15 @@ void console_putc(char c) {
 }
 
 void serial_putc(char c) {
-    volatile uint8_t *uart = (volatile uint8_t *)UART_BASE;
-    while (!(uart[5] & 0x20));
+#if defined(__x86_64__)
+    outb(0x3F8, (uint8_t)c);
+#elif defined(__aarch64__)
+    volatile uint8_t *uart = (volatile uint8_t *)0x09000000;
     uart[0] = (uint8_t)c;
+#else // __riscv
+    volatile uint8_t *uart = (volatile uint8_t *)0x10000000;
+    uart[0] = (uint8_t)c;
+#endif
 }
 
 void console_write(const char *s) {

@@ -17,10 +17,12 @@
 #include "vfs.h"
 #include "sage_libc_shim.h"
 
+#ifndef SAGE_BARE_METAL
 #include "lwip/apps/http_client.h"
 #include "lwip/altcp_tls.h"
 #include "lwip/dns.h"
 #include "mbedtls/ssl.h"
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
@@ -1131,6 +1133,7 @@ void cmd_ipconfig(void) {
 /* curl — HTTP/HTTPS client                                          */
 /* ------------------------------------------------------------------ */
 
+#ifndef SAGE_BARE_METAL
 typedef struct {
     char dest[128];
     uint64_t offset;
@@ -1311,6 +1314,12 @@ void cmd_curl(const char *args) {
         console_write("curl: download failed (see dmesg for details)\n");
     }
 }
+#else
+void cmd_curl(const char *args) {
+    (void)args;
+    console_write("curl: Networking not supported on this platform.\n");
+}
+#endif
 
 void cmd_bmesg(void) {
     char buf[512];

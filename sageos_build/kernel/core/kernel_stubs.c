@@ -1,24 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
-
-void shell_run(void) {}
-void* metal_string_get(void* s) { return s; }
-void* mv_nil(void) { return NULL; }
-void* mv_str(const char* s) { return (void*)s; }
-void* mv_num(int n) { return NULL; }
-void* metal_dict_new(void) { return NULL; }
-void* metal_string_intern(const char* s) { return (void*)s; }
-void metal_dict_set(void* d, const char* k, void* v) {}
-void* metal_array_new(void) { return NULL; }
-void metal_array_push(void* a, void* v) {}
-void metal_vm_init(void* vm) {}
-void metal_vm_register_native(void* vm, const char* name, void* fn) {}
-void metal_vm_load_binary(void* vm, void* b) {}
-void metal_vm_run(void* vm) {}
-void metal_vm_call(void* vm, const char* fn, int argc, void* args) {}
-void* metal_dict_get(void* d, const char* k) { return NULL; }
-int metal_array_len(void* a) { return 0; }
-void* metal_array_get(void* a, int i) { return NULL; }
+#include "metal_vm.h"
 
 // Dummy strncpy/strcpy/strcat
 char *strncpy(char *dest, const char *src, size_t n) {
@@ -34,17 +16,6 @@ char *strcat(char *dest, const char *src) {
     char *d = dest; while (*d) d++; while (*src) *d++ = *src++; *d = '\0'; return dest;
 }
 
-// n_os_ stubs
-int n_len(void* v) { return 0; }
-void* n_os_strlen(void* vm, void* args, int argc) { return NULL; }
-void* n_os_starts_with(void* vm, void* args, int argc) { return NULL; }
-int n_os_array_len(void* a) { return 0; }
-void n_os_array_push(void* a, void* v) {}
-void n_os_write_str(void* s) {}
-void n_os_num_to_str(int n) {}
-void n_os_stat(const char* path) {}
-void* mv_ptr(void* p) { return NULL; }
-
 // ATA & Boot
 int ata_read_sector(uint32_t lba, uint16_t *buffer) { return 0; }
 int ata_write_sector(uint32_t lba, uint16_t *buffer) { return 0; }
@@ -59,3 +30,131 @@ double strtod(const char *nptr, char **endptr) { return 0.0; }
 int access(const char *pathname, int mode) { return -1; }
 int mkstemps(char *template, int suffixlen) { return -1; }
 int unlink(const char *pathname) { return -1; }
+
+// --- Virt Platform Diagnostic & Subsystem Stubs ---
+#include "scheduler.h"
+#include "console.h"
+
+// Networking stubs
+int net_device_count(void) { return 0; }
+void net_format_hwaddr(void* a, void* b) { (void)a; (void)b; }
+void* net_get_device(int i) { (void)i; return NULL; }
+
+// Dmesg stubs
+void dmesg_dump(void) { console_write("\ndmesg: Not supported on this platform."); }
+void dmesg_log(const char* s) { (void)s; }
+int dmesg_get_char(uint64_t idx) { (void)idx; return -1; }
+uint64_t dmesg_get_size(void) { return 0; }
+uint64_t dmesg_get_head(void) { return 0; }
+uint64_t dmesg_get_total(void) { return 0; }
+
+// Power stubs
+void power_qemu_exit(void) {}
+void power_halt(void) {}
+void power_suspend(void) {}
+
+// Sysinfo stubs
+int sysinfo_is_qemu(void) { return 1; }
+void sysinfo_cmd(void) {
+    console_write("\nSystem Info:\n  Platform: Virtual Bare-metal (rv64/virt)\n  RAM: 128 MB\n");
+}
+
+// Swap stubs
+int swap_is_available(void) { return 0; }
+void swap_info(void) { console_write("\nswap: Not supported."); }
+
+// ACPI stubs
+void acpi_cmd_battery(void) { console_write("\nACPI: Not supported."); }
+void acpi_cmd_lid(void) { console_write("\nACPI: Not supported."); }
+void acpi_cmd_madt(void) { console_write("\nACPI: Not supported."); }
+void acpi_cmd_fadt(void) { console_write("\nACPI: Not supported."); }
+void acpi_cmd_tables(void) { console_write("\nACPI: Not supported."); }
+void acpi_cmd_summary(void) { console_write("\nACPI: Not supported."); }
+
+// SDHCI & PCI stubs
+void sdhci_cmd_info(void) { console_write("\nSDHCI: Not supported."); }
+void pci_cmd_info(void) { console_write("\nPCI: Not supported."); }
+void battery_cmd_info(void) { console_write("\nBattery: Not supported."); }
+
+// SMP stubs
+void smp_boot_aps(void) {}
+void smp_cmd_info(void) { console_write("\nSMP: Not supported."); }
+uint32_t smp_cpu_count(void) { return 1; }
+
+// Timer stubs
+void timer_cmd_info(void) { console_write("\nTimer: Not supported."); }
+void timer_delay_ms(uint32_t ms) {
+    volatile uint32_t i;
+    for (uint32_t m = 0; m < ms; m++) {
+        for (i = 0; i < 50000; i++) {}
+    }
+}
+uint64_t timer_seconds(void) { return 0; }
+uint32_t timer_cpu_percent(void) { return 0; }
+uint32_t timer_cpu_percent_at(uint32_t cpu) { (void)cpu; return 0; }
+void timer_poll(void) {}
+
+// Memory stubs
+uint64_t ram_total_bytes(void) { return 128 * 1024 * 1024; }
+uint64_t ram_used_bytes(void) { return 16 * 1024 * 1024; }
+
+// Battery & SDHCI stubs
+int battery_percent(void) { return -1; }
+int sdhci_is_available(void) { return 0; }
+
+// Status stubs
+void status_refresh(void) {}
+void status_print(void) { console_write("\n[System Status: Normal]"); }
+
+// Scheduler stubs
+static sched_stats_t dummy_stats = {100, 5, 2, 1000, 50, 1, 1};
+const sched_stats_t *sched_get_stats(void) { return &dummy_stats; }
+void sched_cmd_info(void) { console_write("\nScheduler: Single-tasking bare metal."); }
+int sched_get_thread_info(uint32_t index, char *name, thread_state_t *state, uint32_t *cpu) {
+    if (index == 0) {
+        char *src = "idle";
+        char *d = name;
+        while (*src) *d++ = *src++;
+        *d = '\0';
+        *state = THREAD_STATE_RUNNING;
+        *cpu = 0;
+        return 1;
+    }
+    return 0;
+}
+
+// WiFi & QCA6174 stubs
+void qca6174_cmd_connect(const char* s) { (void)s; console_write("\nWiFi: Not supported on this platform."); }
+void qca6174_cmd_info(void) { console_write("\nWiFi: Not supported on this platform."); }
+void qca6174_cmd_scan(void) { console_write("\nWiFi: Not supported on this platform."); }
+void qca6174_cmd_init_rings(void) {}
+void qca6174_cmd_upload(void) {}
+void qca6174_cmd_reset(void) {}
+void net_cmd_info(void) { console_write("\nNetwork: Not supported on this platform."); }
+void net_cmd_selftest(void) { console_write("\nNetwork: Not supported on this platform."); }
+void dmesg_save_persistent(void) {}
+
+// Sage & VM stubs
+void sage_run_file(const char *path) {
+    (void)path;
+    console_write("\nsage: File execution not supported on this platform.");
+}
+void elf_exec(const char *path, uint64_t sz) {
+    (void)path; (void)sz;
+    console_write("\nexecelf: ELF execution not supported on this platform.");
+}
+void sage_import_module(void* vm, const char* name) {
+    (void)vm; (void)name;
+}
+void sage_repl_init(void) { console_write("\nsage: REPL not supported on this platform."); }
+void sage_execute(const char* mod) { (void)mod; console_write("\nsage: execution not supported on this platform."); }
+
+// VFS / sagelang bridge stubs
+MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+MetalValue n_os_strlen(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+MetalValue n_os_starts_with(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+MetalValue n_os_array_len(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+MetalValue n_os_array_push(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+MetalValue n_os_write_str(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+MetalValue n_os_num_to_str(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }

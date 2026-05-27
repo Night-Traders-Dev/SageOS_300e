@@ -17,6 +17,7 @@ char *strcat(char *dest, const char *src) {
 }
 
 // ATA & Boot
+void ata_init(void) {}
 int ata_read_sector(uint32_t lba, uint16_t *buffer) { return 0; }
 int ata_write_sector(uint32_t lba, uint16_t *buffer) { return 0; }
 int ata_is_available(void) { return 0; }
@@ -40,14 +41,6 @@ int net_device_count(void) { return 0; }
 void net_format_hwaddr(void* a, void* b) { (void)a; (void)b; }
 void* net_get_device(int i) { (void)i; return NULL; }
 
-// Dmesg stubs
-void dmesg_dump(void) { console_write("\ndmesg: Not supported on this platform."); }
-void dmesg_log(const char* s) { (void)s; }
-int dmesg_get_char(uint64_t idx) { (void)idx; return -1; }
-uint64_t dmesg_get_size(void) { return 0; }
-uint64_t dmesg_get_head(void) { return 0; }
-uint64_t dmesg_get_total(void) { return 0; }
-
 // Power stubs
 void power_qemu_exit(void) {}
 void power_halt(void) {}
@@ -58,10 +51,6 @@ int sysinfo_is_qemu(void) { return 1; }
 void sysinfo_cmd(void) {
     console_write("\nSystem Info:\n  Platform: Virtual Bare-metal (rv64/virt)\n  RAM: 128 MB\n");
 }
-
-// Swap stubs
-int swap_is_available(void) { return 0; }
-void swap_info(void) { console_write("\nswap: Not supported."); }
 
 // ACPI stubs
 void acpi_cmd_battery(void) { console_write("\nACPI: Not supported."); }
@@ -89,7 +78,11 @@ void timer_delay_ms(uint32_t ms) {
         for (i = 0; i < 50000; i++) {}
     }
 }
-uint64_t timer_seconds(void) { return 0; }
+uint64_t timer_ticks(void) {
+    static uint64_t ticks = 0;
+    return ticks++;
+}
+uint64_t timer_seconds(void) { return timer_ticks() / 100; }
 uint32_t timer_cpu_percent(void) { return 0; }
 uint32_t timer_cpu_percent_at(uint32_t cpu) { (void)cpu; return 0; }
 void timer_poll(void) {}
@@ -132,7 +125,6 @@ void qca6174_cmd_upload(void) {}
 void qca6174_cmd_reset(void) {}
 void net_cmd_info(void) { console_write("\nNetwork: Not supported on this platform."); }
 void net_cmd_selftest(void) { console_write("\nNetwork: Not supported on this platform."); }
-void dmesg_save_persistent(void) {}
 
 // Sage & VM stubs
 void sage_run_file(const char *path) {

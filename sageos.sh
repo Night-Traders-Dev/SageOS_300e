@@ -57,6 +57,12 @@ if [[ ! -f "$SAGE_BIN" ]]; then
     (cd sageos_build/sage_lang/core && make)
 fi
 
+# Ensure virt disk image exists
+if [[ ! -f "virt.img" ]]; then
+    log_info "Creating virtual disk image..."
+    ./scripts/gen_virt_disk.sh
+fi
+
 mkdir -p "$BUILD_DIR"
 
 case "$ARCH" in
@@ -97,7 +103,10 @@ case "$ARCH" in
 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running ARM64 virt in QEMU..."
-                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
+                    qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio \
+                        -drive file=virt.img,format=raw,if=none,id=dr0 \
+                        -device virtio-blk-device,drive=dr0 \
+                        -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
                 ;;
 
@@ -121,7 +130,9 @@ case "$ARCH" in
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running x86_64 virt in QEMU..."
-                    qemu-system-x86_64 -machine q35 -m 4G -display none -serial mon:stdio -no-reboot -kernel "$BUILD_DIR/x64_virt/kernel.elf"
+                    qemu-system-x86_64 -machine q35 -m 4G -display none -serial mon:stdio -no-reboot \
+                        -drive file=virt.img,format=raw,index=0,media=disk \
+                        -kernel "$BUILD_DIR/x64_virt/kernel.elf"
                 fi
                 ;;
             q35|pc|lenovo_300e)
@@ -166,9 +177,13 @@ case "$ARCH" in
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then
-                    log_info "Running RISCV64 virt in QEMU..."
-                    qemu-system-riscv64 -machine virt -m 4G -display none -serial mon:stdio -bios none -no-reboot -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
+                    log_info "Running RISC-V virt in QEMU..."
+                    qemu-system-riscv64 -machine virt -m 4G -display none -serial mon:stdio -bios none -no-reboot \
+                        -drive file=virt.img,format=raw,if=none,id=dr0 \
+                        -device virtio-blk-device,drive=dr0 \
+                        -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
                 fi
+
                 ;;
             orangepi_rv2)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then

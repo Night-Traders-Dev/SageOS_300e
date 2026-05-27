@@ -7,6 +7,12 @@
 #include "version.h"
 
 #include "vfs.h"
+#include "ata.h"
+#include "fat32.h"
+#include "btrfs.h"
+#include "swap.h"
+#include "bootlog.h"
+#include "dmesg.h"
 
 void power_reboot(void) {
     console_write("Rebooting...\n");
@@ -46,6 +52,22 @@ void kmain(SageOSBootInfo *info) {
     
     keyboard_init();
     vfs_init();
+
+    // Initialize block device subsystem (ATA/Virtio)
+    ata_init();
+
+    // Initialize and mount filesystems
+    if (fat32_init()) {
+        vfs_mount("/fat32", fat32_get_backend());
+    }
+    
+    if (btrfs_init()) {
+        vfs_mount("/", btrfs_get_backend());
+    }
+
+    swap_init();
+    bootlog_init(info);
+    dmesg_log("SageOS Virt Kernel initialization complete.");
     
     // Launch interactive C shell
     shell_run();

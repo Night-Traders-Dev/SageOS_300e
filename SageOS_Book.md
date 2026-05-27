@@ -125,6 +125,15 @@ SageOS is currently at **v0.2.0 (Alpha)**.
 *   Multi-arch boot support (x64, ARM64, RV64).
 *   Integrated networking via lwIP and mbedtls.
 *   Unified multi-architecture **SageShell** port, running interactively across x86_64, aarch64, and riscv64 virtual targets.
+*   Cross-platform filesystem support with FAT32, BTRFS, and SWAP.
+*   Advanced kernel logging with persistent `bootlog` and ring-buffered `dmesg`.
+
+### Core Subsystems:
+*   **VFS (Virtual Filesystem)**: Uniform interface for all filesystems.
+*   **FAT32**: EFI partition support and logging.
+*   **BTRFS**: Robust root filesystem (Read-only Alpha).
+*   **SWAP**: Memory management infrastructure.
+*   **SageVM**: Bare-metal script execution.
 
 ### Upcoming Milestones:
 *   Expansion of the SageLang standard library for kernel development.

@@ -65,6 +65,15 @@ git pull
 ```
 4. If a submodule commit is missing, inspect the affected path and repair the gitlink before rerunning the setup script.
 
+### 1.5 Recent Porting Work
+
+The project follows the "Sage-First Principle" and has migrated many non-critical kernel services into pure SageLang implementations. Notable areas migrated:
+- Virtual Filesystem high-level logic (`vfs_bridge.sage`), RamFS, and mount routing.
+- Shell command implementations and diagnostics (`sage_shell/*` and `/etc/commands/*.sage`).
+- Init scripts and service orchestration (`/etc/init.sage`).
+
+Low-level boot, scheduler, drivers, and the MetalVM interpreter remain in C.
+
 ---
 
 ## 2. SageLang Integration

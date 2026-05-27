@@ -36,3 +36,8 @@ SageOS requires a special initialization process because it uses nested architec
 
 ## Notes
 This documentation is intended for developers and contributors. If you are new to SageOS, begin with the root README and SageOS Book before working in the `arch/` ports.
+
+## Porting Status
+
+- High-level OS components have been migrated to SageLang where possible. The project now runs many shell commands and services as embedded Sage scripts executed via the MetalVM.
+- The recommended verification flow is to build virt targets and run the test suite from inside the SageShell.

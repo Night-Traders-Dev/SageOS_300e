@@ -79,5 +79,18 @@ Build and run the OS with the management script.
 - Read the root [SageOS Book](SageOS_Book.md) for architecture details and project philosophy.
 - See `docs/README.md` for a documentation index and developer guide links.
 
+## Porting Progress
+
+- Many high-level system components have been ported to pure Sage (SageLang) and now run as embedded Sage scripts or VM modules: VFS high-level logic (RamFS/vfs router), most shell commands and utilities (neofetch, dmesg, sched, swap, etc.), and init/service orchestration scripts.
+- The C kernel retains low-level primitives: hardware drivers, bootstrapping, the MetalVM interpreter, and performance-critical shims.
+- To verify builds and run the test suite for virtual targets:
+```bash
+./sageos.sh x64 virt build
+./sageos.sh arm64 virt build
+./sageos.sh rv64 virt build
+# Run test-suite inside a virt image via QEMU (manual):
+# ./sageos.sh x64 virt run  # then run /etc/test_suite.sage from the shell
+```
+
 ## License
 MIT License. See [LICENSE](LICENSE).

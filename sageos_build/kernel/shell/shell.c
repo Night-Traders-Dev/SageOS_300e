@@ -26,6 +26,7 @@ extern const char* vfs_get_embedded_data(const char* path, uint64_t* out_size);
 #include "wifi_qca6174.h"
 #include "sage_shell_entry.h"
 #include "sage_libc_shim.h"
+#include <stdio.h>
 
 static int streq(const char *a, const char *b) {
     while (*a && *b) { if (*a != *b) return 0; a++; b++; }
@@ -48,6 +49,48 @@ static const char *arg_after(const char *line, const char *cmd) {
 }
 
 static void prompt(void);
+
+/* Try to execute an embedded Sage script for a top-level command.
+ * Returns 1 if a script was found and executed, 0 otherwise.
+ */
+static int try_run_embedded_sage(const char *cmdline) {
+    /* Extract command token */
+    char cmd[64]; int i = 0;
+    while (cmdline[i] && cmdline[i] != ' ' && cmdline[i] != '\t' && i < (int)sizeof(cmd)-1) { cmd[i] = cmdline[i]; i++; }
+    cmd[i] = 0;
+    if (i == 0) return 0;
+
+    extern void sage_run_file(const char *path);
+    extern const char* vfs_get_embedded_data(const char* path, uint64_t* out_size);
+
+    const char *prefixes[] = {"/etc/commands/", "/bin/", "/etc/"};
+    const char *suffixes[] = {".sage", ".sgvm", ""};
+
+    char path[128];
+    for (size_t p = 0; p < sizeof(prefixes)/sizeof(prefixes[0]); p++) {
+        for (size_t s = 0; s < sizeof(suffixes)/sizeof(suffixes[0]); s++) {
+            /* build path = prefix + cmd + suffix */
+            size_t len = 0;
+            const char *pr = prefixes[p];
+            const char *sf = suffixes[s];
+            /* copy prefix */
+            while (*pr && len + 1 < sizeof(path)) path[len++] = *pr++;
+            /* copy cmd */
+            int j = 0; while (cmd[j] && len + 1 < sizeof(path)) path[len++] = cmd[j++];
+            /* copy suffix */
+            const char *q = sf; while (*q && len + 1 < sizeof(path)) path[len++] = *q++;
+            path[len] = 0;
+
+            uint64_t sz = 0;
+            const char *data = vfs_get_embedded_data(path, &sz);
+            if (data) {
+                sage_run_file(path);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
 
 #define SHELL_LINE_MAX      160
 #define SHELL_HISTORY_SIZE   16
@@ -537,6 +580,8 @@ static void cmd_hexdump(const char *path) {
 
 void shell_exec_command(const char *cmd) {
     cmd = skip_spaces(cmd);
+    /* Prefer embedded Sage scripts for high-level commands when present */
+    if (try_run_embedded_sage(cmd)) return;
     if (streq(cmd, "")) return;
     if (starts_word(cmd, "pwd"))     { console_write("\n/"); return; }
     if (starts_word(cmd, "history")) { cmd_history(); return; }

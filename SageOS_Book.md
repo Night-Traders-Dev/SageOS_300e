@@ -35,9 +35,35 @@ These tools consume lightweight OS natives to fetch raw data, while all formatti
 ### 1.2 Architecture Ports (`arch/`)
 SageOS supports multiple architectures, each maintained in its own repository and linked as a submodule in the `arch/` directory.
 
-*   **x64 (`arch/x64`)**: The most mature port, supporting standard PC hardware (QEMU q35) and specifically optimized for the **Lenovo 300e Chromebook**. It includes drivers for ACPI, PCI, SATA, E1000 networking, and initial WiFi support (QCA6174).
+*   **x64 (`arch/x64`)**: The most mature port, supporting standard PC hardware (QEMU `q35`) and specifically optimized for the **Lenovo 300e Chromebook**. It includes drivers for ACPI, PCI, SATA, E1000 networking, and initial WiFi support (QCA6174).
 *   **ARM64 (`arch/arm64`)**: Targets the **Raspberry Pi 4** and QEMU `virt` machine. It features PL011 UART support and a specialized boot pipeline for RPi4 hardware.
 *   **RISC-V (`arch/rv64`)**: An emerging port targeting the **Orange Pi RV 2** and RISC-V QEMU `virt` machine.
+
+### 1.3 Submodule Strategy and Initialization
+SageOS uses a nested submodule graph to share the same core implementation across multiple architecture ports without duplicating work.
+
+* `setup_submodules.sh` is the supported initialization path.
+* The script initializes root submodules with `--remote` to resolve forked libraries and remote branches.
+* It then configures each `arch/*/core` submodule to use the local root repository as the core source.
+* Nested `lwip` and `mbedtls` paths are disabled inside the architecture core to prevent redundant cloning.
+* This avoids the common infinite recursion failure mode of repeated nested architecture cores.
+
+### 1.4 Recommended Workflow
+1. Clone the repository:
+   ```bash
+git clone https://github.com/Night-Traders-Dev/SageOS.git
+cd SageOS
+```
+2. Initialize the workspace:
+   ```bash
+./setup_submodules.sh
+```
+3. After pulling new changes:
+   ```bash
+git pull
+./setup_submodules.sh
+```
+4. If a submodule commit is missing, inspect the affected path and repair the gitlink before rerunning the setup script.
 
 ---
 

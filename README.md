@@ -1,67 +1,83 @@
 # SageOS - The Modular Hybrid Operating System
 
-SageOS is a modern, modular, and multi-architecture operating system project. It leverages a low-level C kernel for performance-critical tasks and a high-level scripting language, **SageLang**, for system logic and the interactive shell.
+SageOS is a hybrid operating system that combines a low-level C kernel with a high-level, SageLang-driven runtime. It is designed to be modular, portable, and extensible across multiple architectures.
 
-This repository is the central hub. It contains the **architecture-agnostic core** (`sageos_build/`) and links to architecture-specific hardware ports via Git submodules (`arch/`).
+## What SageOS Provides
+- **Hybrid kernel architecture**: C for performance, SageLang for system services, shell logic, and runtime extensions.
+- **Multi-architecture support**: x64, ARM64, and RV64 ports are maintained as submodules under `arch/`.
+- **Custom SageLang runtime**: A bespoke MetalVM interpreter enables safe SageLang execution inside the OS.
+- **Forked third-party networking stacks**: `lwip` and `mbedtls` are integrated as custom submodule forks to support networking and security.
 
-## Modernized Sage-Native Core
-As of v0.2.1, SageOS has successfully migrated critical core subsystems to pure **SageLang**:
-- **Sage-Native RamFS**: Storage, path resolution, and file access are now handled by memory-safe SageLang classes.
-- **Unified Telemetry**: Diagnostics (`sched`, `swap`, `dmesg`) are decoupled from the C kernel and rendered dynamically via Sage shell scripts.
-- **Pure-Sage JSON**: Standardized on a high-level JSON implementation for all configuration tasks.
-- **Regression Suite**: A unified test suite (`test_suite.sage`) ensures core stability across all architectures.
+## Why This Repository Exists
+This repository is the central coordination point for SageOS development. It contains:
+- `sageos_build/`: the shared system core and SageLang runtime.
+- `arch/`: architecture-specific ports that reuse the core via nested submodules.
+- `docs/`: project documentation and developer guides.
+- `examples/`: sample SageLang programs and boot scripts.
+- `setup_submodules.sh`: a trusted initializer that prevents infinite submodule recursion.
 
-## Comprehensive Documentation
-For a deep dive into the architecture, subsystems, and current status, please read **[The SageOS Book](SageOS_Book.md)**.
-
-## Environment Setup
-SageOS utilizes a complex submodule tree. **Do not use a standard recursive clone.** Instead, clone the repository and run the optimized setup script to initialize the environment safely, avoid recursion loops, and link our custom-forked libraries (`lwip` and `mbedtls`):
-
+## Quick Start
 ```bash
 git clone https://github.com/Night-Traders-Dev/SageOS.git
 cd SageOS
 ./setup_submodules.sh
 ```
 
-## Project Structure
-- **`sageos_build/`**: The **Source of Truth** for shared core components.
-  - `kernel/`: The C kernel, Virtual Filesystem (VFS), and Shell logic.
-  - `sage_lang/`: The SageLang compiler and MetalVM bytecode interpreter.
-- **`docs/`**: Supplemental documentation and guides.
-- **`arch/`**: Architecture-specific hardware ports.
-  - **[x64](https://github.com/Night-Traders-Dev/SageOS_x64)**: PC/Q35 and Lenovo 300e Chromebook support.
-  - **[arm64](https://github.com/Night-Traders-Dev/SageOS_arm64)**: Raspberry Pi 4 support (use the `RPi4` branch).
-  - **[rv64](https://github.com/Night-Traders-Dev/SageOS_rv64)**: RISC-V Orange Pi RV 2 support.
+### Important
+Do not use `git submodule update --init --recursive` directly on the root repository. SageOS relies on `./setup_submodules.sh` to properly configure local `core` references and disable redundant nested submodule clones.
+
+## Repository Layout
+- `sageos_build/`
+  - `kernel/`: kernel boot flow, hardware abstraction, VFS bridge.
+  - `sage_lang/`: SageLang compiler, runtime, and standard library support.
+  - `actual_sagelang_build/`: host-side SageLang build utilities.
+- `arch/`
+  - `x64/`: x86_64 hardware and QEMU targets.
+  - `arm64/`: ARM64 hardware and QEMU targets.
+  - `rv64/`: RISC-V hardware and QEMU targets.
+- `docs/`: documentation, architecture overviews, and guides.
+- `examples/`: sample projects and demonstrations.
+- `scripts/`: helper scripts and build utilities.
+
+## Submodule Strategy
+SageOS uses a nested submodule layout to share the core across ports while avoiding duplication.
+- `setup_submodules.sh` initializes root submodules with `--remote`.
+- It configures `arch/*/core` to reuse the local root repository as the core source.
+- It disables redundant nested `lwip` and `mbedtls` updates inside architecture cores.
+
+### Rebuilding the submodule graph
+After pulling new changes:
+```bash
+git pull
+./setup_submodules.sh
+```
 
 ## Building and Running
-SageOS includes a master management script for building the kernel and running it in QEMU.
+Build and run the OS with the management script.
 
-### Virtual Environments (QEMU `virt`/`q35`)
-You can build and run generic virtualized targets for any supported architecture. These targets compile the full C kernel and SageShell:
+### Virtualized targets
 ```bash
-# x86_64
 ./sageos.sh x64 virt build
 ./sageos.sh x64 virt run
 
-# ARM64
 ./sageos.sh arm64 virt build
 ./sageos.sh arm64 virt run
 
-# RISC-V 64
 ./sageos.sh rv64 virt build
 ./sageos.sh rv64 virt run
 ```
 
-### Hardware-Specific Targets
-To build for specific hardware, use the management script with the appropriate device identifier:
+### Hardware targets
 ```bash
-# Build and run the Lenovo 300e Chromebook target
 ./sageos.sh x64 lenovo_300e build
 ./sageos.sh x64 lenovo_300e run
 
-# Build and run the Raspberry Pi 4 target
 ./sageos.sh arm64 rpi4 run
 ```
 
+## Documentation
+- Read the root [SageOS Book](SageOS_Book.md) for architecture details and project philosophy.
+- See `docs/README.md` for a documentation index and developer guide links.
+
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License. See [LICENSE](LICENSE).

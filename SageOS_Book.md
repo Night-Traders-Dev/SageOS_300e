@@ -117,9 +117,10 @@ Example: Building and running for ARM64 on QEMU:
 ---
 
 ## 5. Current Status & Roadmap
-SageOS is currently at **v0.2.0 (Alpha)**.
+SageOS is currently at **v0.3.0 (Alpha)**.
 
 ### Achievements:
+*   Unified block device subsystem supporting **ATA PIO** (x86) and **VirtIO-MMIO** (ARM64/RISC-V).
 *   Functional MetalVM integrated into the kernel core.
 *   Hybrid VFS supporting multiple mounts and Sage-native filesystems.
 *   Multi-arch boot support (x64, ARM64, RV64).

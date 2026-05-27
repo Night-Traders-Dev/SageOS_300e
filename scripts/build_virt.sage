@@ -60,6 +60,7 @@ proc generate_virt_build(arch):
         "sageos_build/kernel/fs/btrfs.c",
         "sageos_build/kernel/fs/swap.c",
         "sageos_build/kernel/core/ata_pio.c",
+        "sageos_build/kernel/core/virtio.c",
         "sageos_build/kernel/core/dmesg.c",
         "sageos_build/kernel/core/bootlog.c",
         "sageos_build/kernel/core/kernel_stubs.c",

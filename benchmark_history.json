@@ -2542,5 +2542,325 @@
         ]
       }
     ]
+  },
+  {
+    "timestamp": "2026-05-27T02:21:42.066042+00:00",
+    "results": [
+      {
+        "arch": "x64",
+        "device": "virt",
+        "target_dir": "/home/kraken/Devel/SageOS/build/virt_x86_64",
+        "duration_seconds": 2.9767405560123734,
+        "kernel_size": 255048,
+        "dir_size": 667396,
+        "file_count": 23,
+        "object_count": 19,
+        "object_size": 404672,
+        "files": [
+          [
+            "boot.S",
+            3619
+          ],
+          [
+            "boot.o",
+            2536
+          ],
+          [
+            "build.sh",
+            3606
+          ],
+          [
+            "kernel.elf",
+            255048
+          ],
+          [
+            "linker.ld",
+            451
+          ],
+          [
+            "obj0.o",
+            3608
+          ],
+          [
+            "obj1.o",
+            4496
+          ],
+          [
+            "obj10.o",
+            5656
+          ],
+          [
+            "obj11.o",
+            3256
+          ],
+          [
+            "obj12.o",
+            9784
+          ],
+          [
+            "obj13.o",
+            45392
+          ],
+          [
+            "obj14.o",
+            1240
+          ],
+          [
+            "obj15.o",
+            45368
+          ],
+          [
+            "obj16.o",
+            85744
+          ],
+          [
+            "obj17.o",
+            40016
+          ],
+          [
+            "obj2.o",
+            2208
+          ],
+          [
+            "obj3.o",
+            13832
+          ],
+          [
+            "obj4.o",
+            110040
+          ],
+          [
+            "obj5.o",
+            17864
+          ],
+          [
+            "obj6.o",
+            6120
+          ],
+          [
+            "obj7.o",
+            2928
+          ],
+          [
+            "obj8.o",
+            3656
+          ],
+          [
+            "obj9.o",
+            928
+          ]
+        ]
+      },
+      {
+        "arch": "arm64",
+        "device": "virt",
+        "target_dir": "/home/kraken/Devel/SageOS/build/virt_aarch64",
+        "duration_seconds": 3.9841655880009057,
+        "kernel_size": 326824,
+        "dir_size": 748018,
+        "file_count": 23,
+        "object_count": 19,
+        "object_size": 415400,
+        "files": [
+          [
+            "boot.S",
+            1391
+          ],
+          [
+            "boot.o",
+            1448
+          ],
+          [
+            "build.sh",
+            3949
+          ],
+          [
+            "kernel.elf",
+            326824
+          ],
+          [
+            "linker.ld",
+            454
+          ],
+          [
+            "obj0.o",
+            3816
+          ],
+          [
+            "obj1.o",
+            4536
+          ],
+          [
+            "obj10.o",
+            4640
+          ],
+          [
+            "obj11.o",
+            3744
+          ],
+          [
+            "obj12.o",
+            10016
+          ],
+          [
+            "obj13.o",
+            49824
+          ],
+          [
+            "obj14.o",
+            1296
+          ],
+          [
+            "obj15.o",
+            48976
+          ],
+          [
+            "obj16.o",
+            93192
+          ],
+          [
+            "obj17.o",
+            33336
+          ],
+          [
+            "obj2.o",
+            2304
+          ],
+          [
+            "obj3.o",
+            13848
+          ],
+          [
+            "obj4.o",
+            111048
+          ],
+          [
+            "obj5.o",
+            17248
+          ],
+          [
+            "obj6.o",
+            6848
+          ],
+          [
+            "obj7.o",
+            3232
+          ],
+          [
+            "obj8.o",
+            928
+          ],
+          [
+            "obj9.o",
+            5120
+          ]
+        ]
+      },
+      {
+        "arch": "rv64",
+        "device": "virt",
+        "target_dir": "/home/kraken/Devel/SageOS/build/virt_riscv64",
+        "duration_seconds": 3.766090892997454,
+        "kernel_size": 338312,
+        "dir_size": 1260829,
+        "file_count": 23,
+        "object_count": 19,
+        "object_size": 916656,
+        "files": [
+          [
+            "boot.S",
+            1407
+          ],
+          [
+            "boot.o",
+            2336
+          ],
+          [
+            "build.sh",
+            4000
+          ],
+          [
+            "kernel.elf",
+            338312
+          ],
+          [
+            "linker.ld",
+            454
+          ],
+          [
+            "obj0.o",
+            6736
+          ],
+          [
+            "obj1.o",
+            8744
+          ],
+          [
+            "obj10.o",
+            13360
+          ],
+          [
+            "obj11.o",
+            8320
+          ],
+          [
+            "obj12.o",
+            20128
+          ],
+          [
+            "obj13.o",
+            135640
+          ],
+          [
+            "obj14.o",
+            1832
+          ],
+          [
+            "obj15.o",
+            124656
+          ],
+          [
+            "obj16.o",
+            191888
+          ],
+          [
+            "obj17.o",
+            114240
+          ],
+          [
+            "obj2.o",
+            3608
+          ],
+          [
+            "obj3.o",
+            35896
+          ],
+          [
+            "obj4.o",
+            160512
+          ],
+          [
+            "obj5.o",
+            54816
+          ],
+          [
+            "obj6.o",
+            14784
+          ],
+          [
+            "obj7.o",
+            6072
+          ],
+          [
+            "obj8.o",
+            1136
+          ],
+          [
+            "obj9.o",
+            11952
+          ]
+        ]
+      }
+    ]
   }
 ]

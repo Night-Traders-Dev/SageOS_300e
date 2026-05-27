@@ -16,18 +16,7 @@ char *strcat(char *dest, const char *src) {
     char *d = dest; while (*d) d++; while (*src) *d++ = *src++; *d = '\0'; return dest;
 }
 
-// ATA & Boot
-#if !defined(__x86_64__)
-void ata_init(void) {}
-int ata_read_sector(uint32_t lba, uint16_t *buffer) { (void)lba; (void)buffer; return 0; }
-int ata_write_sector(uint32_t lba, uint16_t *buffer) { (void)lba; (void)buffer; return 0; }
-int ata_is_available(void) { return 0; }
-int ata_read_sector_async(uint32_t lba, uint16_t *buffer) { (void)lba; (void)buffer; return 0; }
-int ata_write_sector_async(uint32_t lba, const uint16_t *buffer) { (void)lba; (void)buffer; return 0; }
-int ata_wait_completion(void) { return 1; }
-void ata_timer_tick(void) {}
-#endif
-
+// ATA & Boot (implemented in ata_pio.c / virtio.c)
 void* kernel_get_boot_info(void) { return NULL; }
 
 // Runtime stubs to satisfy linker

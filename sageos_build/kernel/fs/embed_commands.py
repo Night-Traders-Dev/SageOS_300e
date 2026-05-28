@@ -12,14 +12,14 @@ def generate_header(etc_dir, output_header):
     # Root /etc files
     if os.path.exists(etc_dir):
         for f in os.listdir(etc_dir):
-            if (f.endswith('.sage') or f.endswith('.json')) and os.path.isfile(os.path.join(etc_dir, f)):
+            if (f.endswith('.sage') or f.endswith('.json') or f.endswith('.sgvm')) and os.path.isfile(os.path.join(etc_dir, f)):
                 all_files.append((f, etc_dir, f"/etc/{f}"))
                 
     # /etc/commands files
     commands_dir = os.path.join(etc_dir, "commands")
     if os.path.exists(commands_dir):
         for f in os.listdir(commands_dir):
-            if (f.endswith('.sage') or f.endswith('.json')) and os.path.isfile(os.path.join(commands_dir, f)):
+            if (f.endswith('.sage') or f.endswith('.json') or f.endswith('.sgvm')) and os.path.isfile(os.path.join(commands_dir, f)):
                 all_files.append((f, commands_dir, f"/etc/commands/{f}"))
 
     # /bin files (from the workspace root's bin directory if it exists)
@@ -50,7 +50,7 @@ def generate_header(etc_dir, output_header):
                 f.write("    " + ", ".join(f"0x{b:02x}" for b in chunk) + ",\n")
             
             # Add null terminator for safety if it's a script/json
-            if target_path.endswith('.sage') or target_path.endswith('.json'):
+            if target_path.endswith('.sage') or target_path.endswith('.json') or target_path.endswith('.sgvm'):
                 f.write("    0x00\n")
             
             f.write("};\n\n")

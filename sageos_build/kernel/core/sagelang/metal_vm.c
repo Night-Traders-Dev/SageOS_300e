@@ -968,8 +968,14 @@ int metal_vm_step(MetalVM* vm) {
                     vm->sp = frame->sp_base; return 1;
                 }
             }
-            console_write("\nOP_CALL: unsupported target type "); console_u32(callee.type);
-            console_write(" at IP: "); console_hex64((uint64_t)(vm->ip - 1));
+            if (callee.type == MV_STR) {
+                console_write("\nOP_CALL failed: native function '");
+                console_write(metal_string_get(vm, callee.as.str_idx));
+                console_write("' not found.\n");
+            } else {
+                console_write("\nOP_CALL: unsupported target type "); console_u32(callee.type);
+                console_write(" at IP: "); console_hex64((uint64_t)(vm->ip - 1));
+            }
             vm->error = 1; vm->error_msg = "unsupported call target"; return 0;
         }
 

@@ -75,6 +75,9 @@ void kmain(SageOSBootInfo *info) {
     bootlog_init(info);
     dmesg_log("SageOS Virt Kernel initialization complete.");
     
+    console_write("\n[DEBUG] Before shell_run, swap is: ");
+    console_u32(swap_is_available());
+    
     // Launch interactive C shell
     shell_run();
 }

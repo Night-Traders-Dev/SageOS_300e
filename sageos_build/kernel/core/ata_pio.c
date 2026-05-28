@@ -69,11 +69,35 @@ void ata_init(void) {
     ata_io_delay();
     
     status = inb(ATA_PRIMARY_STATUS);
-    if (status == 0 || !(status & ATA_STATUS_DRDY)) {
+    if (status == 0) {
         ata_present = 0;
         console_write("\nata: Primary Master not ready");
         dmesg_log("ata: Primary Master not ready");
         return;
+    }
+
+    /* Wait for BSY to clear after IDENTIFY */
+    if (!ata_wait_not_busy()) {
+        ata_present = 0;
+        console_write("\nata: IDENTIFY timed out");
+        dmesg_log("ata: IDENTIFY timed out");
+        return;
+    }
+
+    status = inb(ATA_PRIMARY_STATUS);
+    if (status & (ATA_STATUS_ERR | ATA_STATUS_DF)) {
+        ata_present = 0;
+        console_write("\nata: Primary Master IDENTIFY failed");
+        dmesg_log("ata: Primary Master IDENTIFY failed");
+        return;
+    }
+
+    /* Drain the 256 words of IDENTIFY data so DRQ is cleared
+     * and subsequent READ SECTORS commands work correctly.     */
+    if (status & ATA_STATUS_DRQ) {
+        for (int i = 0; i < 256; i++) {
+            (void)inw(ATA_PRIMARY_DATA);
+        }
     }
 
     ata_present = 1;

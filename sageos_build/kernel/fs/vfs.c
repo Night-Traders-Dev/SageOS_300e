@@ -34,6 +34,10 @@ static const EmbeddedFile g_embedded_files[] = {
     {"/etc/commands/sched.sage", embedded_file_etc_commands_sched_sage, sizeof(embedded_file_etc_commands_sched_sage) - 1},
     {"/etc/commands/swap.sage", embedded_file_etc_commands_swap_sage, sizeof(embedded_file_etc_commands_swap_sage) - 1},
     {"/etc/commands/dmesg.sage", embedded_file_etc_commands_dmesg_sage, sizeof(embedded_file_etc_commands_dmesg_sage) - 1},
+    {"/etc/commands/status.sgvm", embedded_file_etc_commands_status_sgvm, sizeof(embedded_file_etc_commands_status_sgvm) - 1},
+    {"/etc/commands/sysinfo.sgvm", embedded_file_etc_commands_sysinfo_sgvm, sizeof(embedded_file_etc_commands_sysinfo_sgvm) - 1},
+    {"/etc/commands/btop.sgvm", embedded_file_etc_commands_btop_sgvm, sizeof(embedded_file_etc_commands_btop_sgvm) - 1},
+
     {"/etc/commands/hello.json", embedded_file_etc_commands_hello_json, sizeof(embedded_file_etc_commands_hello_json) - 1},
     {"/etc/import_test.sage", embedded_file_etc_import_test_sage, sizeof(embedded_file_etc_import_test_sage) - 1},
     {"/etc/init.sage", embedded_file_etc_init_sage, sizeof(embedded_file_etc_init_sage) - 1},

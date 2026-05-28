@@ -64,7 +64,7 @@ static int try_run_embedded_sage(const char *cmdline) {
     extern const char* vfs_get_embedded_data(const char* path, uint64_t* out_size);
 
     const char *prefixes[] = {"/etc/commands/", "/bin/", "/etc/"};
-    const char *suffixes[] = {".sage", ".sgvm", ""};
+    const char *suffixes[] = {".sgvm", ".sage", ""};
 
     char path[128];
     for (size_t p = 0; p < sizeof(prefixes)/sizeof(prefixes[0]); p++) {
@@ -589,13 +589,10 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "history")) { cmd_history(); return; }
     if (starts_word(cmd, "help"))         { help(); return; }
     if (starts_word(cmd, "clear"))        { console_clear(); return; }
-    if (starts_word(cmd, "btop"))         { cmd_btop(); return; }
     if (starts_word(cmd, "install"))      { cmd_install(); return; }
     if (starts_word(cmd, "fb"))           { cmd_fb(); return; }
     if (starts_word(cmd, "about"))        { console_write("\nSageOS is a small POSIX-inspired OS target."); console_write("\nCurrent phase: modular kernel and hardware diagnostics."); return; }
     if (starts_word(cmd, "input"))        { console_write("\nInput backend: "); console_write(keyboard_backend()); console_write("\nUse keydebug to inspect raw scancodes."); return; }
-    if (starts_word(cmd, "status"))       { status_print(); return; }
-    if (starts_word(cmd, "sysinfo"))      { sysinfo_cmd(); return; }
     if (starts_word(cmd, "timer"))        { timer_cmd_info(); return; }
     if (starts_word(cmd, "sched"))        { sched_cmd_info(); return; }
     if (starts_word(cmd, "smp start"))    { smp_boot_aps(); return; }

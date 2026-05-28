@@ -445,6 +445,15 @@ static MetalValue n_ram_total_str(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_cpu_percent(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; return mv_dbl((double)timer_cpu_percent());
 }
+
+static MetalValue n_timer_poll(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;(void)a;(void)c; timer_poll(); return mv_nil();
+}
+
+static MetalValue n_timer_cpu_percent_at(MetalVM *vm, MetalValue *a, int c) {
+    int idx = (int)arg_num(a, c, 0);
+    return mv_dbl((double)timer_cpu_percent_at(idx));
+}
 static MetalValue n_battery_percent(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; return mv_dbl((double)battery_percent());
 }
@@ -765,10 +774,10 @@ static MetalValue n_os_get_tasks(MetalVM *vm, MetalValue *a, int c) {
         uint32_t cpu_id;
         if (sched_get_thread_info(i, name, &state, &cpu_id)) {
             int d = metal_dict_new(vm);
-            metal_dict_set(vm, d, metal_string_intern(vm, "id", 2), mv_num((uint64_t)i));
+            metal_dict_set(vm, d, metal_string_intern(vm, "id", 2), mv_dbl((double)i));
             metal_dict_set(vm, d, metal_string_intern(vm, "name", 4), mv_str(vm, name, (int)strlen(name)));
-            metal_dict_set(vm, d, metal_string_intern(vm, "state", 5), mv_num((uint64_t)state));
-            metal_dict_set(vm, d, metal_string_intern(vm, "cpu", 3), mv_num((uint64_t)cpu_id));
+            metal_dict_set(vm, d, metal_string_intern(vm, "state", 5), mv_dbl((double)state));
+            metal_dict_set(vm, d, metal_string_intern(vm, "cpu", 3), mv_dbl((double)cpu_id));
             MetalValue item; item.type = MV_DICT; item.as.dict_idx = d;
             metal_array_push(vm, arr, item);
         }
@@ -780,8 +789,8 @@ static MetalValue n_os_get_tasks(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_os_get_mem_stats(MetalVM *vm, MetalValue *a, int c) {
     (void)a;(void)c;
     int d = metal_dict_new(vm);
-    metal_dict_set(vm, d, metal_string_intern(vm, "used", 4), mv_num(ram_used_bytes()));
-    metal_dict_set(vm, d, metal_string_intern(vm, "total", 5), mv_num(ram_total_bytes()));
+    metal_dict_set(vm, d, metal_string_intern(vm, "used", 4), mv_dbl((double)ram_used_bytes()));
+    metal_dict_set(vm, d, metal_string_intern(vm, "total", 5), mv_dbl((double)ram_total_bytes()));
     MetalValue res; res.type = MV_DICT; res.as.dict_idx = d;
     return res;
 }
@@ -835,6 +844,15 @@ static MetalValue n_os_vfs_readdir(MetalVM *vm, MetalValue *a, int c) {
     return mv_nil();
 }
 
+static MetalValue n_os_get_terminal_size(MetalVM *vm, MetalValue *a, int c) {
+    (void)a; (void)c;
+    int d = metal_dict_new(vm);
+    metal_dict_set(vm, d, metal_string_intern(vm, "cols", 4), mv_dbl((double)console_cols()));
+    metal_dict_set(vm, d, metal_string_intern(vm, "rows", 4), mv_dbl((double)console_rows()));
+    MetalValue res; res.type = MV_DICT; res.as.dict_idx = d;
+    return res;
+}
+
 /* -----------------------------------------------------------------------
  * Register all natives
  * --------------------------------------------------------------------- */
@@ -857,6 +875,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_cursor_home",   n_cursor_home);
     REG("os_input_begin",   n_input_begin);
     REG("os_line_redraw",   n_line_redraw);
+    REG("os_terminal_size", n_os_get_terminal_size);
     /* String utils */
     REG("len",              n_len);
     REG("os_strlen",        n_strlen);
@@ -883,9 +902,13 @@ static void register_natives(MetalVM *vm) {
     REG("os_ram_used_str",  n_ram_used_str);
     REG("os_ram_total_str", n_ram_total_str);
     REG("os_cpu_percent",   n_cpu_percent);
+    REG("os_timer_poll",    n_timer_poll);
+    REG("os_timer_cpu_percent_at", n_timer_cpu_percent_at);
     REG("os_battery_percent",n_battery_percent);
     REG("os_smp_cpu_count", n_smp_cpu_count);
     REG("os_uptime_str",    n_uptime_str);
+    REG("os_get_tasks",     n_os_get_tasks);
+    REG("os_get_mem_stats", n_os_get_mem_stats);
     /* btop helpers */
     REG("os_draw_bar",      n_draw_bar);
     REG("os_delay_ms",      n_delay_ms);
@@ -1012,4 +1035,32 @@ void sage_shell_run(void) {
     }
 
     g_sage_shell_running = 0;
+}
+
+/* -----------------------------------------------------------------------
+ * sage_run_file — entry point for embedded sgvm files
+ * --------------------------------------------------------------------- */
+void sage_run_file(const char *path) {
+    uint64_t sz = 0;
+    extern const char* vfs_get_embedded_data(const char* path, uint64_t* out_size);
+    const char *data = vfs_get_embedded_data(path, &sz);
+    if (!data) {
+        console_write("\nFile not found.\n");
+        return;
+    }
+
+    if (sz >= 4 && data[0] == 'S' && data[1] == 'G' && data[2] == 'V' && data[3] == 'M') {
+        static MetalVM g_cmd_vm;
+        metal_vm_init(&g_cmd_vm);
+        g_cmd_vm.write_char = bridge_write_char;
+        g_cmd_vm.read_char = bridge_read_char;
+        register_natives(&g_cmd_vm);
+        if (metal_vm_load_binary(&g_cmd_vm, (const uint8_t*)data, (int)sz)) {
+            metal_vm_run(&g_cmd_vm);
+        } else {
+            console_write("\nsage: error loading bytecode artifact\n");
+        }
+    } else {
+        console_write("\nsage: Source execution not supported on virt. Please compile to .sgvm\n");
+    }
 }

@@ -107,8 +107,15 @@ static void mmio_write(uint32_t reg, uint32_t val) {
 void ata_init(void) {
     if (VIRTIO_MMIO_BASE == 0) return;
 
-    /* Probe for block device */
-    for (int i = 0; i < 8; i++) {
+    /* Probe for block device.
+     * QEMU ARM virt has 32 MMIO transports, RISC-V virt has 8.
+     * Devices are assigned from the highest index downward.       */
+#if defined(__aarch64__)
+    int probe_count = 32;
+#else
+    int probe_count = 8;
+#endif
+    for (int i = 0; i < probe_count; i++) {
         uint64_t base = VIRTIO_MMIO_BASE + (i * VIRTIO_MMIO_STEP);
         uint32_t magic = *(volatile uint32_t *)(base + REG_MAGIC);
         if (magic == VIRTIO_MAGIC) {
@@ -127,37 +134,78 @@ void ata_init(void) {
 
     /* Reset and initialize */
     mmio_write(REG_STATUS, 0); // Reset
+    mb();
     mmio_write(REG_STATUS, 1); // ACK
     mmio_write(REG_STATUS, 3); // ACK | DRIVER
 
-    /* Negotiate features */
-    uint32_t host_features = mmio_read(0x10);
-    mmio_write(0x14, 1);
-    mmio_write(0x14, 0);
-    mmio_write(REG_GUEST_FEAT, host_features);
-
-    /* Initialize queue 0 */
-    mmio_write(REG_QUEUE_SEL, 0);
-    uint32_t max = mmio_read(REG_QUEUE_NUM_MAX);
-    if (max < 16) {
-        dmesg_log("virtio: Queue size too small");
-        virtio_present = 0;
-        return;
-    }
-
-    desc = (struct virtq_desc *)vq_space;
-    avail = (struct virtq_avail *)(vq_space + 16 * sizeof(struct virtq_desc));
-    used = (struct virtq_used *)(vq_space + 4096);
-
     uint32_t version = mmio_read(REG_VERSION);
+
     if (version == 1) {
-        /* Legacy VirtIO MMIO */
-        uint32_t pfn = (uint32_t)((uintptr_t)vq_space >> 12);
+        /* ===== Legacy VirtIO MMIO (v1) ===== */
+
+        /* Feature negotiation: simple read & echo (no FeatureSel registers) */
+        uint32_t host_features = mmio_read(REG_DEVICE_FEAT);
+        mmio_write(REG_GUEST_FEAT, host_features);
+
+        /* GuestPageSize — MANDATORY for legacy, must be set before queue init */
+        mmio_write(0x28, 4096);
+
+        /* Initialize queue 0 */
+        mmio_write(REG_QUEUE_SEL, 0);
+        uint32_t max = mmio_read(REG_QUEUE_NUM_MAX);
+        if (max < 16) {
+            dmesg_log("virtio: Queue size too small");
+            virtio_present = 0;
+            return;
+        }
+
+        desc = (struct virtq_desc *)vq_space;
+        avail = (struct virtq_avail *)(vq_space + 16 * sizeof(struct virtq_desc));
+        used = (struct virtq_used *)(vq_space + 4096);
+
         mmio_write(REG_QUEUE_NUM, 16);
         mmio_write(0x3c, 4096); /* QueueAlign */
+        uint32_t pfn = (uint32_t)((uintptr_t)vq_space >> 12);
         mmio_write(0x40, pfn); /* QueuePFN */
+
+        mmio_write(REG_STATUS, 7); // ACK | DRIVER | DRIVER_OK
     } else {
-        /* Modern VirtIO MMIO */
+        /* ===== Modern VirtIO MMIO (v2) ===== */
+
+        /* Paged feature negotiation */
+        mmio_write(0x14, 0);  /* DeviceFeaturesSel = page 0 */
+        uint32_t host_lo = mmio_read(REG_DEVICE_FEAT);
+        mmio_write(0x24, 0);  /* DriverFeaturesSel = page 0 */
+        mmio_write(REG_GUEST_FEAT, host_lo);
+
+        mmio_write(0x14, 1);  /* DeviceFeaturesSel = page 1 */
+        uint32_t host_hi = mmio_read(REG_DEVICE_FEAT);
+        mmio_write(0x24, 1);  /* DriverFeaturesSel = page 1 */
+        mmio_write(REG_GUEST_FEAT, host_hi);
+
+        /* FEATURES_OK — mandatory for v2 */
+        mmio_write(REG_STATUS, 0x0B); // ACK | DRIVER | FEATURES_OK
+        mb();
+        uint32_t status_check = mmio_read(REG_STATUS);
+        if (!(status_check & 0x08)) {
+            dmesg_log("virtio: device rejected features (FEATURES_OK not set)");
+            virtio_present = 0;
+            return;
+        }
+
+        /* Initialize queue 0 */
+        mmio_write(REG_QUEUE_SEL, 0);
+        uint32_t max = mmio_read(REG_QUEUE_NUM_MAX);
+        if (max < 16) {
+            dmesg_log("virtio: Queue size too small");
+            virtio_present = 0;
+            return;
+        }
+
+        desc = (struct virtq_desc *)vq_space;
+        avail = (struct virtq_avail *)(vq_space + 16 * sizeof(struct virtq_desc));
+        used = (struct virtq_used *)(vq_space + 4096);
+
         mmio_write(REG_QUEUE_NUM, 16);
         mmio_write(REG_DESC_LOW, (uint32_t)(uintptr_t)desc);
         mmio_write(REG_DESC_HIGH, (uint32_t)((uint64_t)(uintptr_t)desc >> 32));
@@ -166,13 +214,15 @@ void ata_init(void) {
         mmio_write(REG_USED_LOW, (uint32_t)(uintptr_t)used);
         mmio_write(REG_USED_HIGH, (uint32_t)((uint64_t)(uintptr_t)used >> 32));
         mmio_write(REG_QUEUE_READY, 1);
-    }
 
-    mmio_write(REG_STATUS, 7); // ACK | DRIVER | DRIVER_OK
+        mmio_write(REG_STATUS, 0x0F); // ACK | DRIVER | FEATURES_OK | DRIVER_OK
+    }
 
     console_write("\nvirtio-blk: Initialized on transport ");
     console_hex64(mmio_base);
-    console_write("\n");
+    console_write(" (v");
+    console_u32(version);
+    console_write(")\n");
     dmesg_log("virtio-blk: Initialized successfully");
 }
 
@@ -217,10 +267,11 @@ int ata_read_sector(uint32_t lba, uint16_t *buffer) {
 
     /* Poll for completion */
     int timeout = 0;
-    while (used->idx == last_used_idx) {
+    while ((uint16_t)(used->idx - last_used_idx) == 0) {
         mb();
         cpu_pause();
         if (++timeout > 10000000) {
+            dmesg_log("virtio: read timeout");
             return 0;
         }
     }
@@ -260,9 +311,14 @@ int ata_write_sector(uint32_t lba, const uint16_t *buffer) {
 
     mmio_write(REG_QUEUE_NOTIFY, 0);
 
-    while (used->idx == last_used_idx) {
+    int timeout = 0;
+    while ((uint16_t)(used->idx - last_used_idx) == 0) {
         mb();
         cpu_pause();
+        if (++timeout > 10000000) {
+            dmesg_log("virtio: write timeout");
+            return 0;
+        }
     }
     last_used_idx = used->idx;
     mb();

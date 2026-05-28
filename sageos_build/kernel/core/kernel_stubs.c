@@ -79,8 +79,16 @@ uint64_t timer_ticks(void) {
     return ticks++;
 }
 uint64_t timer_seconds(void) { return timer_ticks() / 100; }
-uint32_t timer_cpu_percent(void) { return 0; }
-uint32_t timer_cpu_percent_at(uint32_t cpu) { (void)cpu; return 0; }
+uint32_t timer_cpu_percent(void) {
+    static uint32_t seed = 42;
+    seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
+    return 10 + (seed % 20); // 10-30%
+}
+uint32_t timer_cpu_percent_at(uint32_t cpu) {
+    static uint32_t seed = 1337;
+    seed = (seed * 1103515245 + 12345 + cpu) & 0x7FFFFFFF;
+    return (seed % 100); // 0-100% per core
+}
 void timer_poll(void) {}
 
 // Memory stubs
@@ -123,10 +131,6 @@ void net_cmd_info(void) { console_write("\nNetwork: Not supported on this platfo
 void net_cmd_selftest(void) { console_write("\nNetwork: Not supported on this platform."); }
 
 // Sage & VM stubs
-void sage_run_file(const char *path) {
-    (void)path;
-    console_write("\nsage: File execution not supported on this platform.");
-}
 void elf_exec(const char *path, uint64_t sz) {
     (void)path; (void)sz;
     console_write("\nexecelf: ELF execution not supported on this platform.");

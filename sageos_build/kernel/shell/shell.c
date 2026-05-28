@@ -744,7 +744,7 @@ void shell_exec_command(const char *cmd) {
         uint64_t file_size = 0;
         const char *file_data = vfs_get_embedded_data(path, &file_size);
         if (!file_data) { console_write("\nexecelf: no such file: "); console_write(path); return; }
-        elf_exec(file_data, file_size);
+        elf_exec(file_data, file_size, NULL, NULL);
         return;
     }
     if (starts_word(cmd, "nano")) {

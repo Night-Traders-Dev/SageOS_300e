@@ -115,6 +115,6 @@ int elf_validate(const void *data, uint64_t size);
  * @data:  pointer to the raw ELF file in memory
  * @size:  byte length of the ELF file buffer
  */
-int elf_exec(const void *data, uint64_t size);
+int elf_exec(const void *data, uint64_t size, char *const argv[], char *const envp[]);
 
 #endif /* SAGEOS_ELF_H */

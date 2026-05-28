@@ -604,7 +604,7 @@ static MetalValue n_execelf(MetalVM *vm, MetalValue *a, int c) {
     uint64_t sz = 0;
     const char *fd = vfs_get_embedded_data(path, &sz);
     if (!fd) { console_write("\nexecelf: no such file: "); console_write(path); return mv_nil(); }
-    elf_exec(fd, sz); return mv_nil();
+    elf_exec(fd, sz, NULL, NULL); return mv_nil();
 }
 static int g_shell_exec_active = 0;
 static MetalValue n_shell_exec(MetalVM *vm, MetalValue *a, int c) {

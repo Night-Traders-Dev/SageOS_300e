@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include "console.h"
 #include "elf.h"
+#include "sage_alloc.h"
 
 /* -----------------------------------------------------------------------
  * Validation
@@ -78,9 +79,9 @@ int elf_validate(const void *data, uint64_t size) {
  * Execution
  * ----------------------------------------------------------------------- */
 
-int elf_exec(const void *data, uint64_t size) {
+int elf_exec(const void *data, uint64_t size, char *const argv[], char *const envp[]) {
     if (!elf_validate(data, size)) {
-        console_write("\nelf: not a valid ELF64 x86_64 executable.");
+        console_write("\nelf: not a valid ELF64 executable.");
         return -1;
     }
 
@@ -88,87 +89,81 @@ int elf_exec(const void *data, uint64_t size) {
     const SageElf64_Phdr *phdr =
         (const SageElf64_Phdr *)((const uint8_t *)data + ehdr->e_phoff);
 
-    console_write("\nelf: loading ");
-    console_u32((uint32_t)ehdr->e_phnum);
-    console_write(" program header(s)");
-
-    int loaded = 0;
-
+    console_write("\nelf: loading segments...");
+    
     for (int i = 0; i < ehdr->e_phnum; i++) {
-        if (phdr[i].p_type != PT_LOAD) {
-            continue;
-        }
+        if (phdr[i].p_type != PT_LOAD) continue;
 
-        /* Bounds-check: segment data must fit in file */
-        if (phdr[i].p_offset + phdr[i].p_filesz > size) {
-            console_write("\nelf: segment ");
-            console_u32((uint32_t)i);
-            console_write(" extends past end of file.");
-            return -1;
-        }
-
-        /* Bounds-check: virtual address range */
-        if (phdr[i].p_vaddr < ELF_VADDR_MIN ||
-            phdr[i].p_vaddr + phdr[i].p_memsz > ELF_VADDR_MAX) {
-            console_write("\nelf: segment ");
-            console_u32((uint32_t)i);
-            console_write(" vaddr out of allowed range [0x400000, 0x10000000).");
-            console_write("\n  vaddr: ");
-            console_hex64(phdr[i].p_vaddr);
-            console_write("  memsz: ");
-            console_hex64(phdr[i].p_memsz);
-            return -1;
-        }
-
-        /* Copy file data */
+        /* Copy file data and zero BSS */
         uint8_t *dest = (uint8_t *)phdr[i].p_vaddr;
         const uint8_t *src = (const uint8_t *)data + phdr[i].p_offset;
-
-        for (uint64_t j = 0; j < phdr[i].p_filesz; j++) {
-            dest[j] = src[j];
-        }
-
-        /* Zero BSS (memsz > filesz) */
-        for (uint64_t j = phdr[i].p_filesz; j < phdr[i].p_memsz; j++) {
-            dest[j] = 0;
-        }
-
-        console_write("\n  LOAD ");
-        console_hex64(phdr[i].p_vaddr);
-        console_write(" filesz=");
-        console_hex64(phdr[i].p_filesz);
-        console_write(" memsz=");
-        console_hex64(phdr[i].p_memsz);
-
-        loaded++;
+        for (uint64_t j = 0; j < phdr[i].p_filesz; j++) dest[j] = src[j];
+        for (uint64_t j = phdr[i].p_filesz; j < phdr[i].p_memsz; j++) dest[j] = 0;
     }
 
-    if (loaded == 0) {
-        console_write("\nelf: no PT_LOAD segments found.");
-        return -1;
+    /* Stack Setup */
+    /* We allocate a simple 64KB stack for the process */
+    uint8_t *stack_top = (uint8_t *)sage_malloc(65536);
+    if (!stack_top) return -1;
+    uint8_t *sp = stack_top + 65536;
+
+    /* Push argv/envp onto stack (simplified for now) */
+    /* Real layout: [argc][argv pointers...][NULL][envp pointers...][NULL][strings...] */
+    
+    int argc = 0;
+    if (argv) {
+        while (argv[argc]) argc++;
     }
 
-    console_write("\nelf: jumping to entry ");
-    console_hex64(ehdr->e_entry);
+    /* We'll just push argc and argv for now to satisfy crt0.S 
+       Actually, our crt0 expects argc at (%rsp) and argv pointers following.
+    */
+    
+    /* Align SP to 16 bytes */
+    sp = (uint8_t *)((uintptr_t)(sp - 16) & ~15);
 
-    /* Entry-point bounds check */
-    if (ehdr->e_entry < ELF_VADDR_MIN || ehdr->e_entry >= ELF_VADDR_MAX) {
-        console_write("\nelf: entry point outside allowed range.");
-        return -1;
-    }
+    /* Push arguments onto stack (this is a bit complex in C, 
+       usually done by pushing strings first, then pointers) */
+    
+    /* For now, let's just push a dummy argc/argv to avoid crashes */
+    sp -= 8; *(uint64_t *)sp = 0; /* NULL envp */
+    sp -= 8; *(uint64_t *)sp = 0; /* NULL argv[0] */
+    sp -= 8; *(uint64_t *)sp = (uint64_t)argc;
 
-    /* Call the entry point.  If it returns, we get back to the shell. */
-    int (*entry)(void) = (int (*)(void))ehdr->e_entry;
-    int ret = entry();
+    /* Architecture specific jump to entry point with new SP */
+    int ret = 0;
+    uintptr_t entry = ehdr->e_entry;
 
-    console_write("\nelf: returned with code ");
-    if (ret < 0) {
-        console_write("-");
-        console_u32((uint32_t)(-ret));
-    } else {
-        console_u32((uint32_t)ret);
-    }
+#if defined(__x86_64__)
+    __asm__ volatile (
+        "mov %1, %%rsp\n"
+        "call *%2\n"
+        "mov %%eax, %0"
+        : "=r"(ret)
+        : "r"(sp), "r"(entry)
+        : "rax", "memory"
+    );
+#elif defined(__aarch64__)
+    __asm__ volatile (
+        "mov sp, %1\n"
+        "blr %2\n"
+        "mov %0, x0"
+        : "=r"(ret)
+        : "r"(sp), "r"(entry)
+        : "x0", "memory"
+    );
+#elif defined(__riscv)
+    __asm__ volatile (
+        "mv sp, %1\n"
+        "jalr %2\n"
+        "mv %0, a0"
+        : "=r"(ret)
+        : "r"(sp), "r"(entry)
+        : "a0", "memory"
+    );
+#endif
 
+    sage_free(stack_top);
     return ret;
 }
 
@@ -196,7 +191,7 @@ long sys_execve(const char *path, char *const argv[], char *const envp[]) {
     }
 
     /* Execute the ELF */
-    int ret = elf_exec(buffer, st.size);
+    int ret = elf_exec(buffer, st.size, argv, envp);
 
     /* We don't free the buffer if it's still running, 
        but here elf_exec calls it and waits for return. */

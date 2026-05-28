@@ -52,3 +52,11 @@ x86_64-*-sageos*)
     want64=true
     ;;
 ```
+
+### 4. Build Newlib
+Newlib needs to be configured with `--target=*-*-sageos`. The syscall stubs in `newlib/libc/sys/sageos/syscalls.c` and the unified `crt0.S` will provide the necessary interface to the SageOS kernel.
+
+The following syscalls are now supported by the SageOS kernel for Newlib:
+- read, write, open, close, lseek, fstat
+- brk, exit, getpid, gettimeofday, nanosleep
+- waitpid, times, isatty (basic)

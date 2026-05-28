@@ -18,6 +18,13 @@ struct timespec {
     long tv_nsec;
 };
 
+struct tms {
+    long tms_utime;
+    long tms_stime;
+    long tms_cutime;
+    long tms_cstime;
+};
+
 /* Forward declarations of syscall implementations */
 long sys_write(int fd, const void *buf, size_t count);
 long sys_read(int fd, void *buf, size_t count);
@@ -30,6 +37,7 @@ long sys_execve(const char *path, char *const argv[], char *const envp[]);
 long sys_waitpid(int pid, int *status, int options);
 long sys_gettimeofday(struct timeval *tv, void *tz);
 long sys_nanosleep(const struct timespec *req, struct timespec *rem);
+long sys_times(struct tms *buf);
 void sys_exit(int code);
 
 long syscall_dispatch(long num, long a1, long a2, long a3,
@@ -58,6 +66,8 @@ long syscall_dispatch(long num, long a1, long a2, long a3,
         return sys_gettimeofday((struct timeval *)a1, (void *)a2);
     case SYS_nanosleep:
         return sys_nanosleep((const struct timespec *)a1, (struct timespec *)a2);
+    case SYS_times:
+        return sys_times((struct tms *)a1);
     case SYS_exit:
         sys_exit((int)a1);
         return 0; /* Unreachable */
@@ -222,6 +232,14 @@ long sys_waitpid(int pid, int *status, int options) {
     (void)pid; (void)status; (void)options;
     /* Basic stub for now */
     return 0;
+}
+
+long sys_times(struct tms *buf) {
+    if (buf) {
+        memset(buf, 0, sizeof(struct tms));
+        buf->tms_utime = (long)timer_ticks();
+    }
+    return (long)timer_ticks();
 }
 
 void sys_exit(int code) {

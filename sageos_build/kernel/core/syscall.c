@@ -4,12 +4,15 @@
 #include "console.h"
 #include <string.h>
 
+#include <sys/stat.h>
+
 /* Forward declarations of syscall implementations */
 long sys_write(int fd, const void *buf, size_t count);
 long sys_read(int fd, void *buf, size_t count);
 long sys_open(const char *path, int flags, int mode);
 long sys_close(int fd);
 long sys_lseek(int fd, off_t offset, int whence);
+long sys_fstat(int fd, struct stat *st);
 long sys_brk(uintptr_t addr);
 long sys_execve(const char *path, char *const argv[], char *const envp[]);
 void sys_exit(int code);
@@ -25,6 +28,8 @@ long syscall_dispatch(long num, long a1, long a2, long a3,
         return sys_open((const char *)a1, (int)a2, (int)a3);
     case SYS_close:
         return sys_close((int)a1);
+    case SYS_fstat:
+        return sys_fstat((int)a1, (struct stat *)a2);
     case SYS_lseek:
         return sys_lseek((int)a1, (off_t)a2, (int)a3);
     case SYS_brk:
@@ -148,6 +153,27 @@ long sys_lseek(int fd, off_t offset, int whence) {
     }
 
     return (long)t->fd_table[fd].offset;
+}
+
+long sys_fstat(int fd, struct stat *st) {
+    task_t *t = current_task();
+    if (!t || fd < 0 || fd >= MAX_FD || !t->fd_table[fd].valid)
+        return -VFS_EINVAL;
+
+    VfsStat vst;
+    if (vfs_stat(t->fd_table[fd].path, &vst) < 0)
+        return -VFS_EIO;
+
+    memset(st, 0, sizeof(struct stat));
+    st->st_size = (off_t)vst.size;
+    
+    if (vst.type == VFS_DIRECTORY) {
+        st->st_mode = S_IFDIR | 0755;
+    } else {
+        st->st_mode = S_IFREG | 0644;
+    }
+    
+    return 0;
 }
 
 void sys_exit(int code) {

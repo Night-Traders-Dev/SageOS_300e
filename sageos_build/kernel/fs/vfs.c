@@ -1,5 +1,6 @@
 #include "vfs.h"
 #include "console.h"
+#include "sage_libc_shim.h"
 #include <stddef.h>
 #include <string.h>
 #include "metal_vm.h"
@@ -132,8 +133,7 @@ MetalValue n_os_num_to_str(MetalVM* vm, MetalValue* args, int argc) {
     if (argc < 1 || args[0].type != MV_NUM) return mv_nil();
     char buf[32];
     union { double d; uint64_t u; } v; v.u = args[0].as.num_bits;
-    extern int sage_snprintf(char *buf, size_t n, const char *fmt, ...);
-    int n = sage_snprintf(buf, sizeof(buf), "%g", v.d);
+    int n = snprintf(buf, sizeof(buf), "%g", v.d);
     return mv_str(vm, buf, n);
 }
 

@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 
 #include "timer.h"
+#include "sage_alloc.h"
 
 struct timeval {
     long tv_sec;
@@ -35,10 +36,18 @@ long sys_fstat(int fd, struct stat *st);
 long sys_brk(uintptr_t addr);
 long sys_execve(const char *path, char *const argv[], char *const envp[]);
 long sys_waitpid(int pid, int *status, int options);
+long sys_unlink(const char *path);
+long sys_getdents64(int fd, void *dirp, size_t count);
+long sys_mkdir(const char *path, int mode);
+long sys_getcwd(char *buf, size_t size);
+long sys_chdir(const char *path);
+long sys_dup2(int oldfd, int newfd);
 long sys_gettimeofday(struct timeval *tv, void *tz);
 long sys_nanosleep(const struct timespec *req, struct timespec *rem);
 long sys_times(struct tms *buf);
 void sys_exit(int code);
+
+long sys_vfork(void);
 
 long syscall_dispatch(long num, long a1, long a2, long a3,
                       long a4, long a5) {
@@ -58,10 +67,24 @@ long syscall_dispatch(long num, long a1, long a2, long a3,
         return sys_lseek((int)a1, (off_t)a2, (int)a3);
     case SYS_brk:
         return sys_brk((uintptr_t)a1);
+    case SYS_vfork:
+        return sys_vfork();
     case SYS_execve:
         return sys_execve((const char *)a1, (char *const *)a2, (char *const *)a3);
     case SYS_waitpid:
         return sys_waitpid((int)a1, (int *)a2, (int)a3);
+    case SYS_unlink:
+        return sys_unlink((const char *)a1);
+    case SYS_getdents64:
+        return sys_getdents64((int)a1, (void *)a2, (size_t)a3);
+    case SYS_getcwd:
+        return sys_getcwd((char *)a1, (size_t)a2);
+    case SYS_chdir:
+        return sys_chdir((const char *)a1);
+    case SYS_dup2:
+        return sys_dup2((int)a1, (int)a2);
+    case SYS_mkdir:
+        return sys_mkdir((const char *)a1, (int)a2);
     case SYS_gettimeofday:
         return sys_gettimeofday((struct timeval *)a1, (void *)a2);
     case SYS_nanosleep:
@@ -210,6 +233,82 @@ long sys_fstat(int fd, struct stat *st) {
     return 0;
 }
 
+long sys_unlink(const char *path) {
+    return (long)vfs_unlink(path);
+}
+
+struct linux_dirent64 {
+    uint64_t        d_ino;
+    int64_t         d_off;
+    unsigned short  d_reclen;
+    unsigned char   d_type;
+    char            d_name[];
+};
+
+long sys_getdents64(int fd, void *dirp, size_t count) {
+    task_t *t = current_task();
+    if (!t || fd < 0 || fd >= MAX_FD || !t->fd_table[fd].valid)
+        return -VFS_EINVAL;
+
+    VfsDirEntry entries[VFS_DIRENT_MAX];
+    int n = vfs_readdir(t->fd_table[fd].path, entries, VFS_DIRENT_MAX);
+    if (n < 0) return (long)n;
+
+    uint8_t *out = (uint8_t *)dirp;
+    size_t total_size = 0;
+    
+    for (int i = 0; i < n; i++) {
+        size_t name_len = strlen(entries[i].name);
+        size_t reclen = (8 + 8 + 2 + 1 + name_len + 1 + 7) & ~7; /* Align to 8 */
+        
+        if (total_size + reclen > count) break;
+
+        struct linux_dirent64 *d = (struct linux_dirent64 *)(out + total_size);
+        d->d_ino = i + 1;
+        d->d_off = total_size + reclen;
+        d->d_reclen = (unsigned short)reclen;
+        d->d_type = (entries[i].type == VFS_DIRECTORY) ? 4 : 8; /* DT_DIR=4, DT_REG=8 */
+        strcpy(d->d_name, entries[i].name);
+        
+        total_size += reclen;
+    }
+    
+    return (long)total_size;
+}
+
+long sys_mkdir(const char *path, int mode) {
+    (void)mode;
+    return (long)vfs_mkdir(path);
+}
+
+long sys_getcwd(char *buf, size_t size) {
+    task_t *t = current_task();
+    if (!t) return -VFS_EINVAL;
+    if (strlen(t->cwd) >= size) return -VFS_ENOSPC;
+    strcpy(buf, t->cwd);
+    return (long)buf;
+}
+
+long sys_chdir(const char *path) {
+    task_t *t = current_task();
+    if (!t) return -VFS_EINVAL;
+    VfsStat st;
+    if (vfs_stat(path, &st) < 0) return -VFS_ENOENT;
+    if (st.type != VFS_DIRECTORY) return -VFS_ENOTDIR;
+    strncpy(t->cwd, path, 255);
+    return 0;
+}
+
+long sys_dup2(int oldfd, int newfd) {
+    task_t *t = current_task();
+    if (!t) return -VFS_EINVAL;
+    if (oldfd < 0 || oldfd >= MAX_FD || !t->fd_table[oldfd].valid) return -VFS_EINVAL;
+    if (newfd < 0 || newfd >= MAX_FD) return -VFS_EINVAL;
+    
+    t->fd_table[newfd] = t->fd_table[oldfd];
+    return newfd;
+}
+
 long sys_gettimeofday(struct timeval *tv, void *tz) {
     (void)tz;
     if (tv) {
@@ -228,12 +327,6 @@ long sys_nanosleep(const struct timespec *req, struct timespec *rem) {
     return 0;
 }
 
-long sys_waitpid(int pid, int *status, int options) {
-    (void)pid; (void)status; (void)options;
-    /* Basic stub for now */
-    return 0;
-}
-
 long sys_times(struct tms *buf) {
     if (buf) {
         memset(buf, 0, sizeof(struct tms));
@@ -242,17 +335,103 @@ long sys_times(struct tms *buf) {
     return (long)timer_ticks();
 }
 
-void sys_exit(int code) {
-    /* For now, just terminate the current thread */
-    /* In a full process model, this would clean up the task */
-    console_write("\n[Process Exit] code ");
-    console_u32((uint32_t)code);
-    console_write("\n");
+extern void thread_switch(uint64_t *prev, uint64_t *next);
+extern void thread_clone_and_switch(task_t *parent, task_t *child, uintptr_t offset);
+
+uint64_t copy_kernel_stack(task_t *parent, task_t *child, uint64_t parent_sp, uintptr_t is_parent_offset) {
+    uint64_t parent_stack_size = parent->stack_top - parent->stack_base;
+    memcpy((void*)child->stack_base, (void*)parent->stack_base, parent_stack_size);
     
-    /* We don't have a direct 'thread_exit' in scheduler.h, but we can sleep forever
-     * or call a future sched_terminate_thread.
-     */
-    while(1) {
-        /* Yield or wait */
+    uint64_t offset = parent_sp - parent->stack_base;
+    uint64_t child_sp = child->stack_base + offset;
+
+    child->rsp = child_sp;
+    parent->rsp = parent_sp; /* Optional, as we might not resume here via thread_switch */
+
+    volatile int *child_is_parent = (volatile int *)(child->stack_base + is_parent_offset);
+    *child_is_parent = 0;
+
+    return child_sp;
+}
+
+long sys_vfork(void) {
+    task_t *parent = current_task();
+    task_t *child = sched_create_thread("vfork_child", NULL, NULL, parent->priority);
+    if (!child) return -VFS_ENOSPC;
+
+    child->parent = parent;
+
+    /* Copy file descriptors */
+    for (int i = 0; i < MAX_FD; i++) {
+        child->fd_table[i] = parent->fd_table[i];
     }
+    child->heap_base = parent->heap_base;
+    child->heap_limit = parent->heap_limit;
+    child->heap_end = parent->heap_end;
+
+    volatile int is_parent = 1;
+    uintptr_t is_parent_offset = (uintptr_t)&is_parent - parent->stack_base;
+
+    parent->state = THREAD_STATE_BLOCKED;
+    
+    /* We must update g_current_task because thread_clone_and_switch bypasses sched_schedule */
+    extern thread_t *g_current_task;
+    g_current_task = child;
+    child->state = THREAD_STATE_RUNNING;
+
+    thread_clone_and_switch(parent, child, is_parent_offset);
+
+    /* When parent resumes, it must restore itself as current_task.
+       Actually, sched_schedule will do this! Because sched_schedule switches back to parent.
+       So when parent resumes here, g_current_task is already parent. */
+
+    if (is_parent) {
+        console_write("[sys_vfork] Returning to parent. child id=");
+        console_u32((uint32_t)child->id);
+        console_write("\n");
+        return child->id;
+    } else {
+        console_write("[sys_vfork] Returning to child.\n");
+        return 0;
+    }
+}
+
+extern int sched_get_thread_info(uint32_t index, char *name, thread_state_t *state, uint32_t *cpu);
+extern thread_t *sched_get_thread_by_id(uint32_t id);
+
+long sys_waitpid(int pid, int *status, int options) {
+    (void)options;
+    task_t *parent = current_task();
+    
+    while (1) {
+        task_t *child = sched_get_thread_by_id(pid);
+        if (!child) return -VFS_EINVAL;
+
+        if (child->state == THREAD_STATE_TERMINATED) {
+            if (status) *status = child->exit_code;
+            child->state = THREAD_STATE_UNUSED; /* reap */
+            return pid;
+        }
+
+        parent->state = THREAD_STATE_BLOCKED;
+        sched_schedule();
+    }
+}
+
+extern void sched_exit(void);
+
+void sys_exit(int code) {
+    task_t *t = current_task();
+    t->exit_code = code;
+    
+    if (t->parent) {
+        /* Restore parent's memory if we saved it */
+        if (t->parent->saved_elf_data) {
+            memcpy((void*)t->parent->elf_base, t->parent->saved_elf_data, t->parent->elf_size);
+            sage_free(t->parent->saved_elf_data);
+            t->parent->saved_elf_data = NULL;
+        }
+    }
+    
+    sched_exit();
 }

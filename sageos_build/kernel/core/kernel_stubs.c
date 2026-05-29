@@ -103,52 +103,7 @@ int sdhci_is_available(void) { return 0; }
 void status_refresh(void) {}
 void status_print(void) { console_write("\n[System Status: Normal]"); }
 
-// Scheduler stubs
-static thread_t g_main_task;
-static int g_sched_inited = 0;
-
-const sched_stats_t *sched_get_stats(void) {
-    static sched_stats_t dummy_stats = {100, 5, 2, 1000, 50, 1, 1};
-    return &dummy_stats;
-}
-
-void sched_cmd_info(void) {
-    console_write("\nScheduler: Single-tasking (GCC Port Enabled)");
-}
-
-thread_t *sched_current_thread(void) {
-    if (!g_sched_inited) {
-        /* Initialize the main task on first call */
-        for (int i = 0; i < 32; i++) {
-            g_main_task.fd_table[i].valid = 0;
-        }
-        /* Pre-populate stdin, stdout, stderr */
-        g_main_task.fd_table[0].valid = 1; /* stdin */
-        g_main_task.fd_table[1].valid = 1; /* stdout */
-        g_main_task.fd_table[2].valid = 1; /* stderr */
-        
-        g_main_task.id = 1;
-        g_main_task.heap_base = 0x4000000;  /* 64MB mark */
-        g_main_task.heap_end = 0x4000000;
-        g_main_task.heap_limit = 0x8000000; /* up to 128MB */
-        
-        g_sched_inited = 1;
-    }
-    return &g_main_task;
-}
-
-int sched_get_thread_info(uint32_t index, char *name, thread_state_t *state, uint32_t *cpu) {
-    if (index == 0) {
-        char *src = "idle";
-        char *d = name;
-        while (*src) *d++ = *src++;
-        *d = '\0';
-        *state = THREAD_STATE_RUNNING;
-        *cpu = 0;
-        return 1;
-    }
-    return 0;
-}
+// Scheduler stubs have been moved to scheduler.c
 
 // WiFi & QCA6174 stubs
 void qca6174_cmd_connect(const char* s) { (void)s; console_write("\nWiFi: Not supported on this platform."); }

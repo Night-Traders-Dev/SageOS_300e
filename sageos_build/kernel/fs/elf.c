@@ -113,12 +113,41 @@ int elf_exec(const void *data, uint64_t size, char *const argv[], char *const en
 }
 
 #include "vfs.h"
+#include "process.h"
+
 long sys_execve(const char *path, char *const argv[], char *const envp[]) {
     VfsStat st;
     if (vfs_stat(path, &st) < 0) return -VFS_ENOENT;
     void *buffer = sage_malloc(st.size);
     if (!buffer) return -VFS_ENOSPC;
     if (vfs_read(path, 0, buffer, st.size) != (int)st.size) { sage_free(buffer); return -VFS_EIO; }
+
+    task_t *t = current_task();
+    
+    /* If we have a parent (we are a vfork child), save the parent's memory */
+    if (t && t->parent && t->parent->elf_size > 0 && !t->parent->saved_elf_data) {
+        t->parent->saved_elf_data = sage_malloc(t->parent->elf_size);
+        if (t->parent->saved_elf_data) {
+            memcpy(t->parent->saved_elf_data, (void*)t->parent->elf_base, t->parent->elf_size);
+        }
+    }
+
+    /* Record our new ELF span */
+    if (t) {
+        const SageElf64_Ehdr *ehdr = (const SageElf64_Ehdr *)buffer;
+        const SageElf64_Phdr *phdr = (const SageElf64_Phdr *)((const uint8_t *)buffer + ehdr->e_phoff);
+        uintptr_t min_vaddr = -1ULL;
+        uintptr_t max_vaddr = 0;
+        for (int i = 0; i < ehdr->e_phnum; i++) {
+            if (phdr[i].p_type == PT_LOAD) {
+                if (phdr[i].p_vaddr < min_vaddr) min_vaddr = phdr[i].p_vaddr;
+                if (phdr[i].p_vaddr + phdr[i].p_memsz > max_vaddr) max_vaddr = phdr[i].p_vaddr + phdr[i].p_memsz;
+            }
+        }
+        t->elf_base = min_vaddr;
+        t->elf_size = max_vaddr - min_vaddr;
+    }
+
     int ret = elf_exec(buffer, st.size, argv, envp);
     sage_free(buffer);
     return (long)ret;

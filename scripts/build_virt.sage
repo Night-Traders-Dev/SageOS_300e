@@ -44,6 +44,7 @@ proc generate_virt_build(arch):
     let linker_script = linker.generate_script(ld_config)
 
     # 3. Write artifacts
+    boot_asm = replace(boot_asm, "stack_bottom:", ".global stack_bottom" + NL + "stack_bottom:")
     let boot_path = output_dir + "/boot.S"
     let linker_path = output_dir + "/linker.ld"
     io.writefile(boot_path, boot_asm)
@@ -64,6 +65,7 @@ proc generate_virt_build(arch):
         "sageos_build/kernel/core/dmesg.c",
         "sageos_build/kernel/core/bootlog.c",
         "sageos_build/kernel/core/kernel_stubs.c",
+        "sageos_build/kernel/core/scheduler.c",
         "sageos_build/kernel/shell/shell.c",
         "sageos_build/kernel/shell/shell_helper.c",
         "sageos_build/kernel/shell/extra_cmds.c",
@@ -76,12 +78,15 @@ proc generate_virt_build(arch):
     
     if arch == "x86_64":
         let _u = push(c_sources, "arch/x64/kernel/syscall_entry.S")
+        let _u2 = push(c_sources, "arch/x64/kernel/switch.S")
     end
     if arch == "aarch64":
         let _u = push(c_sources, "arch/arm64/kernel/syscall_entry.S")
+        let _u2 = push(c_sources, "arch/arm64/kernel/switch.S")
     end
     if arch == "riscv64":
         let _u = push(c_sources, "arch/rv64/kernel/syscall_entry.S")
+        let _u2 = push(c_sources, "arch/rv64/kernel/switch.S")
     end
 
     # 5. Construct build script

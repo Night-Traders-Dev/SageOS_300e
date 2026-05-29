@@ -96,10 +96,18 @@ void kmain(SageOSBootInfo *info) {
     /* Milestone 2: Execute userspace Hello World */
     console_write("Milestone 2: Attempting to exec /fat32/hello with args...\n");
     char *argv[] = {"/fat32/hello", "arg1", "arg2", NULL};
-    long res = syscall_dispatch(SYS_execve, (long)"/fat32/hello", (long)argv, 0, 0, 0);
-    console_write("Execve returned: ");
-    console_u32((uint32_t)res);
-    console_write("\n");
+    
+    long pid = syscall_dispatch(SYS_vfork, 0, 0, 0, 0, 0);
+    if (pid == 0) {
+        /* Child */
+        syscall_dispatch(SYS_execve, (long)"/fat32/hello", (long)argv, 0, 0, 0);
+        syscall_dispatch(SYS_exit, 1, 0, 0, 0, 0);
+    } else {
+        /* Parent */
+        int status;
+        syscall_dispatch(SYS_waitpid, pid, (long)&status, 0, 0, 0);
+        console_write("Child exited. Parent resuming.\n");
+    }
 
     console_write("\n[DEBUG] Before shell_run, swap is: ");
     console_u32(swap_is_available());

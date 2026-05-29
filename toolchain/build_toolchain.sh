@@ -51,10 +51,41 @@ step "Extracting sources..."
 [ ! -d "newlib-${NEWLIB_VER}" ] && tar -xf "newlib-${NEWLIB_VER}.tar.gz"
 
 # 2. Patch Sources
-step "Patching Binutils..."
-cp "binutils-${BINUTILS_VER}/config.sub" "binutils-${BINUTILS_VER}/config.sub.bak"
-sed -i 's/sage\*) |/sageos\* | sage\* |/g' "binutils-${BINUTILS_VER}/config.sub"
-# Note: Real patching would involve more robust sed or patch files
+step "Patching config.sub for all packages..."
+for dir in binutils-${BINUTILS_VER} gcc-${GCC_VER} newlib-${NEWLIB_VER}; do
+    if [ -f "$dir/config.sub" ]; then
+        cp "$dir/config.sub" "$dir/config.sub.bak"
+        # Add sageos to the accepted OS list. We look for uclinux as a known anchor.
+        sed -i 's/| uclinux\*/| sageos* | uclinux\*/g' "$dir/config.sub"
+    fi
+done
+
+step "Patching Binutils BFD..."
+cp "binutils-${BINUTILS_VER}/bfd/config.bfd" "binutils-${BINUTILS_VER}/bfd/config.bfd.bak"
+if ! grep -q "sageos" "binutils-${BINUTILS_VER}/bfd/config.bfd"; then
+    sed -i '/case "${targ}" in/a \
+  x86_64-*-sageos*) targ_defvec=x86_64_elf64_vec; targ_selvecs="i386_elf32_vec iamcu_vec x86_64_elf32_vec"; want64=true ;; \
+  aarch64-*-sageos*) targ_defvec=aarch64_elf64_le_vec; targ_selvecs="aarch64_elf64_be_vec aarch64_elf32_le_vec aarch64_elf32_be_vec"; want64=true ;; \
+  riscv64-*-sageos*) targ_defvec=riscv_elf64_vec; targ_selvecs="riscv_elf32_vec"; want64=true ;;' "binutils-${BINUTILS_VER}/bfd/config.bfd"
+fi
+
+step "Patching Binutils LD..."
+cp "binutils-${BINUTILS_VER}/ld/configure.tgt" "binutils-${BINUTILS_VER}/ld/configure.tgt.bak"
+if ! grep -q "sageos" "binutils-${BINUTILS_VER}/ld/configure.tgt"; then
+    sed -i '/case "${targ}" in/a \
+x86_64-*-sageos*) targ_emul=elf_x86_64; targ_extra_emuls="elf_i386";; \
+aarch64-*-sageos*) targ_emul=aarch64elf; targ_extra_emuls="aarch64elf32 aarch64elf32b aarch64elfb";; \
+riscv64-*-sageos*) targ_emul=elf64lriscv; targ_extra_emuls="elf32lriscv";;' "binutils-${BINUTILS_VER}/ld/configure.tgt"
+fi
+
+step "Patching Binutils GAS..."
+cp "binutils-${BINUTILS_VER}/gas/configure.tgt" "binutils-${BINUTILS_VER}/gas/configure.tgt.bak"
+if ! grep -q "sageos" "binutils-${BINUTILS_VER}/gas/configure.tgt"; then
+    sed -i '/case ${targ} in/a \
+  aarch64-*-sageos*) fmt=elf ;; \
+  i386-*-sageos*) fmt=elf ;; \
+  riscv-*-sageos*) fmt=elf ;;' "binutils-${BINUTILS_VER}/gas/configure.tgt"
+fi
 
 step "Patching GCC..."
 cp "${TOOLCHAIN_DIR}/gcc/config/sageos.h" "gcc-${GCC_VER}/gcc/config/"

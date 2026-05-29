@@ -53,8 +53,9 @@
 #define PF_R          0x4  /* Read */
 
 /* Allowed virtual address range for loaded ELF segments */
-#define ELF_VADDR_MIN 0x200000ULL
-#define ELF_VADDR_MAX 0x10000000ULL
+/* We broaden this to support different arch memory maps in single-address-space mode */
+#define ELF_VADDR_MIN 0x100000ULL
+#define ELF_VADDR_MAX 0xFF000000ULL
 
 /* -----------------------------------------------------------------------
  * ELF64 header

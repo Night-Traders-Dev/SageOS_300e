@@ -74,6 +74,13 @@ typedef struct thread {
     uintptr_t  heap_end;
     uintptr_t  heap_base;
     uintptr_t  heap_limit;
+    
+    struct thread *parent;
+    char      cwd[256]; /* Current Working Directory */
+    uintptr_t elf_base;
+    uint64_t  elf_size;
+    void     *saved_elf_data;
+    int       exit_code;
 } thread_t;
 
 typedef struct {

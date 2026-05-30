@@ -1,0 +1,18 @@
+[2J[HSageOS Virt Kernel Booting...
+
+[VFS] Bridge initialized successfully.
+virtio-blk: Initialized on transport 0x0000000010008000 (v1)
+
+FAT32: Mounted on primary master
+  partition start LBA: 2048
+  root cluster: 2
+  sectors per cluster: 8
+  fat size sectors: 8176
+SWAP: Registered swap on partition 3 (125MB) via VirtIO-blk
+[TRACE] After swap_init
+[TRACE] After bootlog_init
+[TRACE] After stage 2 set
+[TRACE] After sage_runtime_init
+[TRACE] After stage 3 set
+[TRACE] After sage_execute_init
+root@sageos:/# [0Kroot@sageos:/# [16G

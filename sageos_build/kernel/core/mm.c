@@ -44,6 +44,16 @@ static int pmm_is_frame_set(uint64_t frame) {
     return (pmm_bitmap[frame / 8] & (1 << (frame % 8)));
 }
 
+uint64_t pmm_count_used_frames(void) {
+    uint64_t count = 0;
+    for (uint64_t i = 0; i < pmm_total_frames; i++) {
+        if (pmm_is_frame_set(i)) {
+            count++;
+        }
+    }
+    return count;
+}
+
 void phys_init(SageOSBootInfo *info) {
     memset(pmm_bitmap, 0xFF, BITMAP_SIZE); // Mark all as reserved initially
     

@@ -542,12 +542,13 @@ proc cmd_neofetch():
         "                  ",
         "                  ",
         "                  ",
+        "                  ",
         "                  "
     ]
 
     os_write_char(10)
     let i = 0
-    while i < 12:
+    while i < 13:
         os_set_color_hex(0x79FFB0)
         os_write_str(logo[i])
         os_write_str("  ")
@@ -602,6 +603,16 @@ proc cmd_neofetch():
             os_write_str(os_num_to_str(os_ram_total_mb()))
             os_write_str(" MB")
         elif i == 11:
+            if os_swap_total_mb() > 0:
+                neofetch_label("Swap:     ")
+                os_write_str(os_num_to_str(os_swap_used_mb()))
+                os_write_str(" MB / ")
+                os_write_str(os_num_to_str(os_swap_total_mb()))
+                os_write_str(" MB")
+            else:
+                neofetch_label("Colors:   ")
+                neofetch_colors()
+        elif i == 12:
             neofetch_label("Colors:   ")
             neofetch_colors()
         

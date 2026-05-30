@@ -195,20 +195,31 @@ proc main():
         
         # MEM Box
         let mem_w = (cols * 30) / 100
-        let mem_h = 10
+        let mem_h = 12
         draw_box(2, cpu_w + 1, mem_w, mem_h, "MEM", FG_MAGENTA)
         
         move_cursor(3, cpu_w + 3)
         os_write_str("RAM " + os_num_to_str(mem_used / (1024*1024)) + "MB / " + os_num_to_str(mem_total / (1024*1024)) + "MB")
         draw_bar(4, cpu_w + 3, mem_w - 6, mem_pct, 100, FG_MAGENTA)
         
-        move_cursor(6, cpu_w + 3)
+        let swp_total = os_swap_total_mb()
+        let swp_used = os_swap_used_mb()
+        let swp_pct = 0
+        if swp_total > 0:
+            swp_pct = (swp_used * 100) / swp_total
+        end
+        
+        move_cursor(5, cpu_w + 3)
+        os_write_str("SWP " + os_num_to_str(swp_used) + "MB / " + os_num_to_str(swp_total) + "MB")
+        draw_bar(6, cpu_w + 3, mem_w - 6, swp_pct, 100, FG_YELLOW)
+        
+        move_cursor(8, cpu_w + 3)
         os_write_str(FG_MAGENTA + "History" + RESET)
-        draw_graph(7, cpu_w + 3, mem_w - 6, mem_history, FG_MAGENTA)
+        draw_graph(9, cpu_w + 3, mem_w - 6, mem_history, FG_MAGENTA)
         
         # Task Box
         let task_w = cols - cpu_w - mem_w
-        let task_h = 10
+        let task_h = 12
         draw_box(2, cpu_w + mem_w + 1, task_w, task_h, "TASKS", FG_YELLOW)
         
         let tasks = os_get_tasks()

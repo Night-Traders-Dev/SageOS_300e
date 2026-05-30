@@ -18,6 +18,8 @@ typedef struct {
 
 int swap_init(void);
 int swap_is_available(void);
+uint64_t swap_total_bytes(void);
+uint64_t swap_used_bytes(void);
 void swap_info(void);
 
 #endif

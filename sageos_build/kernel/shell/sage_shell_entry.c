@@ -752,6 +752,12 @@ static MetalValue n_swap_info(MetalVM *vm, MetalValue *a, int c) {
 static MetalValue n_swap_available(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; return mv_dbl((double)swap_is_available());
 }
+static MetalValue n_os_swap_total_mb(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;(void)a;(void)c; return mv_dbl((double)(swap_total_bytes() / 1024 / 1024));
+}
+static MetalValue n_os_swap_used_mb(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;(void)a;(void)c; return mv_dbl((double)(swap_used_bytes() / 1024 / 1024));
+}
 static MetalValue n_is_qemu(MetalVM *vm, MetalValue *a, int c) {
     (void)vm;(void)a;(void)c; return mv_dbl((double)sysinfo_is_qemu());
 }
@@ -995,6 +1001,8 @@ static void register_natives(MetalVM *vm) {
     REG("os_reboot",        n_reboot);
     REG("os_swap_info",     n_swap_info);
     REG("os_swap_available",n_swap_available);
+    REG("os_swap_total_mb", n_os_swap_total_mb);
+    REG("os_swap_used_mb",  n_os_swap_used_mb);
     REG("os_is_qemu",       n_is_qemu);
     REG("os_qemu_exit",     n_qemu_exit);
     REG("os_sage_exec",     n_sage_exec);

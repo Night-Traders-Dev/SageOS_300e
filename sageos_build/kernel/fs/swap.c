@@ -67,6 +67,18 @@ int swap_is_available(void) {
     return g_swap.active;
 }
 
+uint64_t swap_total_bytes(void) {
+    if (g_swap.active) {
+        return g_swap.size_bytes;
+    }
+    return 0;
+}
+
+uint64_t swap_used_bytes(void) {
+    // Return 0 for now as swap paging is not yet fully implemented
+    return 0;
+}
+
 void swap_info(void) {
     if (!g_swap.active) {
         console_write("\n  [--] No swap device active (" BLKDEV_NAME " not detected)");

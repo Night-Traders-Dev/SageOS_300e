@@ -45,7 +45,7 @@ extern uint64_t pmm_total_frames;
 extern uint64_t pmm_used_frames;
 #define PAGE_SIZE 4096
 uint64_t ram_total_bytes(void) { return pmm_total_frames * PAGE_SIZE; }
-uint64_t ram_used_bytes(void) { return pmm_used_frames * PAGE_SIZE; }
+uint64_t ram_used_bytes(void) { return pmm_count_used_frames() * PAGE_SIZE; }
 
 // Battery & SDHCI stubs
 int battery_percent(void) { return -1; }

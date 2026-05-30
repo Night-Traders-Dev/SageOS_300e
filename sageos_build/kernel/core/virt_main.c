@@ -191,6 +191,9 @@ void kmain(SageOSBootInfo *info) {
         console_write("Child exited. Parent resuming.\n");
     }
 
+    extern void cmd_dmesg(void);
+    cmd_dmesg();
+
     // Launch interactive C shell
     shell_run();
 }

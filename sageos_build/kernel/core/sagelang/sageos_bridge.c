@@ -92,10 +92,10 @@ void sage_runtime_init(void) {
 extern void sage_execute(const char* mod);
 
 void sage_execute_init(void) {
-    dmesg_log("RUNTIME: Executing System Service Activation script (/system/init.sage)...");
+    dmesg_log("RUNTIME: Executing System Service Activation script (/etc/init.sage)...");
     // For now, we'll try to execute it as direct code if it exists as a file
     // In the future, this will be handled by the module loader
-    sage_execute("/system/init.sage");
+    sage_execute("/etc/init.sage");
 }
 
 void sage_import_module(void* vm, const char* name) {
@@ -146,7 +146,9 @@ void sage_execute(const char* mod) {
     
     // Check if mod is a file path
     VfsStat st;
+    dmesg_printf("sage_execute: checking if %s is a file...", mod);
     if (vfs_stat(mod, &st) == VFS_OK && st.type == VFS_FILE) {
+        dmesg_printf("sage_execute: executing file %s (size %d)", mod, (int)st.size);
         char* source = (char*)malloc((size_t)st.size + 1);
         if (source) {
             vfs_read(mod, 0, source, (size_t)st.size);
@@ -154,16 +156,24 @@ void sage_execute(const char* mod) {
             Stmt* program = sage_parse_string(source);
             if (program) {
                 interpret(program, g_sage_env);
+                dmesg_printf("sage_execute: file %s executed.", mod);
+            } else {
+                dmesg_printf("sage_execute: failed to parse %s", mod);
             }
             free(source);
+        } else {
+            dmesg_printf("sage_execute: malloc failed for %d bytes", (int)st.size);
         }
         return;
     }
 
     // Otherwise treat as direct code
+    dmesg_printf("sage_execute: treating %s as direct code", mod);
     Stmt* program = sage_parse_string(mod);
     if (program) {
         interpret(program, g_sage_env);
+    } else {
+        dmesg_printf("sage_execute: failed to parse direct code.");
     }
 }
 

@@ -57,6 +57,12 @@ if [[ ! -f "$SAGE_BIN" ]]; then
     (cd sageos_build/sage_lang/core && make)
 fi
 
+recompile_sage() {
+    log_info "Recompiling Sage components to bytecode..."
+    bash scripts/compile_vfs_bridge.sh "$SAGE_BIN"
+    bash scripts/compile_sage_shell.sh "$SAGE_BIN"
+}
+
 # Ensure virt disk image exists
 if [[ ! -f "virt.img" ]]; then
     log_info "Creating virtual disk image..."
@@ -94,16 +100,15 @@ case "$ARCH" in
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
                     log_info "Building actual SageOS Kernel for ARM64 virt..."
+                    recompile_sage
                     mkdir -p build
                     $SAGE_BIN scripts/build_virt.sage
                     bash build/virt_aarch64/build.sh
                     mkdir -p "$BUILD_DIR/arm64_virt"
                     cp build/virt_aarch64/kernel.elf "$BUILD_DIR/arm64_virt/kernel.elf"
                     
-                    if [ -d "/home/kraken/sageos-native-dist" ]; then
-                        log_info "Installing native toolchain into disk image..."
-                        bash ./scripts/install_toolchain.sh arm64 "/home/kraken/sageos-native-dist"
-                    fi
+                    log_info "Ensuring native toolchain is installed in disk image..."
+                    bash ./scripts/install_toolchain.sh arm64
                 fi
 
                 if [[ "$ACTION" == "run" ]]; then
@@ -126,16 +131,15 @@ case "$ARCH" in
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
                     log_info "Building actual SageOS Kernel for x86_64 virt..."
+                    recompile_sage
                     mkdir -p build
                     $SAGE_BIN scripts/build_virt.sage
                     bash build/virt_x86_64/build.sh
                     mkdir -p "$BUILD_DIR/x64_virt"
                     cp build/virt_x86_64/kernel.elf "$BUILD_DIR/x64_virt/kernel.elf"
 
-                    if [ -d "/home/kraken/sageos-native-dist" ]; then
-                        log_info "Installing native toolchain into disk image..."
-                        bash ./scripts/install_toolchain.sh x86_64 "/home/kraken/sageos-native-dist"
-                    fi
+                    log_info "Ensuring native toolchain is installed in disk image..."
+                    bash ./scripts/install_toolchain.sh x86_64
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then
@@ -179,16 +183,15 @@ case "$ARCH" in
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
                     log_info "Building actual SageOS Kernel for RISCV64 virt..."
+                    recompile_sage
                     mkdir -p build
                     $SAGE_BIN scripts/build_virt.sage
                     bash build/virt_riscv64/build.sh
                     mkdir -p "$BUILD_DIR/rv64_virt"
                     cp build/virt_riscv64/kernel.elf "$BUILD_DIR/rv64_virt/kernel.elf"
 
-                    if [ -d "/home/kraken/sageos-native-dist" ]; then
-                        log_info "Installing native toolchain into disk image..."
-                        bash ./scripts/install_toolchain.sh riscv64 "/home/kraken/sageos-native-dist"
-                    fi
+                    log_info "Ensuring native toolchain is installed in disk image..."
+                    bash ./scripts/install_toolchain.sh riscv64
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then

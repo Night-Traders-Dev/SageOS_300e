@@ -362,14 +362,17 @@ proc vfs_unlink(path):
 # -----------------------------------------------------------------------------
 proc vfs_init_fs():
     # Pre-create standard layout
-    ramfs_mkdir("/etc")
-    ramfs_mkdir("/etc/commands")
     ramfs_mkdir("/bin")
     ramfs_mkdir("/dev")
+    ramfs_mkdir("/etc")
+    ramfs_mkdir("/etc/commands")
+    ramfs_mkdir("/lib")
+    ramfs_mkdir("/mnt")
+    ramfs_mkdir("/mnt/fat32")
+    ramfs_mkdir("/mnt/btrfs")
+    ramfs_mkdir("/opt")
     ramfs_mkdir("/proc")
     ramfs_mkdir("/tmp")
-    ramfs_mkdir("/fat32")
-    ramfs_mkdir("/btrfs")
 
     # Fetch and populate all C-embedded files dynamically
     let count = os_get_embedded_count()

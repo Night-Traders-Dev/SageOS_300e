@@ -25,23 +25,23 @@ extern "C" {
 // ============================================================================
 
 #ifndef METAL_STACK_SIZE
-#define METAL_STACK_SIZE      1024    // Value stack depth
+#define METAL_STACK_SIZE      2048    // Value stack depth
 #endif
 
 #ifndef METAL_POOL_SIZE
-#define METAL_POOL_SIZE       1024    // Object pool entries
+#define METAL_POOL_SIZE       2048    // Object pool entries
 #endif
 
 #ifndef METAL_STRING_POOL
-#define METAL_STRING_POOL     262144  // String storage bytes
+#define METAL_STRING_POOL     1048576 // String storage bytes (1MB)
 #endif
 
 #ifndef METAL_HEAP_SIZE
-#define METAL_HEAP_SIZE       2097152 // General heap bytes (bump allocator)
+#define METAL_HEAP_SIZE       4194304 // General heap bytes (4MB)
 #endif
 
 #ifndef METAL_CONST_POOL
-#define METAL_CONST_POOL      1024    // Constant pool entries
+#define METAL_CONST_POOL      4096    // Constant pool entries
 #endif
 
 #ifndef METAL_ENV_DEPTH
@@ -196,13 +196,13 @@ struct MetalVM {
     int scope_depth;
 
     // Object pools (no malloc — fixed-size arenas)
-    MetalArray arrays[512];
+    MetalArray arrays[1024];
     int array_count;
 
-    MetalDict dicts[512];
+    MetalDict dicts[1024];
     int dict_count;
 
-    MetalFunction functions[256];
+    MetalFunction functions[1024];
     int fn_count;
 
     // String pool (bump allocator)

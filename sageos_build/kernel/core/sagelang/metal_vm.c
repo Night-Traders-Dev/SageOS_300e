@@ -349,13 +349,15 @@ void metal_string_concat(MetalVM* vm, int idx_a, int idx_b, int* out_idx) {
     if (la < 0 || lb < 0 || la > 0x3FFFFFFF || lb > 0x3FFFFFFF) { *out_idx = -1; return; }
     int total = la + lb;
     
-    if (vm->string_used + total + 1 > METAL_STRING_POOL) { *out_idx = -1; return; }
-    char* dest = &vm->strings[vm->string_used];
-    memcpy(dest, a, (unsigned long)la);
-    memcpy(dest + la, b, (unsigned long)lb);
-    dest[total] = '\0';
-    *out_idx = vm->string_used;
-    vm->string_used += total + 1;
+    // Check if combined length is reasonable
+    if (total > 4096) { *out_idx = -1; return; }
+    
+    char tmp[4097];
+    memcpy(tmp, a, (unsigned long)la);
+    memcpy(tmp + la, b, (unsigned long)lb);
+    tmp[total] = '\0';
+    
+    *out_idx = metal_string_intern(vm, tmp, total);
 }
 
 void metal_num_to_str(MetalVM* vm, long long n, int* out_idx) {

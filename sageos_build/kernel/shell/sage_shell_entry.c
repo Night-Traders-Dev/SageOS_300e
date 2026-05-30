@@ -179,6 +179,14 @@ static MetalValue n_cursor_home(MetalVM *vm, MetalValue *a, int c) {
     (void)vm; (void)a; (void)c; console_set_cursor(0,0); return mv_nil();
 }
 
+static MetalValue n_move_cursor(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm;
+    uint32_t row = (uint32_t)arg_num(a, c, 0);
+    uint32_t col = (uint32_t)arg_num(a, c, 1);
+    console_set_cursor(row - 1, col - 1); // Sage uses 1-based for UI usually
+    return mv_nil();
+}
+
 static void serial_raw(const char *s) {
     while (*s) serial_putc(*s++);
 }
@@ -895,6 +903,7 @@ static void register_natives(MetalVM *vm) {
     /* Console */
     REG("os_console_clear", n_console_clear);
     REG("os_cursor_home",   n_cursor_home);
+    REG("os_move_cursor",   n_move_cursor);
     REG("os_input_begin",   n_input_begin);
     REG("os_line_redraw",   n_line_redraw);
     REG("os_terminal_size", n_os_get_terminal_size);

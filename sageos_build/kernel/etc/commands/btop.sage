@@ -42,7 +42,7 @@ let B_CJ = os_chr(226) + os_chr(148) + os_chr(188) # ┼
 
 # --- Helpers ---
 proc move_cursor(row, col):
-    os_write_str(ESC + "[" + os_num_to_str(row) + ";" + os_num_to_str(col) + "H")
+    os_move_cursor(row, col)
 end
 
 proc get_braille_char(bits):
@@ -88,20 +88,7 @@ end
 proc draw_bar(row, col, width, val, max_val, color):
     move_cursor(row, col)
     os_write_str(color)
-    let pct = (val * 100) / max_val
-    if pct > 100: pct = 100 end
-    
-    let fill = (width * pct) / 100
-    let i = 0
-    while i < fill:
-        os_write_str("#")
-        i = i + 1
-    end
-    os_write_str(FG_GRAY)
-    while i < width:
-        os_write_str("-")
-        i = i + 1
-    end
+    os_draw_bar(val, max_val, width)
     os_write_str(RESET)
 end
 

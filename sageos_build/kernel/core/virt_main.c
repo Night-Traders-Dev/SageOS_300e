@@ -104,7 +104,16 @@ static void setup_vectors(void) {
 }
 #endif
 
+#include "boot_stages.h"
+#include "phys_alloc.h"
+#include "vmm.h"
+
+extern void sage_runtime_init(void);
+
 void kmain(SageOSBootInfo *info) {
+    // --- STAGE 1: Early Kernel Initialization ---
+    sageos_set_boot_stage(STAGE_1_KERNEL_INIT);
+    
     serial_init();
     
     // Initialize console, keyboard, VFS, RamFS
@@ -118,9 +127,11 @@ void kmain(SageOSBootInfo *info) {
     setup_vectors();
 #endif
     
+    phys_init(info);
+    vmm_init();
+    
     keyboard_init();
     vfs_init();
-
 
     // Initialize block device subsystem (ATA/Virtio)
     ata_init();
@@ -144,11 +155,25 @@ void kmain(SageOSBootInfo *info) {
 
     swap_init();
     bootlog_init(info);
+    
+    // --- STAGE 2: Runtime Bring-up ---
+    sageos_set_boot_stage(STAGE_2_RUNTIME_BRINGUP);
+    sage_runtime_init();
+
     dmesg_log("SageOS Virt Kernel initialization complete.");
     
     /* GCC Port Phase 0: Syscall Smoke Test */
     dmesg_log("Syscall Smoke Test: Calling SYS_write to stdout...");
     syscall_dispatch(SYS_write, 1, (long)"[SYSCALL TEST] Hello via syscall_dispatch\n", 42, 0, 0);
+
+    // --- STAGE 3: System Service Activation ---
+    sageos_set_boot_stage(STAGE_3_SERVICE_ACTIVATION);
+    // Future: launch VFS service, device manager, etc.
+    extern void sage_execute_init(void);
+    sage_execute_init();
+
+    // --- Userspace Session ---
+    sageos_set_boot_stage(STAGE_USERSPACE_SESSION);
 
     /* Milestone 2: Execute userspace Hello World */
     console_write("Milestone 2: Attempting to exec /mnt/fat32/hello with args...\n");

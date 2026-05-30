@@ -75,6 +75,26 @@ void sage_repl_init(void) {
     }
 }
 
+void sage_runtime_init(void) {
+    dmesg_log("RUNTIME: Initializing SGVM Core...");
+    sage_repl_init();
+    
+    // In the future, this will also:
+    // - initialize runtime object allocator
+    // - initialize IPC namespace
+    // - initialize service registry
+    // - initialize capability manager
+    
+    dmesg_log("RUNTIME: SGVM Runtime Bring-up complete.");
+}
+
+void sage_execute_init(void) {
+    dmesg_log("RUNTIME: Executing System Service Activation script (/system/init.sage)...");
+    // For now, we'll try to execute it as direct code if it exists as a file
+    // In the future, this will be handled by the module loader
+    sage_execute("/system/init.sage");
+}
+
 void sage_import_module(void* vm, const char* name) {
     (void)vm;
     sage_repl_init();

@@ -1,4 +1,4 @@
-# SageOS v0.4.0 - The Modular Hybrid Operating System
+# SageOS v0.4.3 - The Modular Hybrid Operating System
 
 SageOS is a hybrid operating system that combines a low-level C kernel with a high-level, SageLang-driven runtime. It is designed to be modular, portable, and extensible across multiple architectures.
 

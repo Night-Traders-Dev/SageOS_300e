@@ -15,14 +15,14 @@ let fat32_avail = false
 try:
     os.vfs.stat("/fat32")
     fat32_avail = true
-catch:
+catch e:
     fat32_avail = false
 
 let btrfs_avail = false
 try:
     os.vfs.stat("/btrfs")
     btrfs_avail = true
-catch:
+catch e:
     btrfs_avail = false
 
 if fat32_avail:

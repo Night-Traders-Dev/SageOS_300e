@@ -318,46 +318,58 @@ proc vfs_readdir(path):
     # Also add mount points that are children of this path
     let i = 0
     let m_count = os_array_len(g_vfs_mounts)
-    let p_len = os_strlen(path)
-    if os_char_at(path, p_len - 1) == 47 and p_len > 1:
-        p_len = p_len - 1
+    
+    # Ensure path ends with slash for prefix matching children
+    let p_norm = path
+    if os_strlen(p_norm) > 0:
+        if os_char_at(p_norm, os_strlen(p_norm) - 1) != 47:
+            p_norm = p_norm + "/"
+        end
+    else:
+        p_norm = "/"
     end
+    let p_len = os_strlen(p_norm)
 
     while i < m_count:
         let m = g_vfs_mounts[i]
         let m_path = m["path"]
-        if m_path != "/" and m_path != path:
-            if os_starts_with(m_path, path):
-                # Check if it's a direct child
-                let sub = os_substr(m_path, p_len, os_strlen(m_path))
-                if os_char_at(sub, 0) == 47:
-                    sub = os_substr(sub, 1, os_strlen(sub))
+        
+        # If mount point is a child of the requested path
+        if os_starts_with(m_path, p_norm) and m_path != "/" and m_path != path:
+            # Extract the component name after the current path
+            let sub = os_substr(m_path, p_len, os_strlen(m_path))
+            
+            # Find the first component
+            let j = 0
+            let comp_name = ""
+            while j < os_strlen(sub):
+                let c = os_char_at(sub, j)
+                if c == 47: # Slash
+                    break
+                end
+                comp_name = comp_name + os_chr(c)
+                j = j + 1
+            end
+
+            if os_strlen(comp_name) > 0:
+                # Check if already in entries
+                let found = 0
+                let k = 0
+                let ent_count = os_array_len(entries)
+                while k < ent_count:
+                    if entries[k]["name"] == comp_name:
+                        found = 1
+                        break
+                    end
+                    k = k + 1
                 end
                 
-                # If sub has no more slashes, it's a direct child
-                let j = 0
-                let has_slash = 0
-                while j < os_strlen(sub):
-                    if os_char_at(sub, j) == 47: has_slash = 1 break end
-                    j = j + 1
-                end
-
-                if has_slash == 0 and os_strlen(sub) > 0:
-                    # Check if already in entries
-                    let found = 0
-                    let k = 0
-                    while k < os_array_len(entries):
-                        if entries[k]["name"] == sub: found = 1 break end
-                        k = k + 1
-                    end
-                    
-                    if found == 0:
-                        let entry = {}
-                        entry["name"] = sub
-                        entry["type"] = 1 # Directory
-                        entry["size"] = 0
-                        os_array_push(entries, entry)
-                    end
+                if found == 0:
+                    let entry = {}
+                    entry["name"] = comp_name
+                    entry["type"] = 1 # Directory
+                    entry["size"] = 0
+                    os_array_push(entries, entry)
                 end
             end
         end

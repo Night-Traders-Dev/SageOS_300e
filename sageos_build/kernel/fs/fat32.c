@@ -204,8 +204,28 @@ static int fat32_update_directory_entry(uint32_t cluster, const char *name, FAT3
     return 0;
 }
 
+typedef struct {
+    uint8_t  order;         /* sequence number, bit 6 is set if last */
+    uint16_t name1[5];      /* chars 1-5 */
+    uint8_t  attr;          /* always 0x0F */
+    uint8_t  type;          /* always 0 */
+    uint8_t  checksum;
+    uint16_t name2[6];      /* chars 6-11 */
+    uint16_t first_cluster; /* always 0 */
+    uint16_t name3[2];      /* chars 12-13 */
+} __attribute__((packed)) FAT32_LFNEntry;
+
+static void fat32_lfn_to_name(const FAT32_LFNEntry *lfn, char *name_buf, int offset) {
+    /* Basic Unicode to ASCII conversion (taking lower byte) */
+    for (int i = 0; i < 5; i++) name_buf[offset + i] = (char)(lfn->name1[i] & 0xFF);
+    for (int i = 0; i < 6; i++) name_buf[offset + 5 + i] = (char)(lfn->name2[i] & 0xFF);
+    for (int i = 0; i < 2; i++) name_buf[offset + 11 + i] = (char)(lfn->name3[i] & 0xFF);
+}
+
 static int fat32_find_entry_in_cluster(uint32_t cluster, const char *name, FAT32_DirEntry *out_entry) {
     uint8_t sector[512];
+    char lfn_name[256];
+    int lfn_active = 0;
 
     while (!fat32_is_end_of_chain(cluster)) {
         for (uint32_t sector_idx = 0; sector_idx < fat32_sectors_per_cluster; sector_idx++) {
@@ -220,27 +240,46 @@ static int fat32_find_entry_in_cluster(uint32_t cluster, const char *name, FAT32
                 }
 
                 if ((uint8_t)entry->name[0] == 0xE5) {
+                    lfn_active = 0;
                     continue;
                 }
 
                 if (entry->attr == FAT32_ATTR_LONG_NAME) {
+                    FAT32_LFNEntry *lfn = (FAT32_LFNEntry *)entry;
+                    int order = lfn->order & 0x1F;
+                    if (order > 0 && order <= 20) {
+                        fat32_lfn_to_name(lfn, lfn_name, (order - 1) * 13);
+                        if (lfn->order & 0x40) {
+                            /* Last entry in sequence, ensure null termination */
+                            int len = order * 13;
+                            if (len < 256) lfn_name[len] = 0;
+                        }
+                        lfn_active = 1;
+                    }
                     continue;
                 }
 
-                char entry_name[13];
-                size_t len = 0;
-                for (size_t i = 0; i < 8 && entry->name[i] != ' '; i++) {
-                    entry_name[len++] = entry->name[i];
-                }
-                if (entry->ext[0] != ' ') {
-                    entry_name[len++] = '.';
-                    for (size_t i = 0; i < 3 && entry->ext[i] != ' '; i++) {
-                        entry_name[len++] = entry->ext[i];
+                char entry_name[256];
+                if (lfn_active) {
+                    /* Ensure null termination at first 0xFFFF or 0x0000 in Unicode */
+                    /* But our simple lfn_to_name just copies, so we should find the actual end */
+                    int len = 0;
+                    while (len < 255 && lfn_name[len] != '\0' && (uint8_t)lfn_name[len] != 0xFF) len++;
+                    lfn_name[len] = 0;
+                    strncpy(entry_name, lfn_name, 255);
+                } else {
+                    size_t len = 0;
+                    for (size_t i = 0; i < 8 && entry->name[i] != ' '; i++) entry_name[len++] = entry->name[i];
+                    if (entry->ext[0] != ' ') {
+                        entry_name[len++] = '.';
+                        for (size_t i = 0; i < 3 && entry->ext[i] != ' '; i++) entry_name[len++] = entry->ext[i];
                     }
+                    entry_name[len] = 0;
                 }
-                entry_name[len] = 0;
+                
+                lfn_active = 0; /* Reset for next entry */
 
-                if (len > 0 && entry_name[0] != '\0' && streq(entry_name, name)) {
+                if (streq(entry_name, name)) {
                     for (size_t i = 0; i < sizeof(FAT32_DirEntry); i++) {
                         ((uint8_t *)out_entry)[i] = ((uint8_t *)entry)[i];
                     }
@@ -265,7 +304,7 @@ static int fat32_find_root_entry(const char *path, FAT32_DirEntry *out_entry) {
     }
 
     uint32_t current_cluster = fat32_root_cluster;
-    char segment[13];
+    char segment[256];
     size_t i = 0;
 
     while (1) {
@@ -573,6 +612,8 @@ int fat32_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
 
     uint8_t sector[512];
     int count = 0;
+    char lfn_name[256];
+    int lfn_active = 0;
 
     while (!fat32_is_end_of_chain(cluster) && count < max_entries) {
         for (uint32_t sector_idx = 0; sector_idx < fat32_sectors_per_cluster; sector_idx++) {
@@ -583,10 +624,36 @@ int fat32_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
                 FAT32_DirEntry *e = (FAT32_DirEntry *)(sector + offset);
 
                 if ((uint8_t)e->name[0] == 0x00) goto done;
-                if ((uint8_t)e->name[0] == 0xE5) continue;
-                if (e->attr == FAT32_ATTR_LONG_NAME) continue;
+                if ((uint8_t)e->name[0] == 0xE5) {
+                    lfn_active = 0;
+                    continue;
+                }
 
-                fat32_entry_to_name(e, entries[count].name, VFS_NAME_MAX);
+                if (e->attr == FAT32_ATTR_LONG_NAME) {
+                    FAT32_LFNEntry *lfn = (FAT32_LFNEntry *)e;
+                    int order = lfn->order & 0x1F;
+                    if (order > 0 && order <= 20) {
+                        fat32_lfn_to_name(lfn, lfn_name, (order - 1) * 13);
+                        if (lfn->order & 0x40) {
+                            int len = order * 13;
+                            if (len < 256) lfn_name[len] = 0;
+                        }
+                        lfn_active = 1;
+                    }
+                    continue;
+                }
+
+                if (lfn_active) {
+                    int len = 0;
+                    while (len < 255 && lfn_name[len] != '\0' && (uint8_t)lfn_name[len] != 0xFF) len++;
+                    lfn_name[len] = 0;
+                    strncpy(entries[count].name, lfn_name, VFS_NAME_MAX - 1);
+                    entries[count].name[VFS_NAME_MAX - 1] = 0;
+                } else {
+                    fat32_entry_to_name(e, entries[count].name, VFS_NAME_MAX);
+                }
+                
+                lfn_active = 0;
                 entries[count].type = (e->attr & FAT32_ATTR_DIRECTORY) ? VFS_DIRECTORY : VFS_FILE;
                 entries[count].size = e->file_size;
                 count++;

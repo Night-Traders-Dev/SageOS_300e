@@ -330,6 +330,13 @@ static MetalValue n_os_debug_val(MetalVM* vm, MetalValue* args, int argc) {
     return mv_nil();
 }
 
+static MetalValue n_os_chr(MetalVM* vm, MetalValue* args, int argc) {
+    if (argc < 1 || args[0].type != MV_NUM) return mv_str(vm, "", 0);
+    union { double d; uint64_t u; } v; v.u = args[0].as.num_bits;
+    char c = (char)v.d;
+    return mv_str(vm, &c, 1);
+}
+
 void vfs_bridge_init(void) {
     if (g_vfs_vm_inited) return;
     metal_vm_init(&g_vfs_vm);
@@ -350,6 +357,7 @@ void vfs_bridge_init(void) {
     metal_vm_register_native(&g_vfs_vm, "os_backend_write", n_os_backend_write);
     metal_vm_register_native(&g_vfs_vm, "os_substr", n_os_substr);
     metal_vm_register_native(&g_vfs_vm, "os_char_at", n_os_char_at);
+    metal_vm_register_native(&g_vfs_vm, "os_chr", n_os_chr);
     metal_vm_register_native(&g_vfs_vm, "os_get_embedded_count", n_os_get_embedded_count);
     metal_vm_register_native(&g_vfs_vm, "os_get_embedded_file", n_os_get_embedded_file);
     metal_vm_register_native(&g_vfs_vm, "os_debug_val", n_os_debug_val);

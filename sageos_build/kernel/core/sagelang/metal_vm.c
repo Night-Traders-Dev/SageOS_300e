@@ -1095,9 +1095,9 @@ int metal_vm_run(MetalVM* vm) {
     int count = 0;
     while (metal_vm_step(vm)) {
         count++;
-        if (count == 50000) {
+        if (count == 5000000) {
             extern void dmesg_printf(const char* fmt, ...);
-            dmesg_printf("VM looped 50000 times! IP=%d, code_len=%d, sp=%d, halted=%d, error=%d", vm->ip, vm->code_length, vm->sp, vm->halted, vm->error);
+            dmesg_printf("VM looped 5000000 times! IP=%d, code_len=%d, sp=%d, halted=%d, error=%d", vm->ip, vm->code_length, vm->sp, vm->halted, vm->error);
             break;
         }
     }

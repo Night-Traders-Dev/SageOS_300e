@@ -895,8 +895,6 @@ void shell_exec_command(const char *cmd) {
 }
 
 void shell_run(void) {
-    console_write("\n[DEBUG] Entering shell_run()\n");
-    
     /* Boot directly into dynamic SageShell */
     extern void sage_shell_run(void);
     sage_shell_run();

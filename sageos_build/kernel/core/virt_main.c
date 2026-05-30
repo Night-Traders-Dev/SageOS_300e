@@ -165,9 +165,6 @@ void kmain(SageOSBootInfo *info) {
         console_write("Child exited. Parent resuming.\n");
     }
 
-    console_write("\n[DEBUG] Before shell_run, swap is: ");
-    console_u32(swap_is_available());
-    
     // Launch interactive C shell
     shell_run();
 }

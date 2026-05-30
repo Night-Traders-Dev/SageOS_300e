@@ -136,4 +136,34 @@ int putchar(int c);
 #define NULL ((void*)0)
 #endif
 
+#define PATH_MAX 1024
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
+#define F_OK 0
+
+#define SAGE_VERSION_STR "0.4.3"
+
+#define CLOCK_MONOTONIC 1
+#ifndef _TIMESPEC_DEFINED
+#define _TIMESPEC_DEFINED
+struct timespec {
+    long tv_sec;
+    long tv_nsec;
+};
+#endif
+
+char* realpath(const char* path, char* resolved_path);
+int   readlink(const char* path, char* buf, size_t bufsiz);
+int   access(const char* path, int mode);
+int   unlink(const char* path);
+int   mkstemps(char* template, int suffixlen);
+int   clock_gettime(int clk_id, struct timespec *tp);
+int   mkdir(const char* path, uint32_t mode);
+int   close(int fd);
+int   write(int fd, const void* buf, size_t count);
+int   mkstemp(char* template);
+void* fdopen(int fd, const char* mode);
+
 #endif /* SAGEOS_SAGE_LIBC_SHIM_H */

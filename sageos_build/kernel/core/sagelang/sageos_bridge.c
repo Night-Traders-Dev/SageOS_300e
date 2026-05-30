@@ -2,6 +2,10 @@
 #include "module.h"
 #include "env.h"
 #include "io.h"
+#include "parser.h"
+#include "lexer.h"
+#include "interpreter.h"
+#include "sage_libc_shim.h"
 #include "console.h"
 #include "scheduler.h"
 #include "serial.h"
@@ -29,6 +33,116 @@ extern void console_periodic_flip(void);
 extern void timer_irq(void);
 extern SageOSBootInfo* console_boot_info(void);
 extern uint32_t console_get_fg(void);
+
+// --- Sage Interpreter Integration ---
+
+static Env* g_sage_env = NULL;
+static ModuleCache* g_sage_cache = NULL;
+
+void register_sageos_natives(ModuleCache* cache);
+
+// Stubs for missing interpreter dependencies
+void bytecode_program_free(void* p) { (void)p; }
+void vm_mark_roots(void* vm) { (void)vm; }
+void* parse_program(const char* s) { (void)s; return NULL; }
+void bytecode_program_init(void* p) { (void)p; }
+void bytecode_compile_program(void* p, void* ast) { (void)p; (void)ast; }
+void bytecode_program_read_file(void* p, const char* path) { (void)p; (void)path; }
+void bytecode_program_write_file(void* p, const char* path) { (void)p; (void)path; }
+void vm_execute_program(void* vm, void* p) { (void)vm; (void)p; }
+void aot_init(void* a) { (void)a; }
+void aot_free(void* a) { (void)a; }
+void aot_set_var_type(void* a, const char* n, int t) { (void)a; (void)n; (void)t; }
+void aot_compile_program(void* a, void* p) { (void)a; (void)p; }
+void aot_compile_to_binary(void* a, const char* path) { (void)a; (void)path; }
+void run_passes(void* p) { (void)p; }
+
+// Atomic stubs for ARM64
+#ifdef __aarch64__
+void __aarch64_swp8_acq_rel(void) {}
+void __aarch64_cas8_acq_rel(void) {}
+void __aarch64_ldadd8_acq_rel(void) {}
+#endif
+
+void sage_repl_init(void) {
+    if (!g_sage_env) {
+        g_sage_cache = create_module_cache();
+        g_sage_env = env_create(NULL);
+        g_global_env = g_sage_env;
+        extern void init_stdlib(Env* env);
+        init_stdlib(g_sage_env);
+        register_sageos_natives(g_sage_cache);
+    }
+}
+
+void sage_import_module(void* vm, const char* name) {
+    (void)vm;
+    sage_repl_init();
+}
+
+static Stmt* sage_parse_string(const char* source) {
+    init_lexer(source, "input");
+    parser_init();
+    return parse();
+}
+
+void sage_execute(const char* mod) {
+    sage_repl_init();
+    
+    if (mod == NULL || *mod == 0) {
+        // Simple REPL loop
+        console_write("\nSageLang Interactive REPL (AST mode)\n");
+        console_write("Type :exit to return to shell.\n");
+        
+        char line[256];
+        while (1) {
+            console_write("\nsage> ");
+            int pos = 0;
+            while (pos < 255) {
+                KeyEvent ev;
+                if (keyboard_wait_event(&ev) && ev.pressed && ev.ascii) {
+                    if (ev.ascii == '\n') { console_putc('\n'); break; }
+                    if (ev.ascii == 8 && pos > 0) { pos--; console_write("\b \b"); }
+                    else if (ev.ascii >= 32) { line[pos++] = (char)ev.ascii; console_putc((char)ev.ascii); }
+                }
+            }
+            line[pos] = 0;
+            
+            if (strcmp(line, ":exit") == 0 || strcmp(line, ":quit") == 0) break;
+            if (pos == 0) continue;
+            
+            Stmt* program = sage_parse_string(line);
+            if (program) {
+                interpret(program, g_sage_env);
+            } else {
+                console_write("\nsage: syntax error\n");
+            }
+        }
+        return;
+    }
+    
+    // Check if mod is a file path
+    VfsStat st;
+    if (vfs_stat(mod, &st) == VFS_OK && st.type == VFS_FILE) {
+        char* source = (char*)malloc((size_t)st.size + 1);
+        if (source) {
+            vfs_read(mod, 0, source, (size_t)st.size);
+            source[st.size] = 0;
+            Stmt* program = sage_parse_string(source);
+            if (program) {
+                interpret(program, g_sage_env);
+            }
+            free(source);
+        }
+        return;
+    }
+
+    // Otherwise treat as direct code
+    Stmt* program = sage_parse_string(mod);
+    if (program) {
+        interpret(program, g_sage_env);
+    }
+}
 
 // --- Input Helpers ---
 

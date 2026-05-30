@@ -2,32 +2,13 @@
 #include <stddef.h>
 #include "metal_vm.h"
 
-// Dummy strncpy/strcpy/strcat
-char *strncpy(char *dest, const char *src, size_t n) {
-    size_t i;
-    for (i = 0; i < n && src[i]; i++) dest[i] = src[i];
-    for (; i < n; i++) dest[i] = '\0';
-    return dest;
-}
-char *strcpy(char *dest, const char *src) {
-    char *d = dest; while (*src) *d++ = *src++; *d = '\0'; return dest;
-}
-char *strcat(char *dest, const char *src) {
-    char *d = dest; while (*d) d++; while (*src) *d++ = *src++; *d = '\0'; return dest;
-}
+// Dummy strncpy/strcpy/strcat (now provided by sage_libc_shim.h/c)
+
 
 // ATA & Boot (implemented in ata_pio.c / virtio.c)
 void* kernel_get_boot_info(void) { return NULL; }
 
-// Runtime stubs to satisfy linker
-typedef struct {} jmp_buf;
-int setjmp(jmp_buf env) { return 0; }
-void longjmp(jmp_buf env, int val) {}
-double strtod(const char *nptr, char **endptr) { return 0.0; }
-int access(const char *pathname, int mode) { return -1; }
-int mkstemps(char *template, int suffixlen) { return -1; }
-int unlink(const char *pathname) { return -1; }
-
+// Runtime stubs to satisfy linker (now provided by sage_libc_shim.h/c)
 // --- Virt Platform Diagnostic & Subsystem Stubs ---
 #include "scheduler.h"
 #include "console.h"
@@ -115,11 +96,5 @@ void qca6174_cmd_reset(void) {}
 void net_cmd_info(void) { console_write("\nNetwork: Not supported on this platform."); }
 void net_cmd_selftest(void) { console_write("\nNetwork: Not supported on this platform."); }
 
-// Sage & VM stubs
-void sage_import_module(void* vm, const char* name) {
-    (void)vm; (void)name;
-}
-void sage_repl_init(void) { console_write("\nsage: REPL not supported on this platform."); }
-void sage_execute(const char* mod) { (void)mod; console_write("\nsage: execution not supported on this platform."); }
-
+// Sage & VM stubs (now implemented in sageos_bridge.c)
 // VFS / sagelang bridge stubs (implemented in vfs.c)

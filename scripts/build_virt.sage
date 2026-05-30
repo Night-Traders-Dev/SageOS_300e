@@ -56,6 +56,19 @@ proc generate_virt_build(arch):
         "sageos_build/kernel/core/virt_console.c",
         "sageos_build/kernel/core/virt_keyboard.c",
         "sageos_build/kernel/core/sagelang/sage_libc_shim.c",
+        "sageos_build/kernel/core/sagelang/sageos_bridge.c",
+        "sageos_build/kernel/core/sagelang/libsage_port.c",
+        "sageos_build/sage_lang/core/src/c/ast.c",
+        "sageos_build/sage_lang/core/src/c/lexer.c",
+        "sageos_build/sage_lang/core/src/c/parser.c",
+        "sageos_build/sage_lang/core/src/c/env.c",
+        "sageos_build/sage_lang/core/src/c/value.c",
+        "sageos_build/sage_lang/core/src/c/module.c",
+        "sageos_build/sage_lang/core/src/c/interpreter.c",
+        "sageos_build/sage_lang/core/src/c/diagnostic.c",
+        "sageos_build/sage_lang/core/src/c/gc.c",
+        "sageos_build/sage_lang/core/src/c/stdlib.c",
+        "sageos_build/sage_lang/core/src/c/stubs.c",
         "sageos_build/kernel/fs/vfs.c",
         "sageos_build/kernel/fs/fat32.c",
         "sageos_build/kernel/fs/btrfs.c",
@@ -102,9 +115,9 @@ proc generate_virt_build(arch):
         script = script + "AS=\"riscv64-linux-gnu-as\"; ASFLAGS=\"-march=rv64gc -mabi=lp64d\"; CC=\"riscv64-linux-gnu-gcc\"; LD=\"riscv64-linux-gnu-ld\"" + NL
     end
 
-    script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mno-red-zone -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -O2\"" + NL
-    if arch == "aarch64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mstrict-align -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -O2\"" + NL end
-    if arch == "riscv64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mcmodel=medany -march=rv64g -mabi=lp64d -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -O2\"" + NL end
+    script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mno-red-zone -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__\"" + NL
+    if arch == "aarch64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mstrict-align -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__\"" + NL end
+    if arch == "riscv64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mcmodel=medany -march=rv64g -mabi=lp64d -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__\"" + NL end
 
     script = script + "echo 'Building SageOS Virt (" + arch + ")...'" + NL
     script = script + "$AS $ASFLAGS -o " + output_dir + "/boot.o " + boot_path + NL
@@ -115,7 +128,11 @@ proc generate_virt_build(arch):
         let src = c_sources[i]
         let obj = output_dir + "/obj" + str(i) + ".o"
         script = script + "echo '  CC " + src + "'" + NL
-        script = script + "$CC $CFLAGS -c -o " + obj + " " + src + NL
+        if src[len(src)-2:len(src)] == ".S":
+            script = script + "$CC $CFLAGS -c -o " + obj + " " + src + NL
+        else:
+            script = script + "$CC $CFLAGS -include sage_libc_shim.h -O2 -c -o " + obj + " " + src + NL
+        end
         objects_str = objects_str + " " + obj
         i = i + 1
     end

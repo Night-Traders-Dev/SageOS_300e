@@ -259,7 +259,8 @@ void* create_gpu_api_module(void) { return (void*)0; }
 void* create_ml_module(void) { return (void*)0; }
 void* create_lsp_module(void) { return (void*)0; }
 
-/* 6. SageOS Natives for old VM bridge */
+/* 6. SageOS Natives for old VM bridge (now provided by vfs.c) */
+#if 0
 MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
 MetalValue n_os_strlen(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
 MetalValue n_os_starts_with(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
@@ -268,6 +269,8 @@ MetalValue n_os_array_push(MetalVM* vm, MetalValue* args, int argc) { (void)vm; 
 MetalValue n_os_write_str(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
 MetalValue n_os_num_to_str(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
 MetalValue n_os_stat(MetalVM* vm, MetalValue* args, int argc) { (void)vm; (void)args; (void)argc; return mv_nil(); }
+#endif
+
 
 /* 7. Bridge functions */
 char* realpath(const char* p, char* r) {

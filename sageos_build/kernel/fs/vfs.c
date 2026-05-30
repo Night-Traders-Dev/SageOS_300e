@@ -91,13 +91,6 @@ static MetalValue vfs_mv_dbl(double d) {
 }
 
 MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) {
-    console_write("[DEBUG C] n_len called, argc=");
-    console_u32((uint32_t)argc);
-    if (argc > 0) {
-        console_write(" type=");
-        console_u32((uint32_t)args[0].type);
-    }
-    console_write("\n");
     if (argc < 1) return mv_nil();
     if (args[0].type == MV_STR) {
         const char *s = metal_string_get(vm, args[0].as.str_idx);
@@ -110,13 +103,6 @@ MetalValue n_len(MetalVM* vm, MetalValue* args, int argc) {
 }
 
 static MetalValue n_dict_keys(MetalVM* vm, MetalValue* args, int argc) {
-    console_write("[DEBUG C] n_dict_keys called, argc=");
-    console_u32((uint32_t)argc);
-    if (argc > 0) {
-        console_write(" type=");
-        console_u32((uint32_t)args[0].type);
-    }
-    console_write("\n");
     if (argc < 1 || args[0].type != MV_DICT) return mv_nil();
     int dict_idx = args[0].as.dict_idx;
     int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
@@ -171,13 +157,6 @@ MetalValue n_os_write_str(MetalVM* vm, MetalValue* args, int argc) {
 }
 
 MetalValue n_os_num_to_str(MetalVM* vm, MetalValue* args, int argc) {
-    console_write("[DEBUG C] n_os_num_to_str called, argc=");
-    console_u32((uint32_t)argc);
-    if (argc > 0) {
-        console_write(" type=");
-        console_u32((uint32_t)args[0].type);
-    }
-    console_write("\n");
     if (argc < 1 || args[0].type != MV_NUM) return mv_nil();
     char buf[32];
     union { double d; uint64_t u; } v; v.u = args[0].as.num_bits;
@@ -347,21 +326,7 @@ const char* vfs_get_embedded_data(const char* path, uint64_t* out_size) {
 }
 
 static MetalValue n_os_debug_val(MetalVM* vm, MetalValue* args, int argc) {
-    if (argc > 0) {
-        console_write("[DEBUG C] os_debug_val: type=");
-        console_u32((uint32_t)args[0].type);
-        if (args[0].type == MV_DICT) {
-            console_write(" dict_idx=");
-            console_u32((uint32_t)args[0].as.dict_idx);
-        } else if (args[0].type == MV_STR) {
-            console_write(" str_idx=");
-            console_u32((uint32_t)args[0].as.str_idx);
-            console_write(" val='");
-            console_write(metal_string_get(vm, args[0].as.str_idx));
-            console_write("'");
-        }
-        console_write("\n");
-    }
+    (void)vm; (void)args; (void)argc;
     return mv_nil();
 }
 
@@ -694,9 +659,6 @@ int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
         int ret_val = -1;
         if (res.type == MV_ARR) {
             int count = metal_array_len(&g_vfs_vm, res.as.arr_idx);
-            console_write("\n[DEBUG] vfs_readdir: count=");
-            console_u32(count);
-            console_write("\n");
             if (count > max_entries) count = max_entries;
             for (int i = 0; i < count; i++) {
                 MetalValue item = metal_array_get(&g_vfs_vm, res.as.arr_idx, i);
@@ -723,9 +685,6 @@ int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
             }
             ret_val = count;
         } else {
-            console_write("\n[DEBUG] vfs_readdir: res.type=");
-            console_u32(res.type);
-            console_write("\n");
             /* If VM readdir fails or returns nil, fall back to C mounts */
         }
 

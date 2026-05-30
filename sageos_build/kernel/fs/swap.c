@@ -25,9 +25,6 @@ int swap_init(void) {
 }
 
 int swap_is_available(void) {
-    if (g_swap.active == 0) {
-        console_write("\n[DEBUG] swap_is_available called, active is 0!");
-    }
     return g_swap.active;
 }
 

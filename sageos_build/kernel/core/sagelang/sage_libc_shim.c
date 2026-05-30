@@ -89,6 +89,12 @@ void* kernel_calloc(size_t n, size_t size) { return sage_calloc(n, size); }
 void  kernel_free(void* ptr) { sage_free(ptr); }
 char* kernel_strdup(const char* str) { return sage_strdup(str); }
 
+#undef calloc
+#undef realloc
+#undef strdup
+#undef free
+#undef malloc
+
 void *calloc(size_t n, size_t size) __attribute__((alias("sage_calloc")));
 void *realloc(void *ptr, size_t size) __attribute__((alias("sage_realloc")));
 char *strdup(const char *s) __attribute__((alias("sage_strdup")));
@@ -399,6 +405,35 @@ int putchar(int c) {
     console_putc((char)c);
     return c;
 }
+
+int clock_gettime(int clk_id, struct timespec *tp) {
+    (void)clk_id;
+    if (!tp) return -1;
+    extern uint64_t timer_ticks(void);
+    uint64_t ticks = timer_ticks();
+    tp->tv_sec = (long)(ticks / 100);
+    tp->tv_nsec = (long)((ticks % 100) * 10000000);
+    return 0;
+}
+
+int readlink(const char* path, char* buf, size_t bufsiz) {
+    (void)path; (void)buf; (void)bufsiz;
+    return -1;
+}
+
+int mkdir(const char* path, uint32_t mode) {
+    (void)mode;
+    extern int vfs_mkdir(const char*);
+    return vfs_mkdir(path);
+}
+
+int close(int fd) { (void)fd; return -1; }
+int write(int fd, const void* buf, size_t count) { (void)fd; (void)buf; (void)count; return -1; }
+int access(const char* path, int mode) { (void)path; (void)mode; return -1; }
+int unlink(const char* path) { (void)path; return -1; }
+int mkstemp(char* template) { (void)template; return -1; }
+int mkstemps(char* template, int suffixlen) { (void)template; (void)suffixlen; return -1; }
+void* fdopen(int fd, const char* mode) { (void)fd; (void)mode; return NULL; }
 
 /* Dummy math functions for compiler linking */
 uint64_t sage_fmod(uint64_t x, uint64_t y) { (void)x; (void)y; return 0; }

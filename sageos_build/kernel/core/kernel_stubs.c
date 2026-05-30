@@ -73,8 +73,12 @@ uint32_t timer_cpu_percent_at(uint32_t cpu) {
 void timer_poll(void) {}
 
 // Memory stubs
-uint64_t ram_total_bytes(void) { return 128 * 1024 * 1024; }
-uint64_t ram_used_bytes(void) { return 16 * 1024 * 1024; }
+extern uint64_t pmm_total_frames;
+extern uint64_t pmm_used_frames;
+#define PAGE_SIZE 4096
+
+uint64_t ram_total_bytes(void) { return pmm_total_frames * PAGE_SIZE; }
+uint64_t ram_used_bytes(void) { return pmm_used_frames * PAGE_SIZE; }
 
 // Battery & SDHCI stubs
 int battery_percent(void) { return -1; }

@@ -10,8 +10,8 @@
 #define BITMAP_SIZE (MAX_FRAMES / 8)
 
 static uint8_t pmm_bitmap[BITMAP_SIZE];
-static uint64_t pmm_total_frames = 0;
-static uint64_t pmm_used_frames = 0;
+uint64_t pmm_total_frames = 0;
+uint64_t pmm_used_frames = 0;
 
 /* 
  * sys_brk: Change the data segment size (heap)

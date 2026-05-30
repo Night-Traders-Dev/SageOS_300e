@@ -24,6 +24,7 @@
 #include "vfs.h"
 #include "shell.h"
 #include "version.h"
+#include "dmesg.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -87,6 +88,8 @@ void sage_runtime_init(void) {
     
     dmesg_log("RUNTIME: SGVM Runtime Bring-up complete.");
 }
+
+extern void sage_execute(const char* mod);
 
 void sage_execute_init(void) {
     dmesg_log("RUNTIME: Executing System Service Activation script (/system/init.sage)...");

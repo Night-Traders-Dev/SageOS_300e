@@ -72,7 +72,7 @@ void phys_init(SageOSBootInfo *info) {
         pmm_set_frame(addr / PAGE_SIZE);
     }
 
-    dmesg_log("PMM: Bitmap-backed allocator initialized. Total: %d MB, Usable: %d MB", 
+    dmesg_printf("PMM: Bitmap-backed allocator initialized. Total: %d MB, Usable: %d MB", 
               (int)(info->memory_total / 1024 / 1024), 
               (int)(info->memory_usable / 1024 / 1024));
 }

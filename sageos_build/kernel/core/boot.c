@@ -15,7 +15,7 @@ const char* stage_names[] = {
 void sageos_set_boot_stage(SageOSBootStage stage) {
     g_current_stage = stage;
     if (stage <= STAGE_USERSPACE_SESSION) {
-        dmesg_log("BOOT: Transitioning to %s", stage_names[stage]);
+        dmesg_printf("BOOT: Transitioning to %s", stage_names[stage]);
     }
 }
 

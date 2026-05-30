@@ -60,6 +60,7 @@ proc generate_virt_build(arch):
 
     # 4. List sources
     let c_sources = [
+        "sageos_build/kernel/core/boot.c",
         "sageos_build/kernel/core/virt_main.c",
         "sageos_build/kernel/core/virt_console.c",
         "sageos_build/kernel/core/virt_keyboard.c",

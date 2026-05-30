@@ -54,7 +54,7 @@ if [ ! -f "$DISK_IMG" ]; then
 fi
 
 # Check if already installed to avoid costly re-copy
-if mdir -i "$DISK_IMG@@1M" ::/usr/bin/gcc >/dev/null 2>&1; then
+if mdir -i "$DISK_IMG@@1M" ::/bin/gcc >/dev/null 2>&1 || mdir -i "$DISK_IMG@@1M" ::/bin/as >/dev/null 2>&1; then
     echo "Toolchain already detected in $DISK_IMG. Skipping installation."
     exit 0
 fi
@@ -62,44 +62,40 @@ fi
 echo "Installing native toolchain ($ARCH) into $DISK_IMG..."
 echo "WARNING: This is a large operation (1.2GB+) and may take several minutes depending on your disk speed."
 
-# Ensure standard directories exist in the image root
-mmd -i "$DISK_IMG@@1M" ::/bin 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/lib 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/include 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/usr 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/usr/bin 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/usr/lib 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/usr/include 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/usr/libexec 2>/dev/null || true
-mmd -i "$DISK_IMG@@1M" ::/usr/share 2>/dev/null || true
+# Ensure standard directories exist in the image root (use -D s to avoid interactive prompts on name clashes)
+mmd -D s -i "$DISK_IMG@@1M" ::/bin 2>/dev/null || true
+mmd -D s -i "$DISK_IMG@@1M" ::/lib 2>/dev/null || true
+mmd -D s -i "$DISK_IMG@@1M" ::/include 2>/dev/null || true
+mmd -D s -i "$DISK_IMG@@1M" ::/libexec 2>/dev/null || true
+mmd -D s -i "$DISK_IMG@@1M" ::/share 2>/dev/null || true
 
 # Stage files to a single directory to minimize mcopy calls
 echo "Staging files for transfer..."
 STAGE_DIR="/tmp/sageos-toolchain-stage"
 rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR/usr"
+mkdir -p "$STAGE_DIR"
 
 if [ -d "$NATIVE_DIST/usr/bin" ]; then
-    cp -r "$NATIVE_DIST/usr/bin" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/usr/lib" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/usr/include" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/usr/libexec" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/usr/share" "$STAGE_DIR/usr/"
+    for dir in bin lib include libexec share; do
+        if [ -d "$NATIVE_DIST/usr/$dir" ]; then
+            cp -r "$NATIVE_DIST/usr/$dir" "$STAGE_DIR/"
+        fi
+    done
 else
-    cp -r "$NATIVE_DIST/bin" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/lib" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/include" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/libexec" "$STAGE_DIR/usr/"
-    cp -r "$NATIVE_DIST/share" "$STAGE_DIR/usr/"
+    for dir in bin lib include libexec share; do
+        if [ -d "$NATIVE_DIST/$dir" ]; then
+            cp -r "$NATIVE_DIST/$dir" "$STAGE_DIR/"
+        fi
+    done
     TARGET="${TAR_ARCH}-unknown-sageos"
     if [ -d "$NATIVE_DIST/$TARGET" ]; then
-         cp -r "$NATIVE_DIST/$TARGET" "$STAGE_DIR/usr/"
+         cp -r "$NATIVE_DIST/$TARGET" "$STAGE_DIR/"
     fi
 fi
 
 echo "Copying files to disk image (this is the slow part)..."
 # Using -m to preserve modification times, might be faster or more reliable
-mcopy -v -i "$DISK_IMG@@1M" -s -D o "$STAGE_DIR/usr" ::/
+mcopy -o -v -i "$DISK_IMG@@1M" -s "$STAGE_DIR"/* ::/
 
 echo "Installation complete!"
 rm -rf "$STAGE_DIR"

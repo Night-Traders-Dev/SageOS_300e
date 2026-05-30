@@ -52,58 +52,95 @@ long sys_vfork(void);
 long syscall_dispatch(long num, long a1, long a2, long a3,
                       long a4, long a5) {
     task_t *t = current_task();
+    long ret = 0;
     switch (num) {
     case SYS_read:
-        return sys_read((int)a1, (void *)a2, (size_t)a3);
+        ret = sys_read((int)a1, (void *)a2, (size_t)a3);
+        break;
     case SYS_write:
-        return sys_write((int)a1, (const void *)a2, (size_t)a3);
+        ret = sys_write((int)a1, (const void *)a2, (size_t)a3);
+        break;
     case SYS_open:
-        return sys_open((const char *)a1, (int)a2, (int)a3);
+        ret = sys_open((const char *)a1, (int)a2, (int)a3);
+        break;
     case SYS_close:
-        return sys_close((int)a1);
+        ret = sys_close((int)a1);
+        break;
     case SYS_fstat:
-        return sys_fstat((int)a1, (struct stat *)a2);
+        ret = sys_fstat((int)a1, (struct stat *)a2);
+        break;
     case SYS_lseek:
-        return sys_lseek((int)a1, (off_t)a2, (int)a3);
+        ret = sys_lseek((int)a1, (off_t)a2, (int)a3);
+        break;
     case SYS_brk:
-        return sys_brk((uintptr_t)a1);
+        ret = sys_brk((uintptr_t)a1);
+        break;
     case SYS_vfork:
-        return sys_vfork();
+        ret = sys_vfork();
+        break;
     case SYS_execve:
-        return sys_execve((const char *)a1, (char *const *)a2, (char *const *)a3);
+        ret = sys_execve((const char *)a1, (char *const *)a2, (char *const *)a3);
+        break;
     case SYS_waitpid:
-        return sys_waitpid((int)a1, (int *)a2, (int)a3);
+        ret = sys_waitpid((int)a1, (int *)a2, (int)a3);
+        break;
     case SYS_unlink:
-        return sys_unlink((const char *)a1);
+        ret = sys_unlink((const char *)a1);
+        break;
     case SYS_getdents64:
-        return sys_getdents64((int)a1, (void *)a2, (size_t)a3);
+        ret = sys_getdents64((int)a1, (void *)a2, (size_t)a3);
+        break;
     case SYS_getcwd:
-        return sys_getcwd((char *)a1, (size_t)a2);
+        ret = sys_getcwd((char *)a1, (size_t)a2);
+        break;
     case SYS_chdir:
-        return sys_chdir((const char *)a1);
+        ret = sys_chdir((const char *)a1);
+        break;
     case SYS_dup2:
-        return sys_dup2((int)a1, (int)a2);
+        ret = sys_dup2((int)a1, (int)a2);
+        break;
     case SYS_mkdir:
-        return sys_mkdir((const char *)a1, (int)a2);
+        ret = sys_mkdir((const char *)a1, (int)a2);
+        break;
     case SYS_gettimeofday:
-        return sys_gettimeofday((struct timeval *)a1, (void *)a2);
+        ret = sys_gettimeofday((struct timeval *)a1, (void *)a2);
+        break;
     case SYS_nanosleep:
-        return sys_nanosleep((const struct timespec *)a1, (struct timespec *)a2);
+        ret = sys_nanosleep((const struct timespec *)a1, (struct timespec *)a2);
+        break;
     case SYS_times:
-        return sys_times((struct tms *)a1);
+        ret = sys_times((struct tms *)a1);
+        break;
     case SYS_exit:
         sys_exit((int)a1);
-        return 0; /* Unreachable */
+        ret = 0;
+        break;
     case SYS_getpid:
-        return (t) ? (long)t->id : 1;
+        ret = (t) ? (long)t->id : 1;
+        break;
     case SYS_kill:
-        return -VFS_EINVAL; /* Not implemented */
+        ret = -VFS_EINVAL;
+        break;
     case SYS_isatty:
-        return (a1 >= 0 && a1 <= 2) ? 1 : 0;
+        ret = (a1 >= 0 && a1 <= 2) ? 1 : 0;
+        break;
     default:
-        return -VFS_EINVAL;
+        ret = -VFS_EINVAL;
+        break;
     }
+
+    if (num != SYS_write || (a1 != 1 && a1 != 2)) {
+        console_write("[SYSCALL] num=");
+        console_u32((uint32_t)num);
+        console_write(" a1=");
+        console_u32((uint32_t)a1);
+        console_write(" -> ");
+        console_u32((uint32_t)ret);
+        console_write("\n");
+    }
+    return ret;
 }
+
 
 /* --- Syscall Implementations --- */
 

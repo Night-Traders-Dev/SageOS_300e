@@ -725,13 +725,39 @@ int metal_vm_step(MetalVM* vm) {
 
         case OP_EQUAL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            int eq = (a.type == b.type) && (a.as.num_bits == b.as.num_bits);
+            int eq = 0;
+            if (a.type == b.type) {
+                switch (a.type) {
+                    case MV_NIL:  eq = 1; break;
+                    case MV_NUM:  eq = (a.as.num_bits == b.as.num_bits); break;
+                    case MV_BOOL: eq = (!a.as.boolean == !b.as.boolean); break;
+                    case MV_STR:  eq = (a.as.str_idx == b.as.str_idx); break;
+                    case MV_ARR:  eq = (a.as.arr_idx == b.as.arr_idx); break;
+                    case MV_DICT: eq = (a.as.dict_idx == b.as.dict_idx); break;
+                    case MV_FN:   eq = (a.as.fn_idx == b.as.fn_idx); break;
+                    case MV_PTR:  eq = (a.as.ptr == b.as.ptr); break;
+                    default:      eq = 0; break;
+                }
+            }
             metal_vm_push(vm, mv_bool(eq));
             break;
         }
         case OP_NOT_EQUAL: {
             MetalValue b = metal_vm_pop(vm), a = metal_vm_pop(vm);
-            int eq = (a.type == b.type) && (a.as.num_bits == b.as.num_bits);
+            int eq = 0;
+            if (a.type == b.type) {
+                switch (a.type) {
+                    case MV_NIL:  eq = 1; break;
+                    case MV_NUM:  eq = (a.as.num_bits == b.as.num_bits); break;
+                    case MV_BOOL: eq = (!a.as.boolean == !b.as.boolean); break;
+                    case MV_STR:  eq = (a.as.str_idx == b.as.str_idx); break;
+                    case MV_ARR:  eq = (a.as.arr_idx == b.as.arr_idx); break;
+                    case MV_DICT: eq = (a.as.dict_idx == b.as.dict_idx); break;
+                    case MV_FN:   eq = (a.as.fn_idx == b.as.fn_idx); break;
+                    case MV_PTR:  eq = (a.as.ptr == b.as.ptr); break;
+                    default:      eq = 0; break;
+                }
+            }
             metal_vm_push(vm, mv_bool(!eq));
             break;
         }
@@ -984,7 +1010,7 @@ int metal_vm_step(MetalVM* vm) {
             int count = read_u16(vm);
             int arr = metal_array_new(vm);
             if (arr < 0) { vm->error = 1; vm->error_msg = "array pool full"; return 0; }
-            for (int i = count - 1; i >= 0; i--) metal_array_push(vm, arr, vm->stack[vm->sp - count + i]);
+            for (int i = 0; i < count; i++) metal_array_push(vm, arr, vm->stack[vm->sp - count + i]);
             vm->sp -= count; MetalValue v; v.type = MV_ARR; v.as.arr_idx = arr; metal_vm_push(vm, v);
             break;
         }

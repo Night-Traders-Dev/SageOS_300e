@@ -85,6 +85,12 @@ int elf_exec(const void *data, uint64_t size, char *const argv[], char *const en
 
     sp = (uint8_t *)((uintptr_t)sp & ~15); /* Align */
 
+    /* Ensure final sp is aligned to 16-byte boundary */
+    size_t total_ptr_size = 8 + (argc + 1) * 8 + (envc + 1) * 8;
+    if (total_ptr_size % 16 != 0) {
+        sp -= 8;
+    }
+
     sp -= (envc + 1) * 8;
     for (int i = 0; i <= envc; i++) ((uint64_t *)sp)[i] = (uint64_t)envp_ptrs[i];
     
@@ -94,22 +100,23 @@ int elf_exec(const void *data, uint64_t size, char *const argv[], char *const en
     sp -= 8;
     *(uint64_t *)sp = (uint64_t)argc;
 
+
     sage_free(envp_ptrs);
     sage_free(argv_ptrs);
 
     /* 5. Jump to entry */
     uintptr_t entry = ehdr->e_entry;
-    int ret = 0;
 
 #if defined(__x86_64__)
-    __asm__ volatile ("mov %1, %%rsp\ncall *%2\nmov %%eax, %0" : "=r"(ret) : "r"(sp), "r"(entry) : "rax", "memory");
+    __asm__ volatile ("mov %0, %%rsp\njmp *%1" : : "r"(sp), "r"(entry) : "memory");
 #elif defined(__aarch64__)
-    __asm__ volatile ("mov sp, %1\nblr %2\nmov %0, x0" : "=r"(ret) : "r"(sp), "r"(entry) : "x0", "memory");
+    __asm__ volatile ("mov sp, %0\nbr %1" : : "r"(sp), "r"(entry) : "memory");
 #elif defined(__riscv)
-    __asm__ volatile ("mv sp, %1\njalr %2\nmv %0, a0" : "=r"(ret) : "r"(sp), "r"(entry) : "a0", "memory");
+    __asm__ volatile ("mv sp, %0\njr %1" : : "r"(sp), "r"(entry) : "memory");
 #endif
 
-    return ret;
+    return 0;
+
 }
 
 #include "vfs.h"
@@ -146,7 +153,11 @@ long sys_execve(const char *path, char *const argv[], char *const envp[]) {
         }
         t->elf_base = min_vaddr;
         t->elf_size = max_vaddr - min_vaddr;
+        t->heap_base = (max_vaddr + 4095) & ~4095;
+        t->heap_end = t->heap_base;
+        t->heap_limit = t->heap_base + 64 * 1024 * 1024;
     }
+
 
     int ret = elf_exec(buffer, st.size, argv, envp);
     sage_free(buffer);

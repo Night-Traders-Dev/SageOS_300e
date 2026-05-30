@@ -15,6 +15,14 @@ SageOS is a hybrid operating system that combines a low-level C kernel with a hi
 - **Filesystem Support**: FAT32, BTRFS (Read-only), and SWAP support across all virtual targets.
 - **Disk Drivers**: Legacy ATA PIO (x64) and VirtIO-MMIO (ARM/RISCV) block drivers.
 
+## Native Toolchain
+SageOS 0.4.1 introduces a native C toolchain (GCC 14.1.0 + Binutils) integrated directly into the system image. This enables:
+- **On-Device Development**: Compile C programs directly within SageShell.
+- **Self-Hosting Path**: Steps toward SageOS compiling its own kernel and runtime.
+- **Automated Setup**: Prebuilt toolchains are automatically downloaded from GitHub during the first build.
+
+See [docs/toolchain.md](docs/toolchain.md) for more details.
+
 ## Why This Repository Exists
 This repository is the central coordination point for SageOS development. It contains:
 - `sageos_build/`: the shared system core and SageLang runtime.

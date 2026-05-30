@@ -33,11 +33,11 @@ extern "C" {
 #endif
 
 #ifndef METAL_STRING_POOL
-#define METAL_STRING_POOL     65536   // String storage bytes
+#define METAL_STRING_POOL     262144  // String storage bytes
 #endif
 
 #ifndef METAL_HEAP_SIZE
-#define METAL_HEAP_SIZE       524288  // General heap bytes (bump allocator)
+#define METAL_HEAP_SIZE       2097152 // General heap bytes (bump allocator)
 #endif
 
 #ifndef METAL_CONST_POOL
@@ -196,10 +196,10 @@ struct MetalVM {
     int scope_depth;
 
     // Object pools (no malloc — fixed-size arenas)
-    MetalArray arrays[METAL_POOL_SIZE / 8];
+    MetalArray arrays[512];
     int array_count;
 
-    MetalDict dicts[METAL_POOL_SIZE / 16];
+    MetalDict dicts[512];
     int dict_count;
 
     MetalFunction functions[256];

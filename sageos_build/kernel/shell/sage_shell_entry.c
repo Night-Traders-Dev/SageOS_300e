@@ -335,6 +335,28 @@ static MetalValue n_len(MetalVM *vm, MetalValue *a, int c) {
     }
     return mv_dbl(0.0);
 }
+static MetalValue n_dict_keys(MetalVM *vm, MetalValue *a, int c) {
+    if (c < 1 || a[0].type != MV_DICT) return mv_nil();
+    int dict_idx = a[0].as.dict_idx;
+    int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
+    if (dict_idx < 0 || dict_idx >= max) return mv_nil();
+    
+    MetalDict *d = &vm->dicts[dict_idx];
+    int arr_idx = metal_array_new(vm);
+    if (arr_idx < 0) return mv_nil();
+    
+    for (int i = 0; i < d->count; i++) {
+        MetalValue key_val;
+        key_val.type = MV_STR;
+        key_val.as.str_idx = d->key_str_idx[i];
+        metal_array_push(vm, arr_idx, key_val);
+    }
+    
+    MetalValue res;
+    res.type = MV_ARR;
+    res.as.arr_idx = arr_idx;
+    return res;
+}
 
 /* --- Version / system info --- */
 static MetalValue n_version_string(MetalVM *vm, MetalValue *a, int c) {
@@ -816,8 +838,8 @@ static MetalValue n_os_vfs_stat(MetalVM *vm, MetalValue *a, int c) {
     if (vfs_stat(path, &st) == VFS_OK) {
         int d = metal_dict_new(vm);
         metal_dict_set(vm, d, metal_string_intern(vm, "name", 4), mv_str(vm, st.name, (int)strlen(st.name)));
-        metal_dict_set(vm, d, metal_string_intern(vm, "type", 4), mv_num((uint64_t)st.type));
-        metal_dict_set(vm, d, metal_string_intern(vm, "size", 4), mv_num(st.size));
+        metal_dict_set(vm, d, metal_string_intern(vm, "type", 4), mv_dbl((double)st.type));
+        metal_dict_set(vm, d, metal_string_intern(vm, "size", 4), mv_dbl((double)st.size));
         MetalValue res; res.type = MV_DICT; res.as.dict_idx = d;
         return res;
     }
@@ -833,8 +855,8 @@ static MetalValue n_os_vfs_readdir(MetalVM *vm, MetalValue *a, int c) {
         for (int i = 0; i < count; i++) {
             int d = metal_dict_new(vm);
             metal_dict_set(vm, d, metal_string_intern(vm, "name", 4), mv_str(vm, entries[i].name, (int)strlen(entries[i].name)));
-            metal_dict_set(vm, d, metal_string_intern(vm, "type", 4), mv_num((uint64_t)entries[i].type));
-            metal_dict_set(vm, d, metal_string_intern(vm, "size", 4), mv_num(entries[i].size));
+            metal_dict_set(vm, d, metal_string_intern(vm, "type", 4), mv_dbl((double)entries[i].type));
+            metal_dict_set(vm, d, metal_string_intern(vm, "size", 4), mv_dbl((double)entries[i].size));
             MetalValue item; item.type = MV_DICT; item.as.dict_idx = d;
             metal_array_push(vm, arr, item);
         }
@@ -878,6 +900,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_terminal_size", n_os_get_terminal_size);
     /* String utils */
     REG("len",              n_len);
+    REG("dict_keys",        n_dict_keys);
     REG("os_strlen",        n_strlen);
     REG("os_streq",         n_streq);
     REG("os_char_at",       n_char_at);

@@ -146,8 +146,8 @@ void kmain(SageOSBootInfo *info) {
     keyboard_init();
     vfs_init();
 
-    extern void timer_init(void);
-    timer_init();
+    //extern void timer_init(void);
+    //timer_init();
 
     // Initialize block device subsystem (ATA/Virtio)
     ata_init();

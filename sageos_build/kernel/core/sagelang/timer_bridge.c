@@ -136,7 +136,7 @@ void timer_init(void) {
         outb(PIT_CMD, 0x34);
         outb(PIT_CH0, pit_reload & 0xFF);
         outb(PIT_CH0, pit_reload >> 8);
-        g_boot_timer_count = rdtsc();
+        if (g_boot_timer_count == 0) g_boot_timer_count = rdtsc();
         g_next_tick_time = g_boot_timer_count + 20000000ULL; // ~100Hz on 2GHz CPU
 #endif
         g_timer_freq = PIT_BASE_HZ;
@@ -144,14 +144,14 @@ void timer_init(void) {
     } else if (arch == TIMER_ARCH_ARM64) {
         g_timer_freq = arch_timer_freq();
         if (g_timer_freq == 0) g_timer_freq = 62500000;
-        g_boot_timer_count = arch_timer_count();
+        if (g_boot_timer_count == 0) g_boot_timer_count = arch_timer_count();
         g_timer_interval = g_timer_freq / PIT_HZ;
         arch_timer_cval_write(g_boot_timer_count + g_timer_interval);
         arch_timer_ctl_write(CNTV_ENABLE);
     } else if (arch == TIMER_ARCH_RV64) {
         g_timer_freq = arch_timer_freq();
         if (g_timer_freq == 0) g_timer_freq = 10000000;
-        g_boot_timer_count = arch_timer_count();
+        if (g_boot_timer_count == 0) g_boot_timer_count = arch_timer_count();
         g_timer_interval = g_timer_freq / PIT_HZ;
         g_next_tick_time = g_boot_timer_count + g_timer_interval;
         arch_timer_cval_write(g_next_tick_time);
@@ -233,13 +233,30 @@ uint64_t timer_elapsed_centiseconds(void) {
         current_count = arch_timer_count();
     }
     
+    /* Initialize boot timer and frequency on first call if timer_init hasn't been called yet */
+    if (g_timer_freq == 0) {
+        /* timer_init hasn't been called yet, initialize freq */
+        if (arch == TIMER_ARCH_X86) {
+            g_timer_freq = PIT_BASE_HZ;
+        } else if (arch == TIMER_ARCH_ARM64) {
+            g_timer_freq = arch_timer_freq();
+            if (g_timer_freq == 0) g_timer_freq = 62500000;
+        } else if (arch == TIMER_ARCH_RV64) {
+            g_timer_freq = arch_timer_freq();
+            if (g_timer_freq == 0) g_timer_freq = 10000000;
+        }
+        if (g_boot_timer_count == 0) {
+            g_boot_timer_count = current_count;
+        }
+        return 0;  /* First call: elapsed is 0 */
+    }
+    
     if (current_count < g_boot_timer_count) {
         return 0;  /* Guard against timer wrap-around or uninitialized state */
     }
     
     uint64_t elapsed = current_count - g_boot_timer_count;
     /* Convert hardware timer units to centiseconds (1/100th second) */
-    if (g_timer_freq == 0) return 0;
     uint64_t centiseconds = (elapsed * 100) / g_timer_freq;
     return centiseconds;
 }

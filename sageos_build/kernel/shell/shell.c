@@ -580,11 +580,55 @@ static void cmd_hexdump(const char *path) {
     }
 }
 
+/* Try to find and execute an ELF binary from the VFS.
+ * Searches in /bin/, /usr/bin/, and as an absolute path.
+ */
+static int try_run_elf(const char *cmdline) {
+    char cmd[64];
+    int i = 0;
+    while (cmdline[i] && cmdline[i] != ' ' && cmdline[i] != '\t' && i < (int)sizeof(cmd)-1) {
+        cmd[i] = cmdline[i];
+        i++;
+    }
+    cmd[i] = 0;
+    if (i == 0) return 0;
+
+    /* Parse arguments */
+    char *argv[16];
+    char arg_buf[SHELL_LINE_MAX];
+    memcpy(arg_buf, cmdline, strlen(cmdline) + 1);
+    
+    int argc = 0;
+    char *p = arg_buf;
+    while (*p && argc < 15) {
+        while (*p == ' ' || *p == '\t') *p++ = 0;
+        if (!*p) break;
+        argv[argc++] = p;
+        while (*p && *p != ' ' && *p != '\t') p++;
+    }
+    argv[argc] = NULL;
+
+    const char *prefixes[] = {"", "/bin/", "/usr/bin/"};
+    char path[128];
+    for (size_t p = 0; p < sizeof(prefixes)/sizeof(prefixes[0]); p++) {
+        snprintf(path, sizeof(path), "%s%s", prefixes[p], cmd);
+        
+        VfsStat st;
+        if (vfs_stat(path, &st) == VFS_OK && st.type == VFS_FILE) {
+            extern long sys_execve(const char *path, char *const argv[], char *const envp[]);
+            sys_execve(path, argv, NULL);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void shell_exec_command(const char *cmd) {
     cmd = skip_spaces(cmd);
     /* Prefer embedded Sage scripts for high-level commands when present */
     if (try_run_embedded_sage(cmd)) return;
     if (streq(cmd, "")) return;
+    /* ... rest of built-ins ... */
     if (starts_word(cmd, "pwd"))     { console_write("\n/"); return; }
     if (starts_word(cmd, "history")) { cmd_history(); return; }
     if (starts_word(cmd, "help"))         { help(); return; }
@@ -844,6 +888,9 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "suspend")) { power_suspend(); return; }
     if (starts_word(cmd, "halt"))    { power_halt(); return; }
     if (starts_word(cmd, "reboot"))  { console_write("\nRebooting."); power_reboot(); return; }
+    
+    if (try_run_elf(cmd)) return;
+
     console_write("\nUnknown command: "); console_write(cmd);
 }
 

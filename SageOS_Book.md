@@ -117,7 +117,7 @@ Example: Building and running for ARM64 on QEMU:
 ---
 
 ## 5. Current Status & Roadmap
-SageOS is currently at **v0.3.1 (Alpha)**.
+SageOS is currently at **v0.4.1 (Alpha)**.
 
 ### Achievements:
 *   Unified block device subsystem supporting **ATA PIO** (x86) and **VirtIO-MMIO** (ARM64/RISC-V).

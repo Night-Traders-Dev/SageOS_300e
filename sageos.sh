@@ -99,6 +99,11 @@ case "$ARCH" in
                     bash build/virt_aarch64/build.sh
                     mkdir -p "$BUILD_DIR/arm64_virt"
                     cp build/virt_aarch64/kernel.elf "$BUILD_DIR/arm64_virt/kernel.elf"
+                    
+                    if [ -d "/home/kraken/sageos-native-dist" ]; then
+                        log_info "Installing native toolchain into disk image..."
+                        bash ./scripts/install_toolchain.sh arm64 "/home/kraken/sageos-native-dist"
+                    fi
                 fi
 
                 if [[ "$ACTION" == "run" ]]; then
@@ -126,6 +131,11 @@ case "$ARCH" in
                     bash build/virt_x86_64/build.sh
                     mkdir -p "$BUILD_DIR/x64_virt"
                     cp build/virt_x86_64/kernel.elf "$BUILD_DIR/x64_virt/kernel.elf"
+
+                    if [ -d "/home/kraken/sageos-native-dist" ]; then
+                        log_info "Installing native toolchain into disk image..."
+                        bash ./scripts/install_toolchain.sh x86_64 "/home/kraken/sageos-native-dist"
+                    fi
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then
@@ -174,6 +184,11 @@ case "$ARCH" in
                     bash build/virt_riscv64/build.sh
                     mkdir -p "$BUILD_DIR/rv64_virt"
                     cp build/virt_riscv64/kernel.elf "$BUILD_DIR/rv64_virt/kernel.elf"
+
+                    if [ -d "/home/kraken/sageos-native-dist" ]; then
+                        log_info "Installing native toolchain into disk image..."
+                        bash ./scripts/install_toolchain.sh riscv64 "/home/kraken/sageos-native-dist"
+                    fi
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then

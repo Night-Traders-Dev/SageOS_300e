@@ -149,9 +149,48 @@ long sys_read(int fd, void *buf, size_t count) {
     return ret;
 }
 
+#define S_IFMT   0170000
+#define S_IFSOCK 0140000
+#define S_IFLNK  0120000
+#define S_IFREG  0100000
+#define S_IFBLK  0060000
+#define S_IFDIR  0040000
+#define S_IFCHR  0020000
+#define S_IFIFO  0010000
+
+/* Linux-compatible fcntl.h flags */
+#define O_RDONLY  00000000
+#define O_WRONLY  00000001
+#define O_RDWR    00000002
+#define O_CREAT   00000100
+#define O_EXCL    00000200
+#define O_NOCTTY  00000400
+#define O_TRUNC   00001000
+#define O_APPEND  00002000
+
 long sys_open(const char *path, int flags, int mode) {
     task_t *t = current_task();
     if (!t) return -VFS_EINVAL;
+
+    /* Handle O_CREAT */
+    VfsStat st;
+    if (vfs_stat(path, &st) < 0) {
+        if (flags & O_CREAT) {
+            int ret = vfs_create(path);
+            if (ret < 0) return (long)ret;
+        } else {
+            return -VFS_ENOENT;
+        }
+    } else {
+        if ((flags & O_CREAT) && (flags & O_EXCL)) {
+            return -VFS_EEXIST;
+        }
+        /* If O_TRUNC is set, we should truncate the file.
+           VFS doesn't have truncate yet, but we can simulate by re-creating it if it is a file. */
+        if ((flags & O_TRUNC) && (st.type == VFS_FILE)) {
+            vfs_create(path);
+        }
+    }
 
     /* Find free FD */
     int fd = -1;
@@ -163,18 +202,11 @@ long sys_open(const char *path, int flags, int mode) {
     }
     if (fd == -1) return -VFS_ENOSPC;
 
-    /* Check if file exists (VFS currently doesn't have an 'open' but we can check with stat) */
-    VfsStat st;
-    if (vfs_stat(path, &st) < 0) {
-        /* If VFS_O_CREATE is supported in the future, we would create it here */
-        return -VFS_ENOENT;
-    }
-
     /* Initialize FD entry */
     t->fd_table[fd].valid = 1;
     strncpy(t->fd_table[fd].path, path, VFS_MAX_PATH);
     t->fd_table[fd].flags = flags;
-    t->fd_table[fd].offset = 0;
+    t->fd_table[fd].offset = (flags & O_APPEND) ? (off_t)st.size : 0;
 
     return fd;
 }

@@ -1,3 +1,3 @@
 /* RV64GC baseline */
 #undef  RISCV_TUNE_STRING_DEFAULT
-#define RISCV_TUNE_STRING_DEFAULT "generic"
+#define RISCV_TUNE_STRING_DEFAULT "rocket"

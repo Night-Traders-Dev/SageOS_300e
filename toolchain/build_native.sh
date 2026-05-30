@@ -3,19 +3,13 @@
 set -e
 
 # Configuration
-ARCH=${1:-"aarch64"}
+ARCH=${1:-"x86_64"}
 TARGET="${ARCH}-unknown-sageos"
 HOST="$TARGET"
-PREFIX="/opt/sageos-native"
-SYSROOT="/opt/sageos-toolchain/sysroot"
+PREFIX="/usr"
+INSTALL_DIR="/home/kraken/sageos-native-dist"
 
-# Check if PREFIX is writable, else fallback to user directory
-if [ ! -w "$(dirname "$PREFIX")" ] && [ ! -d "$PREFIX" ]; then
-    PREFIX="/home/kraken/sageos-native"
-    SYSROOT="/home/kraken/sageos-toolchain/sysroot"
-fi
 JOBS=$(nproc)
-
 BINUTILS_VER="2.42"
 GCC_VER="14.1.0"
 
@@ -26,12 +20,12 @@ else
     export PATH="/home/kraken/sageos-toolchain/bin:$PATH"
 fi
 
-mkdir -p "$PREFIX"
+mkdir -p "$INSTALL_DIR"
 BUILD_DIR="$(pwd)/toolchain_build"
 cd "$BUILD_DIR"
 
-echo "Building native Binutils..."
-mkdir -p build-native-binutils && cd build-native-binutils
+echo "Building native Binutils ($ARCH)..."
+mkdir -p build-native-binutils-${ARCH} && cd build-native-binutils-${ARCH}
 ../binutils-${BINUTILS_VER}/configure \
     --host="$HOST" \
     --target="$TARGET" \
@@ -40,11 +34,11 @@ mkdir -p build-native-binutils && cd build-native-binutils
     --disable-nls \
     --disable-werror
 make MAKEINFO=true -j"$JOBS"
-make MAKEINFO=true install
+make MAKEINFO=true install DESTDIR="$INSTALL_DIR"
 cd ..
 
-echo "Building native GCC..."
-mkdir -p build-native-gcc && cd build-native-gcc
+echo "Building native GCC ($ARCH)..."
+mkdir -p build-native-gcc-${ARCH} && cd build-native-gcc-${ARCH}
 ../gcc-${GCC_VER}/configure \
     --host="$HOST" \
     --target="$TARGET" \
@@ -57,9 +51,12 @@ mkdir -p build-native-gcc && cd build-native-gcc
     --disable-libssp \
     --disable-libgomp \
     --disable-libatomic \
-    --disable-libquadmath
+    --disable-libquadmath \
+    --with-newlib
 make MAKEINFO=true -j"$JOBS"
-make MAKEINFO=true install
+make MAKEINFO=true install DESTDIR="$INSTALL_DIR"
 cd ..
+
+echo "Native toolchain build complete! Files in $INSTALL_DIR"
 
 echo "Native toolchain build complete!"

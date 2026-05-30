@@ -7,8 +7,8 @@ set -e
 
 # Configuration
 ARCH=${1:-"x86_64"}
+PREFIX=${2:-"/opt/sageos-toolchain"}
 TARGET="${ARCH}-unknown-sageos"
-PREFIX="/opt/sageos-toolchain"
 SYSROOT="${PREFIX}/sysroot"
 JOBS=$(nproc)
 
@@ -27,10 +27,13 @@ step() { echo -e "${BLUE}>>${NC} $1"; }
 
 # Check if PREFIX can be created/written by our current user
 if [ ! -w "$(dirname "$PREFIX")" ] && [ ! -d "$PREFIX" ] && [ "$EUID" -ne 0 ]; then
-  log "Directory $(dirname "$PREFIX") is not writable and we are not root."
-  log "Setting PREFIX to user-writable path: /home/kraken/sageos-toolchain"
-  PREFIX="/home/kraken/sageos-toolchain"
-  SYSROOT="${PREFIX}/sysroot"
+  if [[ "$PREFIX" == "/opt/sageos-toolchain"* ]]; then
+      log "Directory $(dirname "$PREFIX") is not writable and we are not root."
+      DEFAULT_PREFIX="/home/kraken/sageos-toolchain-${ARCH}"
+      log "Setting PREFIX to user-writable path: $DEFAULT_PREFIX"
+      PREFIX="$DEFAULT_PREFIX"
+      SYSROOT="${PREFIX}/sysroot"
+  fi
 fi
 
 mkdir -p "$PREFIX"
@@ -214,9 +217,19 @@ cp "${TOOLCHAIN_DIR}/newlib/libc/sys/sageos/syscalls.c" "newlib-${NEWLIB_VER}/ne
 cp "${TOOLCHAIN_DIR}/newlib/libc/sys/sageos/crt0.S" "newlib-${NEWLIB_VER}/newlib/libc/sys/sageos/"
 cp "${TOOLCHAIN_DIR}/newlib/libc/sys/sageos/Makefile.inc" "newlib-${NEWLIB_VER}/newlib/libc/sys/sageos/"
 
+# Patch Newlib to recognize SageOS
+if ! grep -q "sageos" "newlib-${NEWLIB_VER}/newlib/configure.host"; then
+    sed -i '/case "${host}" in/a \  *-*-sageos*) \n    sys_dir=sageos \n    posix_dir= \n    has_ieee_754_libs=yes \n    ;;' "newlib-${NEWLIB_VER}/newlib/configure.host"
+fi
+
+# Ensure Makefile.inc in libc/sys includes sageos
+if ! grep -q "sageos" "newlib-${NEWLIB_VER}/newlib/libc/sys/Makefile.inc"; then
+    echo -e "if HAVE_LIBC_SYS_SAGEOS_DIR\ninclude %D%/sageos/Makefile.inc\nendif" >> "newlib-${NEWLIB_VER}/newlib/libc/sys/Makefile.inc"
+fi
+
 # 3. Build Binutils
-step "Building Binutils..."
-mkdir -p build-binutils && cd build-binutils
+step "Building Binutils ($ARCH)..."
+mkdir -p build-binutils-${ARCH} && cd build-binutils-${ARCH}
 ../binutils-${BINUTILS_VER}/configure \
     --target="$TARGET" \
     --prefix="$PREFIX" \
@@ -229,9 +242,9 @@ make install MAKEINFO=true
 cd ..
 
 # 4. Build GCC Stage 1
-step "Building GCC Stage 1..."
+step "Building GCC Stage 1 ($ARCH)..."
 mkdir -p "${PREFIX}/sysroot/usr/include"
-mkdir -p build-gcc && cd build-gcc
+mkdir -p build-gcc-${ARCH} && cd build-gcc-${ARCH}
 ../gcc-${GCC_VER}/configure \
     --target="$TARGET" \
     --prefix="$PREFIX" \
@@ -253,12 +266,13 @@ make install-gcc install-target-libgcc MAKEINFO=true
 cd ..
 
 # 5. Build Newlib
-step "Building Newlib..."
-mkdir -p build-newlib && cd build-newlib
+step "Building Newlib ($ARCH)..."
+mkdir -p build-newlib-${ARCH} && cd build-newlib-${ARCH}
 # Add SageOS to Newlib's configure.host or similar if needed
 ../newlib-${NEWLIB_VER}/configure \
     --target="$TARGET" \
     --prefix="$PREFIX" \
+    --disable-libgloss \
     --enable-newlib-reent-small \
     --disable-newlib-fvwrite-in-streamio \
     --disable-newlib-wide-orient \
@@ -270,8 +284,8 @@ make install MAKEINFO=true
 cd ..
 
 # 6. Build GCC Stage 2 (Final)
-step "Building GCC Stage 2..."
-cd build-gcc
+step "Building GCC Stage 2 ($ARCH)..."
+cd build-gcc-${ARCH}
 ../gcc-${GCC_VER}/configure \
     --target="$TARGET" \
     --prefix="$PREFIX" \

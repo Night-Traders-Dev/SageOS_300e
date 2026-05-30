@@ -27,7 +27,9 @@ _start:
     .global _start
     .type   _start, %function
 _start:
-    and     sp, sp, #~15
+    mov     x0, sp
+    bic     x0, x0, #15
+    mov     sp, x0
     adrp    x0, __bss_start
     add     x0, x0, :lo12:__bss_start
     adrp    x1, _end

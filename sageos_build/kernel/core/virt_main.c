@@ -73,7 +73,8 @@ void kmain(SageOSBootInfo *info) {
     // Initialize and mount filesystems
     if (fat32_init()) {
         vfs_mount("/fat32", fat32_get_backend());
-        dmesg_log("VFS: Mounted FAT32 at /fat32");
+        vfs_mount("/usr", fat32_get_backend());
+        dmesg_log("VFS: Mounted FAT32 at /fat32 and /usr");
     } else {
         dmesg_log("VFS: FAT32 initialization FAILED");
     }

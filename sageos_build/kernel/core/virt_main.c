@@ -127,9 +127,9 @@ void kmain(SageOSBootInfo *info) {
 
     // Initialize and mount filesystems
     if (fat32_init()) {
-        vfs_mount("/fat32", fat32_get_backend());
+        vfs_mount("/mnt/fat32", fat32_get_backend());
         vfs_mount("/usr", fat32_get_backend());
-        dmesg_log("VFS: Mounted FAT32 at /fat32 and /usr");
+        dmesg_log("VFS: Mounted FAT32 at /mnt/fat32 and /usr");
     } else {
         dmesg_log("VFS: FAT32 initialization FAILED");
     }
@@ -150,13 +150,13 @@ void kmain(SageOSBootInfo *info) {
     syscall_dispatch(SYS_write, 1, (long)"[SYSCALL TEST] Hello via syscall_dispatch\n", 42, 0, 0);
 
     /* Milestone 2: Execute userspace Hello World */
-    console_write("Milestone 2: Attempting to exec /fat32/hello with args...\n");
-    char *argv[] = {"/fat32/hello", "arg1", "arg2", NULL};
+    console_write("Milestone 2: Attempting to exec /mnt/fat32/hello with args...\n");
+    char *argv[] = {"/mnt/fat32/hello", "arg1", "arg2", NULL};
     
     long pid = syscall_dispatch(SYS_vfork, 0, 0, 0, 0, 0);
     if (pid == 0) {
         /* Child */
-        syscall_dispatch(SYS_execve, (long)"/fat32/hello", (long)argv, 0, 0, 0);
+        syscall_dispatch(SYS_execve, (long)"/mnt/fat32/hello", (long)argv, 0, 0, 0);
         syscall_dispatch(SYS_exit, 1, 0, 0, 0, 0);
     } else {
         /* Parent */

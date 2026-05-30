@@ -266,9 +266,11 @@ proc vfs_resolve(path):
                 is_match = 1
 
             if is_match == 1:
-                if m_len > best_len:
+                if m_len >= best_len:
                     best_len = m_len
                     best_m = m
+                end
+            end
         i = i + 1
 
     if best_m == nil:
@@ -303,10 +305,66 @@ proc vfs_readdir(path):
     let res = vfs_resolve(path)
     if res == nil: return nil
     let mount = res["mount"]
+    
+    let entries = []
     if mount["is_sage"] == 1:
-        return mount["backend"]["readdir"](res["rel"])
+        let e = mount["backend"]["readdir"](res["rel"])
+        if e != nil: entries = e end
     else:
-        return os_backend_readdir(mount["backend"], res["rel"])
+        let e = os_backend_readdir(mount["backend"], res["rel"])
+        if e != nil: entries = e end
+    end
+
+    # Also add mount points that are children of this path
+    let i = 0
+    let m_count = os_array_len(g_vfs_mounts)
+    let p_len = os_strlen(path)
+    if os_char_at(path, p_len - 1) == 47 and p_len > 1:
+        p_len = p_len - 1
+    end
+
+    while i < m_count:
+        let m = g_vfs_mounts[i]
+        let m_path = m["path"]
+        if m_path != "/" and m_path != path:
+            if os_starts_with(m_path, path):
+                # Check if it's a direct child
+                let sub = os_substr(m_path, p_len, os_strlen(m_path))
+                if os_char_at(sub, 0) == 47:
+                    sub = os_substr(sub, 1, os_strlen(sub))
+                end
+                
+                # If sub has no more slashes, it's a direct child
+                let j = 0
+                let has_slash = 0
+                while j < os_strlen(sub):
+                    if os_char_at(sub, j) == 47: has_slash = 1 break end
+                    j = j + 1
+                end
+
+                if has_slash == 0 and os_strlen(sub) > 0:
+                    # Check if already in entries
+                    let found = 0
+                    let k = 0
+                    while k < os_array_len(entries):
+                        if entries[k]["name"] == sub: found = 1 break end
+                        k = k + 1
+                    end
+                    
+                    if found == 0:
+                        let entry = {}
+                        entry["name"] = sub
+                        entry["type"] = 1 # Directory
+                        entry["size"] = 0
+                        os_array_push(entries, entry)
+                    end
+                end
+            end
+        end
+        i = i + 1
+    end
+
+    return entries
 
 proc vfs_read(path, offset, size):
     let res = vfs_resolve(path)
@@ -373,6 +431,21 @@ proc vfs_init_fs():
     ramfs_mkdir("/opt")
     ramfs_mkdir("/proc")
     ramfs_mkdir("/tmp")
+    ramfs_mkdir("/usr")
+    ramfs_mkdir("/usr/bin")
+    ramfs_mkdir("/usr/lib")
+    ramfs_mkdir("/usr/include")
+    ramfs_mkdir("/usr/libexec")
+    ramfs_mkdir("/usr/share")
+    ramfs_mkdir("/usr/local")
+    ramfs_mkdir("/usr/local/bin")
+    ramfs_mkdir("/usr/local/lib")
+    ramfs_mkdir("/var")
+    ramfs_mkdir("/var/log")
+    ramfs_mkdir("/var/run")
+    ramfs_mkdir("/var/tmp")
+    ramfs_mkdir("/home")
+    ramfs_mkdir("/root")
 
     # Fetch and populate all C-embedded files dynamically
     let count = os_get_embedded_count()

@@ -37,32 +37,7 @@ void smp_boot_aps(void) {}
 void smp_cmd_info(void) { console_write("\nSMP: Not supported."); }
 uint32_t smp_cpu_count(void) { return 1; }
 // Timer stubs
-void timer_cmd_info(void) { console_write("\nTimer: Not supported."); }
-void timer_delay_ms(uint32_t ms) {
-    volatile uint32_t i;
-    for (uint32_t m = 0; m < ms; m++) {
-        for (i = 0; i < 50000; i++) {}
-    }
-}
-uint64_t timer_ticks(void) {
-    static uint64_t ticks = 0;
-    return ticks++;
-}
-uint64_t timer_seconds(void) { return timer_ticks() / 100; }
-uint32_t timer_cpu_percent(void) {
-    static uint32_t seed = 42;
-    seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
-    return 10 + (seed % 20); // 10-30%
-}
-uint32_t timer_cpu_percent_at(uint32_t cpu) {
-    static uint32_t seed = 1337;
-    seed = (seed * 1103515245 + 12345 + cpu) & 0x7FFFFFFF;
-    return (seed % 100); // 0-100% per core
-}
-void timer_init(void) {}
-void timer_irq(void) {}
-void timer_poll(void) {}
-void timer_idle_poll(void) { timer_poll(); }
+
 // Memory stubs
 // Memory stubs
 #include "sysinfo_shared.h"

@@ -30,8 +30,9 @@ void dmesg_printf(const char *fmt, ...) {
 static int dmesg_at_bol = 1;
 
 static void append_timestamp(void) {
-    uint64_t ticks = timer_ticks();
-    uint64_t sec = ticks / 100;
+    uint64_t centiseconds = timer_elapsed_centiseconds();
+    uint64_t sec = centiseconds / 100;
+    uint32_t csec = (uint32_t)(centiseconds % 100);
 
     append_char('[');
     char buf[20];
@@ -41,7 +42,6 @@ static void append_timestamp(void) {
     while (v > 0) { buf[i++] = (char)('0' + (v % 10)); v /= 10; }
     while (i > 0) append_char(buf[--i]);
     append_char('.');
-    uint32_t csec = (uint32_t)(ticks % 100);
     append_char((char)('0' + (csec / 10)));
     append_char((char)('0' + (csec % 10)));
     append_char('0'); append_char('0'); append_char('0'); append_char('0');

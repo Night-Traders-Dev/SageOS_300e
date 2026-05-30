@@ -107,6 +107,7 @@ static uint64_t g_timer_interval = 0;
 static uint64_t g_ticks = 0;
 static uint32_t g_flip_counter = 0;
 static uint64_t g_next_tick_time = 0;
+static uint64_t g_boot_timer_count = 0;  /* Hardware timer value at boot time */
 
 #if CURRENT_ARCH == TIMER_ARCH_X86
 static inline uint64_t rdtsc(void) {
@@ -135,21 +136,24 @@ void timer_init(void) {
         outb(PIT_CMD, 0x34);
         outb(PIT_CH0, pit_reload & 0xFF);
         outb(PIT_CH0, pit_reload >> 8);
-        g_next_tick_time = rdtsc() + 20000000ULL; // ~100Hz on 2GHz CPU
+        g_boot_timer_count = rdtsc();
+        g_next_tick_time = g_boot_timer_count + 20000000ULL; // ~100Hz on 2GHz CPU
 #endif
         g_timer_freq = PIT_BASE_HZ;
         g_timer_interval = 0;
     } else if (arch == TIMER_ARCH_ARM64) {
         g_timer_freq = arch_timer_freq();
         if (g_timer_freq == 0) g_timer_freq = 62500000;
+        g_boot_timer_count = arch_timer_count();
         g_timer_interval = g_timer_freq / PIT_HZ;
-        arch_timer_cval_write(arch_timer_count() + g_timer_interval);
+        arch_timer_cval_write(g_boot_timer_count + g_timer_interval);
         arch_timer_ctl_write(CNTV_ENABLE);
     } else if (arch == TIMER_ARCH_RV64) {
         g_timer_freq = arch_timer_freq();
         if (g_timer_freq == 0) g_timer_freq = 10000000;
+        g_boot_timer_count = arch_timer_count();
         g_timer_interval = g_timer_freq / PIT_HZ;
-        g_next_tick_time = arch_timer_count() + g_timer_interval;
+        g_next_tick_time = g_boot_timer_count + g_timer_interval;
         arch_timer_cval_write(g_next_tick_time);
     }
 }
@@ -214,6 +218,31 @@ void timer_delay_ms(uint32_t ms) {
 
 uint64_t timer_ticks(void) { return g_ticks; }
 uint64_t timer_seconds(void) { return g_ticks / PIT_HZ; }
+
+uint64_t timer_elapsed_centiseconds(void) {
+    int arch = arch_id();
+    uint64_t current_count = 0;
+    
+    if (arch == TIMER_ARCH_X86) {
+#if CURRENT_ARCH == TIMER_ARCH_X86
+        current_count = rdtsc();
+#endif
+    } else if (arch == TIMER_ARCH_ARM64) {
+        current_count = arch_timer_count();
+    } else if (arch == TIMER_ARCH_RV64) {
+        current_count = arch_timer_count();
+    }
+    
+    if (current_count < g_boot_timer_count) {
+        return 0;  /* Guard against timer wrap-around or uninitialized state */
+    }
+    
+    uint64_t elapsed = current_count - g_boot_timer_count;
+    /* Convert hardware timer units to centiseconds (1/100th second) */
+    if (g_timer_freq == 0) return 0;
+    uint64_t centiseconds = (elapsed * 100) / g_timer_freq;
+    return centiseconds;
+}
 void timer_cmd_info(void) {}
 
 // For compatibility with calls elsewhere:
@@ -232,6 +261,7 @@ void     sage_timer_init(void)               { timer_init(); }
 void     sage_timer_irq(void)                { timer_irq(); }
 uint64_t sage_timer_ticks(void)              { return timer_ticks(); }
 uint64_t sage_timer_seconds(void)            { return timer_seconds(); }
+uint64_t sage_timer_elapsed_centiseconds(void) { return timer_elapsed_centiseconds(); }
 void     sage_timer_delay_ms(uint32_t ms)    { timer_delay_ms(ms); }
 void     sage_timer_poll(void)               { timer_poll(); }
 void     sage_timer_idle_poll(void)          { timer_idle_poll(); }

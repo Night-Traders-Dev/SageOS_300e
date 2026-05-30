@@ -10,6 +10,7 @@ void timer_irq(void);
 
 uint64_t timer_ticks(void);
 uint64_t timer_seconds(void);
+uint64_t timer_elapsed_centiseconds(void);
 uint32_t timer_cpu_percent(void);
 uint32_t timer_cpu_percent_at(uint32_t cpu);
 void timer_delay_ms(uint32_t ms);

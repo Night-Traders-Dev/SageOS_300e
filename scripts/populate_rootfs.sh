@@ -46,11 +46,14 @@ MAPPINGS=(
 
 echo "  Compiling and syncing system files and commands..."
 for mapping in "${MAPPINGS[@]}"; do
-    src_glob="${mapping%%:*}"
+    src_dir="${mapping%%:*}"
+    # Convert wildcard to directory for finding files
+    src_path="${src_dir%/*.sage}"
     dst="${mapping##*:}"
-    echo "    Processing $src_glob -> $dst"
+    echo "    Processing $src_path -> $dst"
     
-    for f in $src_glob; do
+    # Explicitly find and process only .sage files
+    find "$src_path" -maxdepth 1 -name "*.sage" | while read -r f; do
         [ -e "$f" ] || continue
         filename=$(basename "${f%.sage}")
         target_path="$ROOTFS/$dst/$filename.sgvm"

@@ -2,11 +2,13 @@
 
 # populate_rootfs.sh - Create and populate the SageOS rootfs directory
 # Organization: Define sources and target directories systematically.
+# Compiles .sage to .sgvm bytecode.
 
 set -e
 
 ROOTFS="rootfs"
 BUILD_DIR="sageos_build/kernel"
+COMPILER="python3 scripts/compile_to_sgvm.py"
 
 echo "Populating $ROOTFS directory..."
 
@@ -34,20 +36,28 @@ for dir in "${DIRS[@]}"; do
     mkdir -p "$ROOTFS/$dir"
 done
 
-# Define mappings: source_path -> target_dir
-# Using an array of strings formatted as "source:target"
+# MAPPINGS: source_path -> target_dir
+# Syncing system files and commands
 MAPPINGS=(
     "$BUILD_DIR/core/sagelang/*.sage:system/sagelang"
     "$BUILD_DIR/etc/system/sagelang/*.sage:etc/system/sagelang"
     "$BUILD_DIR/etc/commands/*.sage:etc/commands"
 )
 
-echo "  Populating system files and commands..."
+echo "  Compiling and syncing system files and commands..."
 for mapping in "${MAPPINGS[@]}"; do
-    src="${mapping%%:*}"
+    src_glob="${mapping%%:*}"
     dst="${mapping##*:}"
-    echo "    Syncing $src -> $dst"
-    cp $src "$ROOTFS/$dst/"
+    echo "    Processing $src_glob -> $dst"
+    
+    for f in $src_glob; do
+        [ -e "$f" ] || continue
+        filename=$(basename "${f%.sage}")
+        target_path="$ROOTFS/$dst/$filename.sgvm"
+        
+        # Compile .sage to .sgvm
+        $COMPILER "$f" -o "$target_path"
+    done
 done
 
 # 4. Copy specific binary/bytecode assets
@@ -67,10 +77,10 @@ done
 
 # 5. Populate /bin with command aliases
 echo "  Generating binary command aliases..."
-for f in "$ROOTFS/etc/commands"/*.sage; do
+for f in "$ROOTFS/etc/commands"/*.sgvm; do
     [ -e "$f" ] || continue
-    name=$(basename "$f")
-    ln -sf "/etc/commands/$name" "$ROOTFS/bin/$name"
+    name=$(basename "${f%.sgvm}")
+    ln -sf "/etc/commands/$name.sgvm" "$ROOTFS/bin/$name"
 done
 
 echo "Rootfs population complete!"

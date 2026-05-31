@@ -1,56 +1,76 @@
 #!/usr/bin/env bash
 
 # populate_rootfs.sh - Create and populate the SageOS rootfs directory
+# Organization: Define sources and target directories systematically.
 
 set -e
 
 ROOTFS="rootfs"
-SAGE_BIN="./sage"
+BUILD_DIR="sageos_build/kernel"
 
 echo "Populating $ROOTFS directory..."
 
-# 0. Clean old rootfs
+# 0. Clean and prepare structure
 rm -rf "$ROOTFS"
 mkdir -p "$ROOTFS"
 
-# 1. Create directory structure
-mkdir -p "$ROOTFS/bin"
-mkdir -p "$ROOTFS/etc/commands"
-mkdir -p "$ROOTFS/etc/system/sagelang"
-mkdir -p "$ROOTFS/lib"
-mkdir -p "$ROOTFS/system/sagelang"
-mkdir -p "$ROOTFS/usr/bin"
-mkdir -p "$ROOTFS/usr/lib"
-mkdir -p "$ROOTFS/dev"
-mkdir -p "$ROOTFS/proc"
-mkdir -p "$ROOTFS/tmp"
-mkdir -p "$ROOTFS/mnt/fat32"
-mkdir -p "$ROOTFS/mnt/btrfs"
+# Define directories to create
+DIRS=(
+    "bin"
+    "etc/commands"
+    "etc/system/sagelang"
+    "lib"
+    "system/sagelang"
+    "usr/bin"
+    "usr/lib"
+    "dev"
+    "proc"
+    "tmp"
+    "mnt/fat32"
+    "mnt/btrfs"
+)
 
-# 2. Copy system scripts
-echo "  Copying system scripts..."
-cp sageos_build/kernel/core/sagelang/*.sage "$ROOTFS/system/sagelang/"
-cp sageos_build/kernel/etc/system/sagelang/*.sage "$ROOTFS/etc/system/sagelang/"
+for dir in "${DIRS[@]}"; do
+    mkdir -p "$ROOTFS/$dir"
+done
 
-# 3. Copy commands
-echo "  Copying commands..."
-cp sageos_build/kernel/etc/commands/*.sage "$ROOTFS/etc/commands/"
+# Define mappings: source_path -> target_dir
+# Using an array of strings formatted as "source:target"
+MAPPINGS=(
+    "$BUILD_DIR/core/sagelang/*.sage:system/sagelang"
+    "$BUILD_DIR/etc/system/sagelang/*.sage:etc/system/sagelang"
+    "$BUILD_DIR/etc/commands/*.sage:etc/commands"
+)
 
-# 4. Copy bytecode if it exists
-if [ -f "sageos_build/kernel/fs/vfs_bridge.bc" ]; then
-    echo "  Copying VFS bridge bytecode..."
-    cp sageos_build/kernel/fs/vfs_bridge.bc "$ROOTFS/lib/"
-fi
+echo "  Populating system files and commands..."
+for mapping in "${MAPPINGS[@]}"; do
+    src="${mapping%%:*}"
+    dst="${mapping##*:}"
+    echo "    Syncing $src -> $dst"
+    cp $src "$ROOTFS/$dst/"
+done
 
-if [ -f "sageos_build/kernel/shell/sage_shell.bc" ]; then
-    echo "  Copying SageShell bytecode..."
-    cp sageos_build/kernel/shell/sage_shell.bc "$ROOTFS/lib/"
-fi
+# 4. Copy specific binary/bytecode assets
+ASSETS=(
+    "$BUILD_DIR/fs/vfs_bridge.bc:lib/vfs_bridge.bc"
+    "$BUILD_DIR/shell/sage_shell.bc:lib/sage_shell.bc"
+)
+
+for asset in "${ASSETS[@]}"; do
+    src="${asset%%:*}"
+    dst="${asset##*:}"
+    if [ -f "$src" ]; then
+        echo "    Copying asset: $src -> $dst"
+        cp "$src" "$ROOTFS/$dst"
+    fi
+done
 
 # 5. Populate /bin with command aliases
+echo "  Generating binary command aliases..."
 for f in "$ROOTFS/etc/commands"/*.sage; do
+    [ -e "$f" ] || continue
     name=$(basename "$f")
-    cp "$f" "$ROOTFS/bin/$name"
+    ln -sf "/etc/commands/$name" "$ROOTFS/bin/$name"
 done
 
 echo "Rootfs population complete!"

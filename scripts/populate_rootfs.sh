@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 # populate_rootfs.sh - Create and populate the SageOS rootfs directory
-# Organization: Define sources and target directories systematically.
-# Compiles .sage to .sgvm bytecode.
+# Organization: FHS-compliant layout
 
 set -e
 
@@ -10,60 +9,58 @@ ROOTFS="rootfs"
 BUILD_DIR="sageos_build/kernel"
 COMPILER="python3 scripts/compile_to_sgvm.py"
 
-echo "Populating $ROOTFS directory..."
+echo "Populating FHS-compliant $ROOTFS directory..."
 
 # 0. Clean and prepare structure
 rm -rf "$ROOTFS"
 mkdir -p "$ROOTFS"
 
-# Define directories to create
+# 1. Define FHS structure
 DIRS=(
-    "bin"
-    "etc/commands"
-    "etc/system/sagelang"
-    "lib"
-    "system/sagelang"
-    "usr/bin"
-    "usr/lib"
-    "dev"
-    "proc"
-    "tmp"
-    "mnt/fat32"
-    "mnt/btrfs"
+    "bin"           # Essential command binaries
+    "etc"           # System configuration
+    "lib"           # Shared libraries and bytecode
+    "proc"          # Kernel/Process information
+    "sys"           # Kernel/Device information
+    "dev"           # Device nodes
+    "tmp"           # Temporary files
+    "usr/bin"       # User binaries
+    "usr/lib"       # User libraries
+    "var/log"       # System logs
+    "mnt"           # Mount points
 )
 
 for dir in "${DIRS[@]}"; do
     mkdir -p "$ROOTFS/$dir"
 done
 
-# MAPPINGS: source_path -> target_dir
-# Syncing system files and commands
+# 2. Map system files to FHS locations
+# Format: "source_dir:target_dir"
 MAPPINGS=(
-    "$BUILD_DIR/core/sagelang/*.sage:system/sagelang"
-    "$BUILD_DIR/etc/system/sagelang/*.sage:etc/system/sagelang"
-    "$BUILD_DIR/etc/commands/*.sage:etc/commands"
+    "$BUILD_DIR/core/sagelang:lib/sagelang"
+    "$BUILD_DIR/etc/system/sagelang:etc/sagelang"
+    "$BUILD_DIR/etc/commands:bin"
 )
 
-echo "  Compiling and syncing system files and commands..."
+echo "  Compiling and syncing system files..."
 for mapping in "${MAPPINGS[@]}"; do
-    src_dir="${mapping%%:*}"
-    # Convert wildcard to directory for finding files
-    src_path="${src_dir%/*.sage}"
-    dst="${mapping##*:}"
-    echo "    Processing $src_path -> $dst"
+    src_path="${mapping%%:*}"
+    dst_path="$ROOTFS/${mapping##*:}"
     
-    # Explicitly find and process only .sage files
+    mkdir -p "$dst_path"
+    
+    # Process only .sage files
     find "$src_path" -maxdepth 1 -name "*.sage" | while read -r f; do
         [ -e "$f" ] || continue
         filename=$(basename "${f%.sage}")
-        target_path="$ROOTFS/$dst/$filename.sgvm"
+        target_path="$dst_path/$filename.sgvm"
         
-        # Compile .sage to .sgvm
+        echo "    Compiling: $(basename "$f") -> $target_path"
         $COMPILER "$f" -o "$target_path"
     done
 done
 
-# 4. Copy specific binary/bytecode assets
+# 3. Copy binary assets to /lib
 ASSETS=(
     "$BUILD_DIR/fs/vfs_bridge.bc:lib/vfs_bridge.bc"
     "$BUILD_DIR/shell/sage_shell.bc:lib/sage_shell.bc"
@@ -71,19 +68,12 @@ ASSETS=(
 
 for asset in "${ASSETS[@]}"; do
     src="${asset%%:*}"
-    dst="${asset##*:}"
+    dst="$ROOTFS/${asset##*:}"
     if [ -f "$src" ]; then
         echo "    Copying asset: $src -> $dst"
-        cp "$src" "$ROOTFS/$dst"
+        cp "$src" "$dst"
     fi
 done
 
-# 5. Populate /bin with command aliases
-echo "  Generating binary command aliases..."
-for f in "$ROOTFS/etc/commands"/*.sgvm; do
-    [ -e "$f" ] || continue
-    name=$(basename "${f%.sgvm}")
-    ln -sf "/etc/commands/$name.sgvm" "$ROOTFS/bin/$name"
-done
-
-echo "Rootfs population complete!"
+# 4. Finalize environment
+echo "Rootfs population complete (FHS-compliant)!"

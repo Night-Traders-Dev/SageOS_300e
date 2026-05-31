@@ -110,7 +110,7 @@ void interpreter_set_jit(JitState* jit) { g_jit = jit; }
 JitState* interpreter_get_jit(void) { return g_jit; }
 
 // Recursion depth tracking to prevent stack overflow
-#define MAX_RECURSION_DEPTH 5000
+#define MAX_RECURSION_DEPTH 1000
 
 // Check if a statement has a specific pragma decorator (@nojit, @noaot, etc.)
 static __attribute__((unused)) int stmt_has_pragma(Stmt* stmt, const char* name) {

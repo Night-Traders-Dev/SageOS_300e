@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "scheduler_ipc_ext.h"
 #include "sage_alloc.h"
 #include "console.h"
 #include <string.h>
@@ -37,6 +38,8 @@ void sched_init(void) {
     g_tasks[0].stack_base = (uint64_t)stack_bottom;
     g_tasks[0].stack_top = (uint64_t)stack_bottom + 16384; // 16KB boot stack
     
+    sched_ipc_init_thread(&g_tasks[0]);
+    
     g_current_task = &g_tasks[0];
     g_sched_inited = 1;
 }
@@ -65,6 +68,8 @@ thread_t *sched_create_thread(const char *name, void (*entry)(void *), void *arg
     strncpy(t->name, name, 31);
     strcpy(t->cwd, "/");
     
+    sched_ipc_init_thread(t);
+
     t->stack_base = (uint64_t)sage_malloc(SCHED_STACK_SIZE);
     t->stack_top = t->stack_base + SCHED_STACK_SIZE;
     
@@ -177,4 +182,21 @@ int sched_get_thread_info(uint32_t index, char *name, thread_state_t *state, uin
 
 void sched_timer_tick(void) {
     /* Called by timer IRQ. Preemption logic goes here. */
+}
+
+void sched_yield(void) {
+    sched_schedule();
+}
+
+void sched_block(void) {
+    if (g_current_task) {
+        g_current_task->state = THREAD_STATE_BLOCKED;
+        sched_schedule();
+    }
+}
+
+void sched_unblock(thread_t *thread) {
+    if (thread && thread->state == THREAD_STATE_BLOCKED) {
+        thread->state = THREAD_STATE_READY;
+    }
 }

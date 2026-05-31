@@ -43,6 +43,12 @@ typedef struct {
 #define IPC_CAPF_IMMUTABLE        (1U << 1)   /* rights cannot be narrowed */
 #define IPC_CAPF_PERSISTENT       (1U << 2)   /* survives task exit */
 
+#define IPC_MAX_ENDPOINTS         128
+#define IPC_MAX_CHANNELS          64
+#define IPC_MAX_PORTS             32
+#define IPC_MAX_SHM               32
+#define IPC_MAX_NS_ENTRIES        256
+
 /* Capability slot table embedded in thread_t (see scheduler.h extension) */
 typedef struct {
     ipc_capability_t caps[IPC_CAP_MAX_PER_TASK];

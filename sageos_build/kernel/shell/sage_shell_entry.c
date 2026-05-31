@@ -970,6 +970,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_keydebug",      n_keydebug);
     REG("os_dmesg_dump",    n_dmesg_dump);
     REG("os_dmesg_log",     n_dmesg_log);
+    REG("dmesg_log",        n_dmesg_log);
     REG("os_dmesg_get_total", n_dmesg_get_total);
     REG("os_dmesg_get_head",  n_dmesg_get_head);
     REG("os_dmesg_get_size",  n_dmesg_get_size);

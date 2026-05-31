@@ -2,12 +2,18 @@
 #include "process.h"
 #include "vfs.h"
 #include "console.h"
+#include "ipc.h"
+#include "scheduler_ipc_ext.h"
 #include <string.h>
 
 #include <sys/stat.h>
 
 #include "timer.h"
 #include "sage_alloc.h"
+
+/* Forward declaration of IPC dispatch router */
+extern long ipc_syscall_dispatch(long num, long a1, long a2, long a3,
+                                  long a4, long a5);
 
 struct timeval {
     long tv_sec;
@@ -124,6 +130,37 @@ long syscall_dispatch(long num, long a1, long a2, long a3,
     case SYS_isatty:
         ret = (a1 >= 0 && a1 <= 2) ? 1 : 0;
         break;
+
+    /* IPC subsystem syscalls (200-244) */
+    case SYS_ipc_endpoint_create:
+    case SYS_ipc_channel_create:
+    case SYS_ipc_port_create:
+    case SYS_ipc_shm_create:
+    case SYS_ipc_send:
+    case SYS_ipc_recv:
+    case SYS_ipc_call:
+    case SYS_ipc_port_listen:
+    case SYS_ipc_port_accept:
+    case SYS_ipc_port_connect:
+    case SYS_ipc_shm_map:
+    case SYS_ipc_shm_unmap:
+    case SYS_ipc_shm_grant:
+    case SYS_ipc_ns_register:
+    case SYS_ipc_ns_lookup:
+    case SYS_ipc_ns_unbind:
+    case SYS_ipc_object_destroy:
+    case SYS_ipc_object_pause:
+    case SYS_ipc_object_resume:
+    case SYS_ipc_object_drain:
+    case SYS_ipc_object_info:
+    case SYS_ipc_object_stats:
+    case SYS_ipc_cap_insert:
+    case SYS_ipc_cap_narrow:
+    case SYS_ipc_cap_revoke:
+    case SYS_ipc_cap_dup:
+        ret = ipc_syscall_dispatch(num, a1, a2, a3, a4, a5);
+        break;
+
     default:
         ret = -VFS_EINVAL;
         break;
@@ -478,6 +515,7 @@ long sys_waitpid(int pid, int *status, int options) {
 
         if (child->state == THREAD_STATE_TERMINATED) {
             if (status) *status = child->exit_code;
+            sched_ipc_cleanup_thread(child);
             child->state = THREAD_STATE_UNUSED; /* reap */
             return pid;
         }

@@ -143,6 +143,9 @@ void kmain(SageOSBootInfo *info) {
     phys_init(info);
     vmm_init();
     
+    extern void ipc_subsystem_init(void);
+    ipc_subsystem_init();
+    
     keyboard_init();
     vfs_init();
 

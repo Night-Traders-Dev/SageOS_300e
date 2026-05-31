@@ -12,6 +12,8 @@ Welcome to the SageOS documentation hub. This directory contains architecture ov
 - [ARM 64-bit (ARM64)](arch/arm64.md)
 - [Intel/AMD 64-bit (x86_64)](arch/x64.md)
 - [RISC-V 64-bit (RV64)](arch/rv64.md)
+- [Inter-Process Communication (IPC) Spec](ipc_spec.md)
+- [IPC Integration Guide](README_IPC.md)
 
 ## Device Guides
 - [Raspberry Pi 4](devices/rpi4.md)

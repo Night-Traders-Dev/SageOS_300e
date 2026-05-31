@@ -127,6 +127,7 @@ uint32_t sched_cpu_id(void);
 
 const sched_stats_t *sched_get_stats(void);
 int sched_get_thread_info(uint32_t index, char *name, thread_state_t *state, uint32_t *cpu);
+thread_t *sched_get_thread_by_id(uint32_t id);
 void sched_cmd_info(void);
 
 #endif

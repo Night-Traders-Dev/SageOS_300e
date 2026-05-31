@@ -389,6 +389,13 @@ static Value n_os_console_clear(int argCount, Value* args) {
     console_clear(); return val_nil();
 }
 
+static Value n_os_dmesg_log(int argCount, Value* args) {
+    if (argCount >= 1 && IS_STRING(args[0])) {
+        dmesg_log(AS_STRING(args[0]));
+    }
+    return val_nil();
+}
+
 // --- Module Registration ---
 
 void register_sageos_natives(ModuleCache* cache) {
@@ -414,10 +421,13 @@ void register_sageos_natives(ModuleCache* cache) {
     env_define(env, "os_shell_completion_common", 25, val_native(n_os_shell_completion_common));
     env_define(env, "os_shell_print_completions", 25, val_native(n_os_shell_print_completions));
     env_define(env, "os_console_clear", 16, val_native(n_os_console_clear));
+    env_define(env, "os_dmesg_log", 12, val_native(n_os_dmesg_log));
+    env_define(env, "dmesg_log", 9, val_native(n_os_dmesg_log));
     env_define(env, "os_version_string", 17, val_native(n_os_version));
 
     // Also register the 'os' module
     Module* os = create_native_module(cache, "os");
     env_define(os->env, "write_str", 9, val_native(n_os_write_str));
+    env_define(os->env, "dmesg_log", 9, val_native(n_os_dmesg_log));
     // ... add more to 'os' module if needed ...
 }

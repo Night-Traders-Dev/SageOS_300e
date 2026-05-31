@@ -7,25 +7,35 @@
 #include "ipc.h"
 #include "process.h"
 #include "scheduler.h"
+#include "scheduler_ipc_ext.h"
 #include "sage_alloc.h"
 #include "console.h"
 #include <string.h>
+
+/* Simple strtok implementation for kernel */
+static char *g_strtok_ptr = NULL;
+static char *strtok(char *str, const char *delim) {
+    if (str) g_strtok_ptr = str;
+    if (!g_strtok_ptr) return NULL;
+    char *start = g_strtok_ptr;
+    while (*start && strchr(delim, *start)) start++;
+    if (!*start) { g_strtok_ptr = NULL; return NULL; }
+    char *end = start;
+    while (*end && !strchr(delim, *end)) end++;
+    if (*end) { *end = '\0'; g_strtok_ptr = end + 1; }
+    else { g_strtok_ptr = NULL; }
+    return start;
+}
 
 /* ============================================================================
  * Internal Object Pools
  * ============================================================================ */
 
-#define IPC_MAX_ENDPOINTS         128
-#define IPC_MAX_CHANNELS          64
-#define IPC_MAX_PORTS             32
-#define IPC_MAX_SHM               32
-#define IPC_MAX_NS_ENTRIES        256
-
-static ipc_endpoint_t    g_endpoints[IPC_MAX_ENDPOINTS];
-static ipc_shared_mem_t  g_shm[IPC_MAX_SHM];
-static ipc_port_t        g_ports[IPC_MAX_PORTS];
-static ipc_ns_entry_t    g_ns_entries[IPC_MAX_NS_ENTRIES];
-static ipc_namespace_t   g_namespace;
+ipc_endpoint_t    g_endpoints[IPC_MAX_ENDPOINTS];
+ipc_shared_mem_t  g_shm[IPC_MAX_SHM];
+ipc_port_t        g_ports[IPC_MAX_PORTS];
+ipc_ns_entry_t    g_ns_entries[IPC_MAX_NS_ENTRIES];
+ipc_namespace_t   g_namespace;
 
 static uint32_t g_ipc_lock = 0;   /* global coarse lock for pool allocators */
 
@@ -35,7 +45,13 @@ static uint32_t g_ipc_lock = 0;   /* global coarse lock for pool allocators */
 
 static void ipc_spin_lock(uint32_t *lock) {
     while (__atomic_test_and_set(lock, __ATOMIC_SEQ_CST)) {
+#if defined(__aarch64__)
+        __asm__ volatile ("yield");
+#elif defined(__riscv)
+        __asm__ volatile ("fence");
+#else
         __asm__ volatile ("pause");
+#endif
     }
 }
 
@@ -48,12 +64,7 @@ static void ipc_spin_unlock(uint32_t *lock) {
  * ============================================================================ */
 
 static ipc_cap_table_t *ipc_get_cap_table(task_t *t) {
-    /* The cap table is embedded in thread_t; we access it via the task pointer.
-     * In the current scheduler.h, thread_t does not yet have a cap_table field.
-     * This is a forward-declaration dependency: scheduler.h must be extended.
-     * For now, we use a global per-task array indexed by task id. */
-    extern ipc_cap_table_t g_cap_tables[SCHED_MAX_THREADS];
-    return &g_cap_tables[t->id % SCHED_MAX_THREADS];
+    return task_ipc_cap_table(t);
 }
 
 static int ipc_cap_alloc_slot(ipc_cap_table_t *tab, uint32_t *out_handle) {
@@ -263,7 +274,8 @@ static void ipc_wait_enqueue(ipc_endpoint_t *ep, thread_t *t) {
 static ipc_ns_entry_t *ipc_ns_find(const char *name) {
     ipc_ns_entry_t *cur = g_namespace.root;
     char buf[IPC_NS_MAX_NAME_LEN];
-    strlcpy(buf, name, sizeof(buf));
+    strncpy(buf, name, sizeof(buf));
+    buf[sizeof(buf)-1] = '\0';
 
     char *token = strtok(buf, ".");
     while (token && cur) {
@@ -290,12 +302,14 @@ static int ipc_ns_insert(const char *name, uint32_t cap_handle,
     if (!g_namespace.root) {
         g_namespace.root = &g_ns_entries[0];
         memset(g_namespace.root, 0, sizeof(ipc_ns_entry_t));
-        strlcpy(g_namespace.root->name, "", sizeof(g_namespace.root->name));
+        strncpy(g_namespace.root->name, "", sizeof(g_namespace.root->name));
+        g_namespace.root->name[sizeof(g_namespace.root->name)-1] = '\0';
     }
 
     ipc_ns_entry_t *cur = g_namespace.root;
     char buf[IPC_NS_MAX_NAME_LEN];
-    strlcpy(buf, name, sizeof(buf));
+    strncpy(buf, name, sizeof(buf));
+    buf[sizeof(buf)-1] = '\0';
 
     char *token = strtok(buf, ".");
     while (token) {
@@ -321,7 +335,8 @@ static int ipc_ns_insert(const char *name, uint32_t cap_handle,
             }
             ipc_ns_entry_t *new_entry = &g_ns_entries[g_namespace.count++];
             memset(new_entry, 0, sizeof(ipc_ns_entry_t));
-            strlcpy(new_entry->name, token, sizeof(new_entry->name));
+            strncpy(new_entry->name, token, sizeof(new_entry->name));
+            new_entry->name[sizeof(new_entry->name)-1] = '\0';
             new_entry->sibling = cur->child;
             cur->child = new_entry;
             cur = new_entry;
@@ -354,8 +369,8 @@ long sys_ipc_endpoint_create(uintptr_t out_send, uintptr_t out_recv) {
     /* Allocate ring buffers */
     ep_send->ring_size = 16;
     ep_recv->ring_size = 16;
-    ep_send->msg_ring = (ipc_msg_t *)sage_alloc(sizeof(ipc_msg_t) * 16);
-    ep_recv->msg_ring = (ipc_msg_t *)sage_alloc(sizeof(ipc_msg_t) * 16);
+    ep_send->msg_ring = (ipc_msg_t *)sage_malloc(sizeof(ipc_msg_t) * 16);
+    ep_recv->msg_ring = (ipc_msg_t *)sage_malloc(sizeof(ipc_msg_t) * 16);
     if (!ep_send->msg_ring || !ep_recv->msg_ring) {
         if (ep_send->msg_ring) sage_free(ep_send->msg_ring);
         if (ep_recv->msg_ring) sage_free(ep_recv->msg_ring);

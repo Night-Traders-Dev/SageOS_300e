@@ -8,6 +8,7 @@
 #define SAGEOS_SCHEDULER_IPC_EXT_H
 
 #include "ipc.h"
+#include "scheduler.h"
 
 /* ============================================================================
  * Thread Extension — IPC Fields
@@ -51,7 +52,7 @@ static inline thread_ipc_ext_t *thread_ipc_ext(thread_t *t) {
 }
 
 /* Helper to get the IPC-cap table for a task (used by ipc.c) */
-static inline ipc_cap_table_t *task_ipc_cap_table(task_t *t) {
+static inline ipc_cap_table_t *task_ipc_cap_table(struct thread *t) {
     return &thread_ipc_ext((thread_t *)t)->cap_table;
 }
 

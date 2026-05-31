@@ -89,11 +89,14 @@ proc generate_virt_build(arch):
         "sageos_build/kernel/core/bootlog.c",
         "sageos_build/kernel/core/kernel_stubs.c",
         "sageos_build/kernel/core/scheduler.c",
+        "sageos_build/kernel/core/scheduler_ipc_ext.c",
+        "sageos_build/kernel/core/ipc.c",
         "sageos_build/kernel/shell/shell.c",
         "sageos_build/kernel/shell/shell_helper.c",
         "sageos_build/kernel/shell/extra_cmds.c",
         "sageos_build/kernel/shell/sage_shell_entry.c",
         "sageos_build/kernel/core/sagelang/metal_vm.c",
+        "sageos_build/kernel/core/sagelang/ipc_sagelang_binding.c",
         "sageos_build/kernel/core/syscall.c",
         "sageos_build/kernel/core/mm.c",
         "sageos_build/kernel/fs/elf.c",
@@ -127,7 +130,7 @@ proc generate_virt_build(arch):
     end
 
     script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mno-red-zone -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_X86_64\"" + NL
-    if arch == "aarch64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mstrict-align -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_AARCH64\"" + NL end
+    if arch == "aarch64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mstrict-align -mno-outline-atomics -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_AARCH64\"" + NL end
     if arch == "riscv64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mcmodel=medany -march=rv64g -mabi=lp64d -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_RV64\"" + NL end
 
     script = script + "echo 'Building SageOS Virt (" + arch + ")...'" + NL

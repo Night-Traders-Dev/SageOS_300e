@@ -6,7 +6,11 @@
 #include "scheduler.h"
 #include "ipc.h"
 #include "sage_alloc.h"
+#include "console.h"
 #include <string.h>
+
+/* Forward declaration of kernel IPC function */
+extern long sys_ipc_object_destroy(uint32_t cap_handle);
 
 /* Global parallel array for IPC extensions */
 thread_ipc_ext_t g_thread_ipc_ext[SCHED_MAX_THREADS];

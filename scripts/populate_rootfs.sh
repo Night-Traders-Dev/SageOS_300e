@@ -37,18 +37,22 @@ for mapping in "${MAPPINGS[@]}"; do
     find "$src_path" -maxdepth 1 -name "*.sage" | while read -r f; do
         [ -e "$f" ] || continue
         filename=$(basename "${f%.sage}")
+        clean_sage="/tmp/$filename.clean.sage"
         bc_path="/tmp/$filename.bc"
         target_path="$dst_path/$filename.sgvm"
         
         echo "    Processing: $(basename "$f")"
         
+        # 0. Strip comments (// style)
+        sed 's|//.*||g' "$f" > "$clean_sage"
+        
         # 1. Generate intermediate bytecode (.bc)
-        $SAGE_COMPILER --emit-vm "$f" -o "$bc_path"
+        $SAGE_COMPILER --emit-vm "$clean_sage" -o "$bc_path"
         
         # 2. Package into final SGVM
         $COMPILER "$bc_path" -o "$target_path"
         
-        rm -f "$bc_path"
+        rm -f "$clean_sage" "$bc_path"
     done
 done
 

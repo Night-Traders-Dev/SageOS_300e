@@ -2,10 +2,10 @@
 // Battery Driver (SageLang)
 // ============================================================================
 
-fn init_battery() {
+proc init_battery():
     battery_init()
-}
+end
 
-fn get_battery_pct() {
+proc get_battery_pct():
     return battery_percent()
-}
+end

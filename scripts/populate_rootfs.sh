@@ -35,12 +35,13 @@ for f in $ALL_SAGE; do
     echo "    Compiling: $(basename "$f")"
     sed 's|//.*||g' "$f" > "$clean_sage"
     
-    # Try compiling; if it fails (e.g. AST fallback not supported), skip it
+    # Try compiling; if it fails (e.g. AST fallback not supported), copy raw file
     if $SAGE_COMPILER --emit-vm "$clean_sage" -o "$bc_path" 2>/dev/null; then
         $COMPILER "$bc_path" -o "$sgvm_path"
         echo "      Success"
     else
-        echo "      Skipped (VM compile unsupported)"
+        echo "      Skipped (VM compile unsupported), falling back to raw .sage"
+        cp "$f" "$ROOTFS/lib/sagelang/$(basename "$f")"
     fi
     
     rm -f "$clean_sage" "$bc_path"

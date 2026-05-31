@@ -2,14 +2,14 @@
 // Power Driver (SageLang)
 // ============================================================================
 
-fn power_qemu_exit_driver() {
+proc power_qemu_exit_driver():
     power_qemu_exit()
-}
+end
 
-fn power_reboot_driver() {
+proc power_reboot_driver():
     power_reboot()
-}
+end
 
-fn power_shutdown_driver() {
+proc power_shutdown_driver():
     power_shutdown()
-}
+end

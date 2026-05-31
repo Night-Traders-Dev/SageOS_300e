@@ -2,10 +2,10 @@
 // BootLog Driver (SageLang)
 // ============================================================================
 
-fn bootlog_init_driver() {
+proc bootlog_init_driver():
     bootlog_init()
-}
+end
 
-fn bootlog_msg(msg) {
+proc bootlog_msg(msg):
     bootlog(msg)
-}
+end

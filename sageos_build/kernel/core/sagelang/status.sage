@@ -2,14 +2,14 @@
 // Status Driver (SageLang)
 // ============================================================================
 
-fn refresh_status() {
+proc refresh_status():
     status_refresh()
-}
+end
 
-fn get_ram_total() {
+proc get_ram_total():
     return ram_total_bytes()
-}
+end
 
-fn get_ram_used() {
+proc get_ram_used():
     return ram_used_bytes()
-}
+end

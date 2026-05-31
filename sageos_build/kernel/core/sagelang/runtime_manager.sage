@@ -1,8 +1,8 @@
 # Runtime Manager (PID 1) — System Supervisor
 # Manages services, dependencies, and self-healing.
 
-import os
-import ipc
+// import os
+// import ipc
 
 let services = {}
 let dependencies = {
@@ -17,7 +17,9 @@ proc log(msg):
     os.dmesg_log("[SUPERVISOR] " + msg)
 
 proc start_service(name):
-    if services.contains(name): return end
+    if services.contains(name):
+        return
+    end
 
     log("Starting service: " + name)
     # Check dependencies

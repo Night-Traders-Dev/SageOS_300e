@@ -17,10 +17,8 @@ proc log(msg):
     os.dmesg_log("[SUPERVISOR] " + msg)
 
 proc start_service(name):
-    if services.contains(name):
-        return nil
-    end
-    
+    if services.contains(name): return end
+
     log("Starting service: " + name)
     # Check dependencies
     if dependencies.contains(name):
@@ -44,8 +42,10 @@ proc start_service(name):
 proc monitor_loop():
     log("Supervisor monitoring loop started.")
     while true:
+        # Simple spin-loop delay as a workaround for timer/sleep unavailability
         let i = 0
-        while i < 100000:
+        while i < 1000000:
+            let dummy = 1
             i = i + 1
         end
         log("Pulse...")
@@ -59,3 +59,4 @@ start_service("shell")
 
 log("System bootstrap complete. Transitioning to monitor mode.")
 monitor_loop()
+

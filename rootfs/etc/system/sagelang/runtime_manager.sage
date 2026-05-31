@@ -17,7 +17,9 @@ proc log(msg):
     os.dmesg_log("[SUPERVISOR] " + msg)
 
 proc start_service(name):
-    if services.contains(name): return end
+    if services.contains(name):
+        return nil
+    end
     
     log("Starting service: " + name)
     # Check dependencies
@@ -42,7 +44,10 @@ proc start_service(name):
 proc monitor_loop():
     log("Supervisor monitoring loop started.")
     while true:
-        os.sleep(5000)
+        let i = 0
+        while i < 100000:
+            i = i + 1
+        end
         log("Pulse...")
 
 log("SageOS Runtime Manager initializing...")

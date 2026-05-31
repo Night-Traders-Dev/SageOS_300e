@@ -1,6 +1,11 @@
 #ifndef SAGEOS_SAGE_LIBC_SHIM_H
 #define SAGEOS_SAGE_LIBC_SHIM_H
 
+/* Bare-metal environments lacking TLS infrastructure */
+#ifndef __thread
+#define __thread
+#endif
+
 /*
  * sage_libc_shim.h — Macro overrides redirecting libc to kernel functions
  *

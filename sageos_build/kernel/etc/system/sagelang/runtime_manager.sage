@@ -2,6 +2,7 @@
 # Manages services, dependencies, and self-healing.
 
 import os
+import sys
 import ipc
 
 let services = {}
@@ -18,7 +19,7 @@ proc log(msg):
     os_dmesg_log("[SUPERVISOR] " + msg)
 
 proc start_service(name):
-    if dict_has(services, name):
+    if dict_has(services, name) and services[name]["status"] == "active":
         return
 
     log("Starting service: " + name)
@@ -46,18 +47,37 @@ proc start_service(name):
     services[name] = {"status": "active", "pid": pid}
     log("Service " + name + " is now active with PID " + str(pid) + ".")
 
+proc check_services():
+    let tasks = os_get_tasks()
+    let service_names = dict_keys(services)
+    let i = 0
+    while i < len(service_names):
+        let name = service_names[i]
+        let svc = services[name]
+        if svc["pid"] >= 0 and svc["pid"] < 100:
+            let found = false
+            let j = 0
+            while j < len(tasks):
+                if tasks[j]["id"] == svc["pid"]:
+                    if tasks[j]["state"] != 4: # THREAD_STATE_TERMINATED = 4
+                        found = true
+                    break
+                j = j + 1
+            
+            if not found:
+                log("Service " + name + " (PID " + str(svc["pid"]) + ") has stopped! Restarting...")
+                services[name]["status"] = "stopped"
+                start_service(name)
+        i = i + 1
+
 proc monitor_loop():
     log("Supervisor monitoring loop started.")
     while true:
-        # Delay loop that allows scheduler to run smoothly
-        let i = 0
-        while i < 100000:
-            let dummy = 1
-            i = i + 1
+        sys.sleep(5)
         log("Pulse...")
-        # Yield to allow other tasks and GC to run
+        check_services()
+        # Yield to allow GC to run
         os_gc_collect()
-        yield()
 
 log("SageOS Runtime Manager initializing...")
 

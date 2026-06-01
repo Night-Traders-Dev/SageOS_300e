@@ -60,10 +60,20 @@ static const char* event_names[] = {
     "VM_CALL",
     "ALLOC_MALLOC",
     "ALLOC_FREE",
-    "SYSCALL_ENTER"
+    "SYSCALL_ENTER",
+    "VFS_READ",
+    "VFS_WRITE",
+    "VFS_MOUNT",
+    "TIMER_TICK",
+    "BOOT_STAGE",
+    "ALLOC_STATS"
 };
 
 void trace_dump(void) {
+    trace_dump_filtered(TRACE_NONE);
+}
+
+void trace_dump_filtered(trace_event_t filter) {
     console_write("\n--- SageOS System Trace Dump ---\n");
     console_write("TIME | EVENT | CPU | TASK | ARG1 | ARG2\n");
     
@@ -74,9 +84,15 @@ void trace_dump(void) {
         uint32_t idx = (start + i) % TELEMETRY_BUFFER_SIZE;
         trace_entry_t *e = &g_trace_buffer[idx];
         
+        if (filter != TRACE_NONE && e->event != filter) continue;
+        
         console_u32((uint32_t)e->timestamp);
         console_write(" | ");
-        console_write(event_names[e->event]);
+        if (e->event < TRACE_MAX) {
+            console_write(event_names[e->event]);
+        } else {
+            console_write("UNKNOWN");
+        }
         console_write(" | ");
         console_u32(e->cpu_id);
         console_write(" | ");
@@ -88,4 +104,16 @@ void trace_dump(void) {
         console_write("\n");
     }
     trace_spin_unlock();
+}
+
+int trace_count(void) {
+    return (int)g_trace_count;
+}
+
+void trace_clear(void) {
+    trace_spin_lock();
+    g_trace_head = 0;
+    g_trace_count = 0;
+    trace_spin_unlock();
+    console_write("[TRACE] Buffer cleared.\n");
 }

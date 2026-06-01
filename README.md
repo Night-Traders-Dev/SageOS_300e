@@ -1,4 +1,4 @@
-# SageOS v0.7.0 - Formalized Hybrid Operating System
+# SageOS v0.7.2 - Formalized Hybrid Operating System
 
 SageOS is a hybrid operating system that combines a low-level C kernel with a high-level, SageLang-driven runtime. It is designed to be modular, secure, and fully observable across multiple architectures.
 

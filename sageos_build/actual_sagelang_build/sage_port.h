@@ -90,7 +90,12 @@ static inline char* realpath_stub(const char* p, char* r) {
 #define realpath realpath_stub
 #endif
 
-#define WIFEXITED(s) 1
-#define WEXITSTATUS(s) 0
+#ifdef __sageos__
+#include "sage_alloc.h"
+#undef malloc
+#undef calloc
+#define malloc        sage_malloc_parser
+#define calloc        sage_calloc_parser
+#endif
 
 #endif

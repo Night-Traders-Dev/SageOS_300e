@@ -3,9 +3,14 @@ import sys
 import os.boot.build as bb
 import os.boot.start as start
 import os.boot.linker as linker
+import scripts.toml as toml
 
 let architectures = ["x86_64", "aarch64", "riscv64"]
 let NL = chr(10)
+
+# Load build.toml configuration
+let toml_content = io.readfile("build.toml")
+let build_config = toml.parse_toml(toml_content)
 
 # 0. Generate version header from root VERSION source
 let version = io.readfile("VERSION")
@@ -18,7 +23,7 @@ v_content = v_content + "#define SAGE_ABI_MAJOR 0" + NL
 v_content = v_content + "#define SAGE_ABI_MINOR 4" + NL
 
 io.writefile("sageos_build/kernel/include/version.h", v_content)
-print "Generated version.h (v" + version + ")"
+print "Generated version.h (v" + version + ") using declarative build.toml"
 
 # Regenerate command embeddings
 sys.exec("python3 sageos_build/kernel/fs/embed_commands.py sageos_build/kernel/etc sageos_build/kernel/fs/commands_embed.h")
@@ -76,90 +81,45 @@ proc generate_virt_build(arch):
     io.writefile(boot_path, boot_asm)
     io.writefile(linker_path, linker_script)
 
-    # 4. List sources
-    let c_sources = [
-        "sageos_build/kernel/core/boot.c",
-        "sageos_build/kernel/core/virt_main.c",
-        "sageos_build/kernel/core/virt_console.c",
-        "sageos_build/kernel/core/virt_keyboard.c",
-        "sageos_build/kernel/core/telemetry.c",
-        "sageos_build/kernel/core/sagelang/sage_libc_shim.c",
-        "sageos_build/kernel/core/sagelang/sage_alloc.c",
-        "sageos_build/kernel/core/sagelang/sageos_bridge.c",
-        "sageos_build/kernel/core/sagelang/libsage_port.c",
-        "sageos_build/sage_lang/core/src/c/ast.c",
-        "sageos_build/sage_lang/core/src/c/lexer.c",
-        "sageos_build/sage_lang/core/src/c/parser.c",
-        "sageos_build/sage_lang/core/src/c/env.c",
-        "sageos_build/sage_lang/core/src/c/value.c",
-        "sageos_build/sage_lang/core/src/c/module.c",
-        "sageos_build/sage_lang/core/src/c/interpreter.c",
-        "sageos_build/sage_lang/core/src/c/diagnostic.c",
-        "sageos_build/sage_lang/core/src/c/gc.c",
-        "sageos_build/sage_lang/core/src/c/stdlib.c",
-        "sageos_build/sage_lang/core/src/c/stubs.c",
-        "sageos_build/kernel/fs/vfs.c",
-        "sageos_build/kernel/fs/fat32.c",
-        "sageos_build/kernel/fs/btrfs.c",
-        "sageos_build/kernel/fs/swap.c",
-        "sageos_build/kernel/core/ata_pio.c",
-        "sageos_build/kernel/core/virtio.c",
-        "sageos_build/kernel/core/dmesg.c",
-        "sageos_build/kernel/core/bootlog.c",
-        "sageos_build/kernel/core/kernel_stubs.c",
-        "sageos_build/kernel/core/scheduler.c",
-        "sageos_build/kernel/core/scheduler_ipc_ext.c",
-        "sageos_build/kernel/core/ipc.c",
-        "sageos_build/kernel/shell/shell.c",
-        "sageos_build/kernel/shell/shell_helper.c",
-        "sageos_build/kernel/shell/extra_cmds.c",
-        "sageos_build/kernel/shell/sage_shell_entry.c",
-        "sageos_build/kernel/core/sagelang/metal_vm.c",
-        "sageos_build/kernel/core/sagelang/ipc_sagelang_binding.c",
-        "sageos_build/kernel/core/syscall.c",
-        "sageos_build/kernel/core/mm.c",
-        "sageos_build/kernel/fs/elf.c",
-        "sageos_build/kernel/core/sagelang/timer_bridge.c"
-    ]
+    # 4. List sources (Read from declarative build.toml)
+    let c_sources = []
+    let common_sources = build_config["sources"]["common"]
+    let i = 0
+    while i < len(common_sources):
+        let _u = push(c_sources, common_sources[i])
+        i = i + 1
+    end
+
+    # Retrieve target specific config from build.toml
+    let target_section = "targets." + arch
+    let target_config = build_config[target_section]
     
-    if arch == "x86_64":
-        let _u = push(c_sources, "arch/x64/kernel/syscall_entry.S")
-        let _u2 = push(c_sources, "arch/x64/kernel/switch.S")
+    let extra_sources = target_config["extra_sources"]
+    let j = 0
+    while j < len(extra_sources):
+        let _u = push(c_sources, extra_sources[j])
+        j = j + 1
     end
-    if arch == "aarch64":
-        let _u = push(c_sources, "arch/arm64/kernel/syscall_entry.S")
-        let _u2 = push(c_sources, "arch/arm64/kernel/switch.S")
-    end
-    if arch == "riscv64":
-        let _u = push(c_sources, "arch/rv64/kernel/syscall_entry.S")
-        let _u2 = push(c_sources, "arch/rv64/kernel/switch.S")
-    end
+
+    let target_as = target_config["as"]
+    let target_asflags = target_config["asflags"]
+    let target_cc = target_config["cc"]
+    let target_ld = target_config["ld"]
+    let target_cflags = target_config["cflags"]
 
     # 5. Construct build script
     let script = "#!/bin/sh" + NL + "set -e" + NL
-    
-    if arch == "x86_64":
-        script = script + "AS=\"x86_64-linux-gnu-as\"; ASFLAGS=\"--64\"; CC=\"x86_64-linux-gnu-gcc\"; LD=\"x86_64-linux-gnu-ld\"" + NL
-    end
-    if arch == "aarch64":
-        script = script + "AS=\"aarch64-linux-gnu-as\"; ASFLAGS=\"\"; CC=\"aarch64-linux-gnu-gcc\"; LD=\"aarch64-linux-gnu-ld\"" + NL
-    end
-    if arch == "riscv64":
-        script = script + "AS=\"riscv64-linux-gnu-as\"; ASFLAGS=\"-march=rv64gc -mabi=lp64d\"; CC=\"riscv64-linux-gnu-gcc\"; LD=\"riscv64-linux-gnu-ld\"" + NL
-    end
-
-    script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mno-red-zone -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_X86_64 -DSAGE_NO_THREADS -DSAGE_NO_CURL -DSAGE_NO_SSL -DSAGE_NO_VULKAN -DSAGE_NO_OPENGL -DSAGE_NO_GLFW\"" + NL
-    if arch == "aarch64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mstrict-align -mno-outline-atomics -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_AARCH64 -DSAGE_NO_THREADS -DSAGE_NO_CURL -DSAGE_NO_SSL -DSAGE_NO_VULKAN -DSAGE_NO_OPENGL -DSAGE_NO_GLFW\"" + NL end
-    if arch == "riscv64": script = script + "CFLAGS=\"-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mcmodel=medany -march=rv64g -mabi=lp64d -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_RV64 -DSAGE_NO_THREADS -DSAGE_NO_CURL -DSAGE_NO_SSL -DSAGE_NO_VULKAN -DSAGE_NO_OPENGL -DSAGE_NO_GLFW\"" + NL end
+    script = script + "AS=\"" + target_as + "\"; ASFLAGS=\"" + target_asflags + "\"; CC=\"" + target_cc + "\"; LD=\"" + target_ld + "\"" + NL
+    script = script + "CFLAGS=\"" + target_cflags + "\"" + NL
 
     script = script + "echo 'Building SageOS Virt (" + arch + ")...'" + NL
     script = script + "$AS $ASFLAGS -o " + output_dir + "/boot.o " + boot_path + NL
     
     let objects_str = output_dir + "/boot.o"
-    let i = 0
-    while i < len(c_sources):
-        let src = c_sources[i]
-        let obj = output_dir + "/obj" + str(i) + ".o"
+    let k = 0
+    while k < len(c_sources):
+        let src = c_sources[k]
+        let obj = output_dir + "/obj" + str(k) + ".o"
         script = script + "echo '  CC " + src + "'" + NL
         if src[len(src)-2:len(src)] == ".S":
             script = script + "$CC $CFLAGS -c -o " + obj + " " + src + NL
@@ -171,7 +131,7 @@ proc generate_virt_build(arch):
             end
         end
         objects_str = objects_str + " " + obj
-        i = i + 1
+        k = k + 1
     end
 
     let elf_path = output_dir + "/kernel.elf"

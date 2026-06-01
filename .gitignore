@@ -15,7 +15,8 @@ target/
 *.so
 *.dll
 *.dylib
-*.bc
+bc
+*.part
 
 # AI Agent / LLM Workspace Artifacts
 .claude/
@@ -75,5 +76,6 @@ benchmark_chart.png
 *.pyc
 /getenv.s
 
+# RootFS directory
 rootfs/
-rootfs-*/
+

@@ -1,0 +1,84 @@
+# build.toml — Declarative build system specification for SageOS
+
+[meta]
+name = "SageOS"
+version_file = "VERSION"
+
+[sources]
+common = [
+    "sageos_build/kernel/core/boot.c",
+    "sageos_build/kernel/core/virt_main.c",
+    "sageos_build/kernel/core/virt_console.c",
+    "sageos_build/kernel/core/virt_keyboard.c",
+    "sageos_build/kernel/core/telemetry.c",
+    "sageos_build/kernel/core/sagelang/sage_libc_shim.c",
+    "sageos_build/kernel/core/sagelang/sage_alloc.c",
+    "sageos_build/kernel/core/sagelang/sageos_bridge.c",
+    "sageos_build/kernel/core/sagelang/libsage_port.c",
+    "sageos_build/sage_lang/core/src/c/ast.c",
+    "sageos_build/sage_lang/core/src/c/lexer.c",
+    "sageos_build/sage_lang/core/src/c/parser.c",
+    "sageos_build/sage_lang/core/src/c/env.c",
+    "sageos_build/sage_lang/core/src/c/value.c",
+    "sageos_build/sage_lang/core/src/c/module.c",
+    "sageos_build/sage_lang/core/src/c/interpreter.c",
+    "sageos_build/sage_lang/core/src/c/diagnostic.c",
+    "sageos_build/sage_lang/core/src/c/gc.c",
+    "sageos_build/sage_lang/core/src/c/stdlib.c",
+    "sageos_build/sage_lang/core/src/c/stubs.c",
+    "sageos_build/kernel/fs/vfs.c",
+    "sageos_build/kernel/fs/fat32.c",
+    "sageos_build/kernel/fs/btrfs.c",
+    "sageos_build/kernel/fs/swap.c",
+    "sageos_build/kernel/core/ata_pio.c",
+    "sageos_build/kernel/core/virtio.c",
+    "sageos_build/kernel/core/dmesg.c",
+    "sageos_build/kernel/core/bootlog.c",
+    "sageos_build/kernel/core/kernel_stubs.c",
+    "sageos_build/kernel/core/scheduler.c",
+    "sageos_build/kernel/core/scheduler_ipc_ext.c",
+    "sageos_build/kernel/core/ipc.c",
+    "sageos_build/kernel/shell/shell.c",
+    "sageos_build/kernel/shell/shell_helper.c",
+    "sageos_build/kernel/shell/extra_cmds.c",
+    "sageos_build/kernel/shell/sage_shell_entry.c",
+    "sageos_build/kernel/core/sagelang/metal_vm.c",
+    "sageos_build/kernel/core/sagelang/ipc_sagelang_binding.c",
+    "sageos_build/kernel/core/syscall.c",
+    "sageos_build/kernel/core/mm.c",
+    "sageos_build/kernel/fs/elf.c",
+    "sageos_build/kernel/core/sagelang/timer_bridge.c"
+]
+
+[targets.x86_64]
+as = "x86_64-linux-gnu-as"
+asflags = "--64"
+cc = "x86_64-linux-gnu-gcc"
+ld = "x86_64-linux-gnu-ld"
+cflags = "-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mno-red-zone -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_X86_64 -DSAGE_NO_THREADS -DSAGE_NO_CURL -DSAGE_NO_SSL -DSAGE_NO_VULKAN -DSAGE_NO_OPENGL -DSAGE_NO_GLFW"
+extra_sources = [
+    "arch/x64/kernel/syscall_entry.S",
+    "arch/x64/kernel/switch.S"
+]
+
+[targets.aarch64]
+as = "aarch64-linux-gnu-as"
+asflags = ""
+cc = "aarch64-linux-gnu-gcc"
+ld = "aarch64-linux-gnu-ld"
+cflags = "-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mstrict-align -mno-outline-atomics -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_AARCH64 -DSAGE_NO_THREADS -DSAGE_NO_CURL -DSAGE_NO_SSL -DSAGE_NO_VULKAN -DSAGE_NO_OPENGL -DSAGE_NO_GLFW"
+extra_sources = [
+    "arch/arm64/kernel/syscall_entry.S",
+    "arch/arm64/kernel/switch.S"
+]
+
+[targets.riscv64]
+as = "riscv64-linux-gnu-as"
+asflags = "-march=rv64gc -mabi=lp64d"
+cc = "riscv64-linux-gnu-gcc"
+ld = "riscv64-linux-gnu-ld"
+cflags = "-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mcmodel=medany -march=rv64g -mabi=lp64d -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_RV64 -DSAGE_NO_THREADS -DSAGE_NO_CURL -DSAGE_NO_SSL -DSAGE_NO_VULKAN -DSAGE_NO_OPENGL -DSAGE_NO_GLFW"
+extra_sources = [
+    "arch/rv64/kernel/syscall_entry.S",
+    "arch/rv64/kernel/switch.S"
+]

@@ -20,6 +20,12 @@ typedef enum {
     TRACE_ALLOC_MALLOC,
     TRACE_ALLOC_FREE,
     TRACE_SYSCALL_ENTER,
+    TRACE_VFS_READ,
+    TRACE_VFS_WRITE,
+    TRACE_VFS_MOUNT,
+    TRACE_TIMER_TICK,
+    TRACE_BOOT_STAGE,
+    TRACE_ALLOC_STATS,
     TRACE_MAX
 } trace_event_t;
 
@@ -37,5 +43,8 @@ typedef struct {
 void telemetry_init(void);
 void trace_log(trace_event_t event, uint64_t arg1, uint64_t arg2);
 void trace_dump(void);
+void trace_dump_filtered(trace_event_t filter);
+int  trace_count(void);
+void trace_clear(void);
 
 #endif

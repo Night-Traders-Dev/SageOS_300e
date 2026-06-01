@@ -4,6 +4,21 @@ All notable changes to SageOS will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.2] — 2026-06-01
+
+### Added
+- **Declarative Build System**: Unified kernel build configurations into a data-driven `build.toml` specification.
+- **Sagelang TOML Parser**: Implemented a native, stateful minimal TOML parser in SageLang supporting multi-line string arrays.
+- **Security Hardening**: Sanitized system call inputs in `syscall.c` with robust NULL pointer guards and path length limits (`VFS_MAX_PATH`) to protect the kernel boundaries.
+- **Observability Pipeline**: Added periodic circular tracepoints for VFS read/write/mount, timer ticks, boot transitions, and parser allocator stats, exposed via a new `trace` shell command.
+- **Release Engineering Pipeline**: Integrated GHA `.github/workflows/release.yml` automating multi-arch kernel compilation and SBOM packaging on tag pushes.
+
+### Changed
+- Bumped version to `v0.7.2` across the entire kernel build system.
+- Re-architected `sage_alloc.h` to use standard function signatures and static inlines for parser allocations, avoiding preprocessor namespace pollution in compiler prototypes.
+
+---
+
 ## [0.7.0] — 2026-05-30
 
 ### Added

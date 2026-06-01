@@ -1,0 +1,91 @@
+name: Release Engineering Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build Multi-Arch Kernels
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64, riscv64]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu gcc-riscv64-linux-gnu python3
+
+      - name: Regenerate Declarative Build Scripts
+        run: |
+          ./sageos_build/sage_lang/core/sage scripts/build_virt.sage
+
+      - name: Build Kernel ELF
+        run: |
+          bash build/virt_${{ matrix.arch }}/build.sh
+
+      - name: Package Kernel Artifact
+        run: |
+          tar -czvf kernel-${{ matrix.arch }}.tar.gz -C build/virt_${{ matrix.arch }} kernel.elf
+
+      - name: Upload Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.arch }}
+          path: kernel-${{ matrix.arch }}.tar.gz
+
+  release:
+    name: Generate SBOM & Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate Software Bill of Materials (SBOM)
+        run: |
+          echo "Generating Software Bill of Materials..."
+          cat <<EOF > sbom.json
+          {
+            "sbomVersion": "1.0",
+            "name": "SageOS Kernel Release SBOM",
+            "version": "${{ github.ref_name }}",
+            "architectures": ["x86_64", "aarch64", "riscv64"],
+            "dependencies": {
+              "compiler": "gcc cross-compilers",
+              "runtime": "SGVM interpreter v0.7.0"
+            },
+            "files": [
+              {"name": "kernel-x86_64.tar.gz", "purpose": "x86_64 bare-metal kernel"},
+              {"name": "kernel-aarch64.tar.gz", "purpose": "ARM64 bare-metal kernel"},
+              {"name": "kernel-riscv64.tar.gz", "purpose": "RISC-V 64 bare-metal kernel"}
+            ]
+          }
+          EOF
+          cat sbom.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/kernel-x86_64/kernel-x86_64.tar.gz
+            artifacts/kernel-aarch64/kernel-aarch64.tar.gz
+            artifacts/kernel-riscv64/kernel-riscv64.tar.gz
+            sbom.json
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

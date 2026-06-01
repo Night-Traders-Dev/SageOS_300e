@@ -23,8 +23,8 @@ void* vm_memcpy(void* dest, const void* src, size_t n) { return memcpy(dest, src
 size_t vm_strlen(const char* s) { return strlen(s); }
 void vm_console_write(const char* s) { console_write(s); }
 void vm_console_u32(uint32_t v) { console_u32(v); }
-extern void* sage_malloc(size_t size);
-void* vm_alloc(size_t size) { return sage_malloc(size); }
+#include "sage_alloc.h"
+void* vm_alloc(size_t size) { return sage_malloc_tagged(size, ALLOC_TAG_VM); }
 void vm_free(void* ptr) { (void)ptr; }
 
 // ============================================================================

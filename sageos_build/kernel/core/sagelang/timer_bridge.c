@@ -4,6 +4,8 @@
 // No separate arch/*/kernel/timer.c is needed.
 
 #include "timer.h"
+#include "telemetry.h"
+#include "sage_alloc.h"
 #include <stdint.h>
 
 // ── Architecture IDs — must match ARCH_* constants in timer.sage ──────────
@@ -172,6 +174,12 @@ void timer_irq(void) {
     
     ata_timer_tick();
     sched_timer_tick();
+    
+    if (g_ticks % 100 == 0) {
+        trace_log(TRACE_TIMER_TICK, g_ticks, 0);
+        alloc_stats_t parser_stats = sage_alloc_stats(ALLOC_TAG_PARSER);
+        trace_log(TRACE_ALLOC_STATS, parser_stats.alloc_count, parser_stats.bytes_total);
+    }
     
     if (++g_flip_counter >= 5) {
         console_periodic_flip();

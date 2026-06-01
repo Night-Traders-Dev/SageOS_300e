@@ -15,6 +15,7 @@
 #include "scheduler.h"
 #include "smp.h"
 #include "vfs.h"
+#include "telemetry.h"
 #include "sage_libc_shim.h"
 
 #ifndef SAGE_BARE_METAL
@@ -916,4 +917,65 @@ void cmd_bmesg(void) {
     } else {
         console_write("\n--- End of boot log ---\n");
     }
+}
+
+void cmd_trace(const char *arg) {
+    if (!arg || !*arg) {
+        console_write("\nUsage: trace [dump | dump <event> | clear | count]\n");
+        console_write("Events: SCHED_SWITCH, SCHED_PRIO, IPC_SEND, IPC_RECV, VM_EXEC,\n");
+        console_write("        VM_CALL, ALLOC_MALLOC, ALLOC_FREE, SYSCALL_ENTER, VFS_READ,\n");
+        console_write("        VFS_WRITE, VFS_MOUNT, TIMER_TICK, BOOT_STAGE, ALLOC_STATS\n");
+        return;
+    }
+
+    if (strncmp(arg, "clear", 5) == 0) {
+        trace_clear();
+        return;
+    }
+
+    if (strncmp(arg, "count", 5) == 0) {
+        console_write("\nTrace entries in buffer: ");
+        console_u32((uint32_t)trace_count());
+        console_write("\n");
+        return;
+    }
+
+    if (strncmp(arg, "dump", 4) == 0) {
+        const char *evt_str = arg + 4;
+        while (*evt_str == ' ') evt_str++;
+        
+        if (!*evt_str) {
+            trace_dump();
+            return;
+        }
+
+        trace_event_t filter = TRACE_NONE;
+        if (strcmp(evt_str, "SCHED_SWITCH") == 0) filter = TRACE_SCHED_SWITCH;
+        else if (strcmp(evt_str, "SCHED_PRIO") == 0) filter = TRACE_SCHED_PRIORITY;
+        else if (strcmp(evt_str, "IPC_SEND") == 0) filter = TRACE_IPC_SEND;
+        else if (strcmp(evt_str, "IPC_RECV") == 0) filter = TRACE_IPC_RECV;
+        else if (strcmp(evt_str, "VM_EXEC") == 0) filter = TRACE_VM_EXEC;
+        else if (strcmp(evt_str, "VM_CALL") == 0) filter = TRACE_VM_CALL;
+        else if (strcmp(evt_str, "ALLOC_MALLOC") == 0) filter = TRACE_ALLOC_MALLOC;
+        else if (strcmp(evt_str, "ALLOC_FREE") == 0) filter = TRACE_ALLOC_FREE;
+        else if (strcmp(evt_str, "SYSCALL_ENTER") == 0) filter = TRACE_SYSCALL_ENTER;
+        else if (strcmp(evt_str, "VFS_READ") == 0) filter = TRACE_VFS_READ;
+        else if (strcmp(evt_str, "VFS_WRITE") == 0) filter = TRACE_VFS_WRITE;
+        else if (strcmp(evt_str, "VFS_MOUNT") == 0) filter = TRACE_VFS_MOUNT;
+        else if (strcmp(evt_str, "TIMER_TICK") == 0) filter = TRACE_TIMER_TICK;
+        else if (strcmp(evt_str, "BOOT_STAGE") == 0) filter = TRACE_BOOT_STAGE;
+        else if (strcmp(evt_str, "ALLOC_STATS") == 0) filter = TRACE_ALLOC_STATS;
+        
+        if (filter == TRACE_NONE) {
+            console_write("\nUnknown event type: ");
+            console_write(evt_str);
+            console_write("\n");
+            return;
+        }
+
+        trace_dump_filtered(filter);
+        return;
+    }
+
+    console_write("\nUsage: trace [dump | dump <event> | clear | count]\n");
 }

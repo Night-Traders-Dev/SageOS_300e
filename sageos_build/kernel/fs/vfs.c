@@ -1,4 +1,5 @@
 #include "vfs.h"
+#include "telemetry.h"
 #include "console.h"
 #include "sage_libc_shim.h"
 #include <stddef.h>
@@ -420,6 +421,8 @@ int vfs_mount(const char *mount_path, VfsBackend *backend) {
     m->active = 1;
     g_mount_count++;
 
+    trace_log(TRACE_VFS_MOUNT, (uint64_t)mount_path, (uint64_t)backend);
+
     /* Notify Sage bridge */
     if (g_vfs_vm_inited) {
         MetalValue args[2];
@@ -701,6 +704,7 @@ int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
 }
 
 int vfs_read(const char *path, uint64_t offset, void *buffer, size_t size) {
+    trace_log(TRACE_VFS_READ, offset, (uint64_t)size);
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 
@@ -750,6 +754,7 @@ int vfs_read(const char *path, uint64_t offset, void *buffer, size_t size) {
     return m->backend->read(m->backend, rel, offset, buffer, size);
 }
 int vfs_write(const char *path, uint64_t offset, const void *data, size_t size) {
+    trace_log(TRACE_VFS_WRITE, offset, (uint64_t)size);
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 

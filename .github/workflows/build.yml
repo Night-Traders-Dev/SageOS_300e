@@ -142,6 +142,9 @@ jobs:
       - name: Populate RootFS
         run: bash scripts/populate_rootfs.sh
 
+      - name: Run test suite (no-boot)
+        run: bash scripts/run_tests.sh --no-boot
+
       - name: Verify RootFS structure
         run: |
           echo "=== RootFS Structure ==="
@@ -154,9 +157,118 @@ jobs:
           test -f rootfs/etc/sagelang/sage_shell_combined.sage || (echo "FAIL: shell missing"; exit 1)
           echo "[OK] RootFS structure validated."
 
+  boot-test:
+    name: Boot Smoke Test (${{ matrix.arch }})
+    needs: [build-kernel, rootfs]
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64, rv64]
+        include:
+          - arch: x64
+            qemu_pkg: qemu-system-x86
+            build_arch: x86_64
+            qemu_cmd: "qemu-system-x86_64 -machine pc -m 128M -display none -serial stdio -no-reboot"
+            disk_flag: "-drive file=test-virt.img,format=raw,index=0,media=disk,file.locking=off"
+          - arch: arm64
+            qemu_pkg: qemu-system-arm
+            build_arch: aarch64
+            qemu_cmd: "qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 128M -display none -serial stdio"
+            disk_flag: "-drive file=test-virt.img,format=raw,if=none,id=dr0 -device virtio-blk-device,drive=dr0"
+          - arch: rv64
+            qemu_pkg: qemu-system-misc
+            build_arch: riscv64
+            qemu_cmd: "qemu-system-riscv64 -machine virt -m 128M -display none -serial stdio -bios none -no-reboot"
+            disk_flag: "-drive file=test-virt.img,format=raw,if=none,id=dr0 -device virtio-blk-device,drive=dr0"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ${{ matrix.qemu_pkg }} dosfstools mtools
+
+      - name: Download kernel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-${{ matrix.arch }}
+          path: build/virt_${{ matrix.build_arch }}/
+
+      - name: Create minimal test disk image
+        run: |
+          # Create a small FAT32 disk for boot testing (64MB)
+          dd if=/dev/zero of=fat.part bs=1M count=64 status=none
+          mkfs.fat -F 32 fat.part >/dev/null
+          dd if=/dev/zero of=test-virt.img bs=1M count=66 status=none
+          dd if=fat.part of=test-virt.img bs=1M seek=1 conv=notrunc status=none
+          rm -f fat.part
+          echo "[OK] Created minimal test disk image"
+
+      - name: Boot kernel with 60s timeout
+        run: |
+          set +e
+          KERNEL="build/virt_${{ matrix.build_arch }}/kernel.elf"
+          echo "Booting ${{ matrix.arch }} kernel: $KERNEL"
+
+          timeout 60 ${{ matrix.qemu_cmd }} \
+            -kernel "$KERNEL" \
+            ${{ matrix.disk_flag }} \
+            > serial_output.log 2>&1
+          EXIT_CODE=$?
+
+          echo ""
+          echo "=== Serial Output (last 40 lines) ==="
+          tail -40 serial_output.log
+          echo ""
+
+          # Validate boot sentinels
+          SENTINEL_1="BOOT: Transitioning to STAGE 1"
+          SENTINEL_2="SageOS Virt Kernel initialization complete"
+
+          FOUND_1=0
+          FOUND_2=0
+          grep -qF "$SENTINEL_1" serial_output.log && FOUND_1=1
+          grep -qF "$SENTINEL_2" serial_output.log && FOUND_2=1
+
+          echo "=== Boot Validation ==="
+          if [[ $FOUND_1 -eq 1 ]]; then
+            echo "[OK] Found: $SENTINEL_1"
+          else
+            echo "[FAIL] Missing: $SENTINEL_1"
+          fi
+
+          if [[ $FOUND_2 -eq 1 ]]; then
+            echo "[OK] Found: $SENTINEL_2"
+          else
+            echo "[FAIL] Missing: $SENTINEL_2"
+          fi
+
+          if [[ $FOUND_1 -eq 1 && $FOUND_2 -eq 1 ]]; then
+            echo ""
+            echo "=== ${{ matrix.arch }} BOOT TEST PASSED ==="
+            exit 0
+          else
+            echo ""
+            echo "=== ${{ matrix.arch }} BOOT TEST FAILED ==="
+            exit 1
+          fi
+
+      - name: Upload serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-log-${{ matrix.arch }}
+          path: serial_output.log
+          retention-days: 7
+
   summary:
     name: Build Summary
-    needs: [build-kernel, rootfs]
+    needs: [build-kernel, rootfs, boot-test]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -171,3 +283,6 @@ jobs:
           echo "| Kernel (arm64) | ${{ needs.build-kernel.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Kernel (rv64) | ${{ needs.build-kernel.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| RootFS | ${{ needs.rootfs.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Boot Test (x64) | ${{ needs.boot-test.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Boot Test (arm64) | ${{ needs.boot-test.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Boot Test (rv64) | ${{ needs.boot-test.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY

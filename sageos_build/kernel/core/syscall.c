@@ -20,6 +20,15 @@ extern long ipc_syscall_dispatch(long num, long a1, long a2, long a3,
 extern void power_reboot(void);
 extern void power_shutdown(void);
 
+static size_t safe_strnlen(const char *s, size_t maxlen) {
+    size_t len = 0;
+    if (!s) return 0;
+    while (len < maxlen && s[len]) {
+        len++;
+    }
+    return len;
+}
+
 struct timeval {
     long tv_sec;
     long tv_usec;
@@ -197,6 +206,7 @@ long syscall_dispatch(long num, long a1, long a2, long a3,
 
 long sys_write(int fd, const void *buf, size_t count) {
     task_t *t = current_task();
+    if (!buf) return -VFS_EINVAL;
     
     /* Handle stdout/stderr specially for early boot or if task is not fully setup */
     if (fd == 1 || fd == 2) {
@@ -220,6 +230,7 @@ long sys_write(int fd, const void *buf, size_t count) {
 
 long sys_read(int fd, void *buf, size_t count) {
     task_t *t = current_task();
+    if (!buf) return -VFS_EINVAL;
     if (!t || fd < 0 || fd >= MAX_FD || !t->fd_table[fd].valid)
         return -VFS_EINVAL;
 
@@ -258,6 +269,7 @@ long sys_read(int fd, void *buf, size_t count) {
 
 long sys_open(const char *path, int flags, int mode) {
     task_t *t = current_task();
+    if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
     if (!t) return -VFS_EINVAL;
 
     /* Handle O_CREAT */
@@ -334,6 +346,7 @@ long sys_lseek(int fd, off_t offset, int whence) {
 
 long sys_fstat(int fd, struct stat *st) {
     task_t *t = current_task();
+    if (!st) return -VFS_EINVAL;
     if (!t || fd < 0 || fd >= MAX_FD || !t->fd_table[fd].valid)
         return -VFS_EINVAL;
 
@@ -354,6 +367,7 @@ long sys_fstat(int fd, struct stat *st) {
 }
 
 long sys_unlink(const char *path) {
+    if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
     return (long)vfs_unlink(path);
 }
 
@@ -367,6 +381,7 @@ struct linux_dirent64 {
 
 long sys_getdents64(int fd, void *dirp, size_t count) {
     task_t *t = current_task();
+    if (!dirp) return -VFS_EINVAL;
     if (!t || fd < 0 || fd >= MAX_FD || !t->fd_table[fd].valid)
         return -VFS_EINVAL;
 
@@ -397,20 +412,23 @@ long sys_getdents64(int fd, void *dirp, size_t count) {
 }
 
 long sys_mkdir(const char *path, int mode) {
+    if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
     (void)mode;
     return (long)vfs_mkdir(path);
 }
 
 long sys_getcwd(char *buf, size_t size) {
     task_t *t = current_task();
+    if (!buf) return -VFS_EINVAL;
     if (!t) return -VFS_EINVAL;
-    if (strlen(t->cwd) >= size) return -VFS_ENOSPC;
+    if (safe_strnlen(t->cwd, 256) >= size) return -VFS_ENOSPC;
     strcpy(buf, t->cwd);
     return (long)buf;
 }
 
 long sys_chdir(const char *path) {
     task_t *t = current_task();
+    if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
     if (!t) return -VFS_EINVAL;
     VfsStat st;
     if (vfs_stat(path, &st) < 0) return -VFS_ENOENT;
@@ -431,27 +449,24 @@ long sys_dup2(int oldfd, int newfd) {
 
 long sys_gettimeofday(struct timeval *tv, void *tz) {
     (void)tz;
-    if (tv) {
-        tv->tv_sec = (long)timer_seconds();
-        tv->tv_usec = (long)((timer_ticks() % 100) * 10000); /* Assuming 100 ticks per second */
-    }
+    if (!tv) return -VFS_EINVAL;
+    tv->tv_sec = (long)timer_seconds();
+    tv->tv_usec = (long)((timer_ticks() % 100) * 10000); /* Assuming 100 ticks per second */
     return 0;
 }
 
 long sys_nanosleep(const struct timespec *req, struct timespec *rem) {
     (void)rem;
-    if (req) {
-        uint32_t ms = (uint32_t)(req->tv_sec * 1000 + req->tv_nsec / 1000000);
-        timer_delay_ms(ms);
-    }
+    if (!req) return -VFS_EINVAL;
+    uint32_t ms = (uint32_t)(req->tv_sec * 1000 + req->tv_nsec / 1000000);
+    timer_delay_ms(ms);
     return 0;
 }
 
 long sys_times(struct tms *buf) {
-    if (buf) {
-        memset(buf, 0, sizeof(struct tms));
-        buf->tms_utime = (long)timer_ticks();
-    }
+    if (!buf) return -VFS_EINVAL;
+    memset(buf, 0, sizeof(struct tms));
+    buf->tms_utime = (long)timer_ticks();
     return (long)timer_ticks();
 }
 

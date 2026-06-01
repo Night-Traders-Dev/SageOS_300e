@@ -16,11 +16,14 @@ const char* stage_names[] = {
     "System Halt"
 };
 
+#include "telemetry.h"
+
 void sageos_set_boot_stage(SageOSBootStage stage) {
     g_current_stage = stage;
     if (stage <= STAGE_HALT) {
         dmesg_printf("BOOT: Transitioning to %s", stage_names[stage]);
     }
+    trace_log(TRACE_BOOT_STAGE, (uint64_t)stage, 0);
 }
 
 SageOSBootStage sageos_get_boot_stage(void) {

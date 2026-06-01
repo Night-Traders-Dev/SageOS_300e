@@ -878,6 +878,7 @@ void shell_exec_command(const char *cmd) {
     if (starts_word(cmd, "bmesg"))   { extern void cmd_bmesg(void); cmd_bmesg(); return; }
     if (starts_word(cmd, "diskdump")) { extern void cmd_diskdump(const char *arg); cmd_diskdump(arg_after(cmd, "diskdump")); return; }
     if (starts_word(cmd, "dmesg"))   { extern void cmd_dmesg(void); cmd_dmesg(); return; }
+    if (starts_word(cmd, "trace"))   { extern void cmd_trace(const char *arg); cmd_trace(arg_after(cmd, "trace")); return; }
     if (starts_word(cmd, "dmesgsync")) {
         extern void dmesg_save_persistent(void);
         dmesg_save_persistent();

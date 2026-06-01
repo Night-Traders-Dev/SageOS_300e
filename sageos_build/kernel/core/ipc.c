@@ -369,8 +369,8 @@ long sys_ipc_endpoint_create(uintptr_t out_send, uintptr_t out_recv) {
     /* Allocate ring buffers */
     ep_send->ring_size = 16;
     ep_recv->ring_size = 16;
-    ep_send->msg_ring = (ipc_msg_t *)sage_malloc(sizeof(ipc_msg_t) * 16);
-    ep_recv->msg_ring = (ipc_msg_t *)sage_malloc(sizeof(ipc_msg_t) * 16);
+    ep_send->msg_ring = (ipc_msg_t *)sage_malloc_tagged(sizeof(ipc_msg_t) * 16, ALLOC_TAG_IPC);
+    ep_recv->msg_ring = (ipc_msg_t *)sage_malloc_tagged(sizeof(ipc_msg_t) * 16, ALLOC_TAG_IPC);
     if (!ep_send->msg_ring || !ep_recv->msg_ring) {
         if (ep_send->msg_ring) sage_free(ep_send->msg_ring);
         if (ep_recv->msg_ring) sage_free(ep_recv->msg_ring);

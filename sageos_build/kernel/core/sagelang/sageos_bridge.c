@@ -532,6 +532,20 @@ static Value n_os_spawn_task(int argCount, Value* args) {
     return val_number(t->id);
 }
 
+static Value n_os_set_color(int argCount, Value* args) {
+    if (argCount >= 1 && IS_NUMBER(args[0])) {
+        console_set_fg((uint32_t)AS_NUMBER(args[0]));
+    }
+    return val_nil();
+}
+
+static Value n_os_status_refresh(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    extern void status_refresh(void);
+    status_refresh();
+    return val_nil();
+}
+
 // --- Module Registration ---
 
 void register_sageos_natives(ModuleCache* cache) {
@@ -561,6 +575,9 @@ void register_sageos_natives(ModuleCache* cache) {
     env_define(env, "dmesg_log", 9, val_native(n_os_dmesg_log));
     env_define(env, "os_version_string", 17, val_native(n_os_version));
     env_define(env, "os_spawn_task", 13, val_native(n_os_spawn_task));
+    env_define(env, "os_set_color", 12, val_native(n_os_set_color));
+    env_define(env, "status_refresh", 14, val_native(n_os_status_refresh));
+    env_define(env, "os_status_refresh", 17, val_native(n_os_status_refresh));
 
     // Register 'os' module
     Module* os = create_native_module(cache, "os");

@@ -9,9 +9,6 @@ Expr* new_number_expr(double value) {
     Expr* e = SAGE_ALLOC(sizeof(Expr));
     e->type = EXPR_NUMBER;
     e->as.number.value = value;
-    union { double d; uint64_t u; } num;
-    num.d = value;
-    printf("[DEBUG_NEW_NUMBER] expr=%p, value=%d (0x%x_%x)\n", e, (int)value, (uint32_t)(num.u >> 32), (uint32_t)num.u);
     return e;
 }
 

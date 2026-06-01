@@ -2346,18 +2346,7 @@ static ExecResult eval_binary(BinaryExpr* b, Env* env) {
             double r = AS_NUMBER(right);
             AST_GC_POP();
             if (b->op.type == TOKEN_GT) return EVAL_RESULT(val_bool(l > r));
-            if (b->op.type == TOKEN_LT) {
-                union { double d; uint64_t u; } l_u, r_u;
-                l_u.d = l;
-                r_u.d = r;
-                uint32_t l_high = (uint32_t)(l_u.u >> 32);
-                uint32_t l_low = (uint32_t)l_u.u;
-                uint32_t r_high = (uint32_t)(r_u.u >> 32);
-                uint32_t r_low = (uint32_t)r_u.u;
-                printf("[DEBUG_LT] l=%d (0x%x_%x), r=%d (0x%x_%x), l < r = %d\n", 
-                       (int)l, l_high, l_low, (int)r, r_high, r_low, l < r);
-                return EVAL_RESULT(val_bool(l < r));
-            }
+            if (b->op.type == TOKEN_LT) return EVAL_RESULT(val_bool(l < r));
             if (b->op.type == TOKEN_GTE) return EVAL_RESULT(val_bool(l >= r));
             if (b->op.type == TOKEN_LTE) return EVAL_RESULT(val_bool(l <= r));
         }
@@ -2468,14 +2457,7 @@ static ExecResult eval_binary(BinaryExpr* b, Env* env) {
 // atomic increments per expression evaluation in the critical path.
 static ExecResult eval_expr(Expr* expr, Env* env) {
     switch (expr->type) {
-        case EXPR_NUMBER: {
-            union { double d; uint64_t u; } num;
-            num.d = expr->as.number.value;
-            uint32_t num_high = (uint32_t)(num.u >> 32);
-            uint32_t num_low = (uint32_t)num.u;
-            printf("[DEBUG_NUMBER] expr=%p, val=%d (0x%x_%x)\n", expr, (int)expr->as.number.value, num_high, num_low);
-            return EVAL_RESULT(val_number(expr->as.number.value));
-        }
+        case EXPR_NUMBER: return EVAL_RESULT(val_number(expr->as.number.value));
         case EXPR_STRING: return EVAL_RESULT(val_string(expr->as.string.value));
         case EXPR_BOOL:   return EVAL_RESULT(val_bool(expr->as.boolean.value));
         case EXPR_NIL:    return EVAL_RESULT(val_nil());

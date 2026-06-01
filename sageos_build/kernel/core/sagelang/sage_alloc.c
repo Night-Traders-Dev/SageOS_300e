@@ -17,6 +17,26 @@ static uint8_t sage_heap[SAGE_ARENA_SIZE] __attribute__((aligned(16)));
 static size_t sage_bump = 0;
 static int g_alloc_lock = 0;
 
+/* Per-tag statistics */
+static alloc_stats_t g_alloc_stats[ALLOC_TAG_MAX];
+
+/* Allocation header layout (16 bytes total, maintains 16-byte alignment):
+ *   [0..7]  size (size_t)
+ *   [8..11] tag  (alloc_tag_t / uint32_t)
+ *   [12..15] reserved / padding
+ */
+#define ALLOC_HEADER_SIZE 16
+
+static const char *g_tag_names[] = {
+    "kernel",
+    "vm",
+    "vfs",
+    "ipc",
+    "parser",
+    "shell",
+    "other"
+};
+
 void *sage_malloc_tagged(size_t size, alloc_tag_t tag) {
     if (size == 0) return NULL;
     

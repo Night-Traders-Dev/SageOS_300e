@@ -409,12 +409,91 @@ MetalNativeFn metal_vm_find_native(MetalVM* vm, unsigned int hash) {
 }
 
 // ============================================================================
-// Array Pool
+// Array Pool & Lightweight Garbage Collector
 // ============================================================================
+
+static void gc_mark_value(MetalVM* vm, MetalValue val);
+
+static void gc_mark_dict(MetalVM* vm, int dict_idx) {
+    if (dict_idx < 0 || dict_idx >= 1024) return;
+    if (vm->dicts[dict_idx].in_use) return; // Already marked
+    vm->dicts[dict_idx].in_use = 1;
+    MetalDict* d = &vm->dicts[dict_idx];
+    for (int i = 0; i < d->count; i++) {
+        gc_mark_value(vm, d->values[i]);
+    }
+}
+
+static void gc_mark_array(MetalVM* vm, int arr_idx) {
+    if (arr_idx < 0 || arr_idx >= 1024) return;
+    if (vm->arrays[arr_idx].in_use) return; // Already marked
+    vm->arrays[arr_idx].in_use = 1;
+    MetalArray* a = &vm->arrays[arr_idx];
+    for (int i = 0; i < a->count; i++) {
+        gc_mark_value(vm, a->elems[i]);
+    }
+}
+
+static void gc_mark_value(MetalVM* vm, MetalValue val) {
+    if (val.type == MV_ARR) {
+        gc_mark_array(vm, val.as.arr_idx);
+    } else if (val.type == MV_DICT) {
+        gc_mark_dict(vm, val.as.dict_idx);
+    }
+}
+
+void metal_vm_gc(MetalVM* vm) {
+    // 1. Reset all in_use flags for allocated objects
+    for (int i = 0; i < vm->array_count; i++) {
+        vm->arrays[i].in_use = 0;
+    }
+    for (int i = 0; i < vm->dict_count; i++) {
+        vm->dicts[i].in_use = 0;
+    }
+
+    // 2. Mark reachable objects from the evaluation stack roots
+    for (int i = 0; i < vm->sp; i++) {
+        gc_mark_value(vm, vm->stack[i]);
+    }
+
+    // 3. Mark reachable objects from the environment scopes (local variables)
+    for (int d = 0; d <= vm->scope_depth; d++) {
+        if (d >= 0 && d < METAL_ENV_DEPTH) {
+            MetalScope* s = &vm->scopes[d];
+            for (int v = 0; v < s->count; v++) {
+                gc_mark_value(vm, s->values[v]);
+            }
+        }
+    }
+}
 
 int metal_array_new(MetalVM* vm) {
     int max = (int)(sizeof(vm->arrays) / sizeof(vm->arrays[0]));
-    if (vm->array_count >= max) return -1;
+    
+    // Try to reuse an unused slot from GC
+    for (int i = 0; i < vm->array_count; i++) {
+        if (!vm->arrays[i].in_use) {
+            vm->arrays[i].count = 0;
+            vm->arrays[i].in_use = 1;
+            return i;
+        }
+    }
+
+    // If completely full, trigger GC to reclaim slots
+    if (vm->array_count >= max) {
+        metal_vm_gc(vm);
+        
+        // Re-attempt slot reuse after GC
+        for (int i = 0; i < vm->array_count; i++) {
+            if (!vm->arrays[i].in_use) {
+                vm->arrays[i].count = 0;
+                vm->arrays[i].in_use = 1;
+                return i;
+            }
+        }
+        return -1;
+    }
+
     int idx = vm->array_count++;
     vm->arrays[idx].count = 0;
     vm->arrays[idx].in_use = 1;
@@ -449,7 +528,31 @@ int metal_array_len(MetalVM* vm, int arr_idx) {
 
 int metal_dict_new(MetalVM* vm) {
     int max = (int)(sizeof(vm->dicts) / sizeof(vm->dicts[0]));
-    if (vm->dict_count >= max) return -1;
+    
+    // Try to reuse an unused slot from GC
+    for (int i = 0; i < vm->dict_count; i++) {
+        if (!vm->dicts[i].in_use) {
+            vm->dicts[i].count = 0;
+            vm->dicts[i].in_use = 1;
+            return i;
+        }
+    }
+
+    // If completely full, trigger GC to reclaim slots
+    if (vm->dict_count >= max) {
+        metal_vm_gc(vm);
+        
+        // Re-attempt slot reuse after GC
+        for (int i = 0; i < vm->dict_count; i++) {
+            if (!vm->dicts[i].in_use) {
+                vm->dicts[i].count = 0;
+                vm->dicts[i].in_use = 1;
+                return i;
+            }
+        }
+        return -1;
+    }
+
     int idx = vm->dict_count++;
     vm->dicts[idx].count = 0;
     vm->dicts[idx].in_use = 1;

@@ -2473,7 +2473,7 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
             num.d = expr->as.number.value;
             uint32_t num_high = (uint32_t)(num.u >> 32);
             uint32_t num_low = (uint32_t)num.u;
-            printf("[DEBUG_NUMBER] val=%d (0x%x_%x)\n", (int)expr->as.number.value, num_high, num_low);
+            printf("[DEBUG_NUMBER] expr=%p, val=%d (0x%x_%x)\n", expr, (int)expr->as.number.value, num_high, num_low);
             return EVAL_RESULT(val_number(expr->as.number.value));
         }
         case EXPR_STRING: return EVAL_RESULT(val_string(expr->as.string.value));

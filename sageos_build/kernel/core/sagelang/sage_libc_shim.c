@@ -269,7 +269,7 @@ int sage_isalpha(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'
 int sage_isalnum(int c) { return sage_isdigit(c) || sage_isalpha(c); }
 int sage_isspace(int c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
-uint64_t sage_strtod(const char *s, char **end) {
+double sage_strtod(const char *s, char **end) {
     long long res = 0, fact = 1; int neg = 0;
     while (*s == ' ') s++;
     if (*s == '-') { neg = 1; s++; }
@@ -287,9 +287,7 @@ uint64_t sage_strtod(const char *s, char **end) {
     double d_res = (double)res / (double)fact;
     if (neg) d_res = -d_res;
     
-    union { double d; uint64_t u; } conv;
-    conv.d = d_res;
-    return conv.u;
+    return d_res;
 }
 
 long sage_strtol(const char *s, char **end, int base) {

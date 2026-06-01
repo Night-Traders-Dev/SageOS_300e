@@ -81,7 +81,7 @@ void exit(int code);
 void abort(void);
 
 /* Math - removed to avoid conflicts with full SageLang */
-uint64_t sage_strtod(const char *s, char **end);
+double   sage_strtod(const char *s, char **end);
 long     sage_strtol(const char *s, char **end, int base);
 int    sage_atoi(const char *s);
 int    sage_isdigit(int c);

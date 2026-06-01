@@ -209,11 +209,18 @@ void kmain(SageOSBootInfo *info) {
     extern void sage_execute_init(void);
     sage_execute_init();
     console_write("\n[TRACE] After sage_execute_init");
-    sched_yield();
+    
+    // allow PID 1 to run asynchronously
+    while (1) {
+        extern void timer_idle_poll(void);
+        timer_idle_poll();
+        sched_schedule();
+    }
 
     // --- STAGE 7: Userspace Session ---
+    // (This stage is now handled by runtime_manager spawning the shell)
     sageos_set_boot_stage(STAGE_7_USERSPACE_SESSION);
 
-    // Launch interactive C shell
-    shell_run();
-    }
+    // Launch interactive C shell (Disabled in favor of Sage supervisor)
+    // shell_run();
+}

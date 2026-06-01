@@ -25,6 +25,8 @@ SageOS.  It covers four pillars:
 | `SHARED_MEM` | Memory-mapped buffer | Zero-copy |
 | `SIGNAL_SET` | Event broadcasting | Many-to-many |
 | `MONITOR` | Condition + mutex hybrid | Synchronization |
+| `FILE` | Secure file handle | I/O |
+| `DIR` | Secure directory handle | I/O |
 
 ### 2.2 Message Format
 
@@ -165,6 +167,8 @@ typedef struct {
 | `MAP` | 3 | Map shared memory |
 | `DUP` | 4 | Duplicate this cap |
 | `REVOKE` | 5 | Destroy / transition object |
+| `VFS_READ` | 6 | Read from file/directory |
+| `VFS_WRITE` | 7 | Write to file/directory |
 
 ### 5.3 Attenuation (Narrowing)
 
@@ -203,6 +207,7 @@ The scheduler's `thread_t` is extended via a parallel array
 * `ipc_wait_next/prev` — wait-queue linkage when blocked on IPC
 * `rpc_reply_cap` — in-flight RPC tracking
 * `signal_pending/mask` — async signal delivery
+* `path` — authorized VFS path (embedded in `ipc_capability_t`)
 
 `sched_ipc_init_thread()` is called from `sched_create_thread()`.
 `sched_ipc_cleanup_thread()` is called from `sched_destroy_thread()`.

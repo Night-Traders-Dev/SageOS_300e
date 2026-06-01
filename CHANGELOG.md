@@ -4,6 +4,23 @@ All notable changes to SageOS will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.3] — 2026-06-01
+
+### Added
+- **Capability-First VFS**: Integrated VFS into the security model. Introduced `IPC_OBJ_FILE` and `IPC_OBJ_DIR` capabilities.
+- **VFS Capability Gating**: Syscalls `read`, `write`, `open`, `mkdir`, `unlink`, and `getdents64` are now gated by capability rights (`VFS_READ`, `VFS_WRITE`).
+- **Asynchronous PID 1 Supervision**: Transitioned `runtime_manager.sage` to a real, asynchronous background kernel thread.
+- **Multitasking FFI**: Implemented `os_spawn_task` in SageLang bridge to dynamically launch scheduler-managed threads.
+- **MetalVM Preemption**: Injected cooperative timer polling into the MetalVM execution loop, preventing clock freezing during long-running bytecode tasks.
+- **Polling-Based Preemption**: Enabled the multitasking scheduler to yield during timer ticks triggered by VM polling.
+
+### Changed
+- Bumped version to `v0.7.3` across the system.
+- Refactored `kmain` idle loop to ensure continuous timer polling and task scheduling.
+- Quieted scheduler debug output to improve console performance and stability.
+
+---
+
 ## [0.7.2] — 2026-06-01
 
 ### Added

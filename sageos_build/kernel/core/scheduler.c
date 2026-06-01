@@ -133,11 +133,7 @@ void sched_schedule(void) {
     next->state = THREAD_STATE_RUNNING;
     g_current_task = next;
 
-    console_write("[sched] Switching to task ");
-    console_u32(next->id);
-    console_write(" at rsp=");
-    console_hex64(next->rsp);
-    console_write("\n");
+    /* Quiet debug: console_write("[sched] Switching to task..."); */
 
     thread_switch(&prev->rsp, &next->rsp);
 }
@@ -190,7 +186,8 @@ uint32_t sched_cpu_id(void) {
 }
 
 void sched_timer_tick(void) {
-    /* Called by timer IRQ. Preemption logic goes here. */
+    /* Called by timer IRQ. Preemption logic via yield. */
+    sched_yield();
 }
 
 void sched_yield(void) {

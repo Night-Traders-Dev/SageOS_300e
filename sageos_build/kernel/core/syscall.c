@@ -246,6 +246,11 @@ long sys_write(int fd, const void *buf, size_t count) {
     if (!t || fd < 0 || fd >= MAX_FD || !t->fd_table[fd].valid)
         return -VFS_EINVAL;
 
+    if (!task_has_vfs_cap(t, t->fd_table[fd].path, IPC_CAP_RIGHT_VFS_WRITE)) {
+        dmesg_log("SECURITY: Denied VFS write access (no capability)");
+        return -VFS_EACCES;
+    }
+
     /* Regular file write via VFS */
     int ret = vfs_write(t->fd_table[fd].path, t->fd_table[fd].offset, buf, count);
     if (ret >= 0) {
@@ -264,6 +269,11 @@ long sys_read(int fd, void *buf, size_t count) {
     if (fd == 0) {
         /* Not implemented for now, return 0 (EOF) */
         return 0;
+    }
+
+    if (!task_has_vfs_cap(t, t->fd_table[fd].path, IPC_CAP_RIGHT_VFS_READ)) {
+        dmesg_log("SECURITY: Denied VFS read access (no capability)");
+        return -VFS_EACCES;
     }
 
     /* Regular file read via VFS */
@@ -421,6 +431,11 @@ long sys_getdents64(int fd, void *dirp, size_t count) {
     if (!dirp) return -VFS_EINVAL;
     if (!t || fd < 0 || fd >= MAX_FD || !t->fd_table[fd].valid)
         return -VFS_EINVAL;
+
+    if (!task_has_vfs_cap(t, t->fd_table[fd].path, IPC_CAP_RIGHT_VFS_READ)) {
+        dmesg_log("SECURITY: Denied VFS getdents64 access (no capability)");
+        return -VFS_EACCES;
+    }
 
     VfsDirEntry entries[VFS_DIRENT_MAX];
     int n = vfs_readdir(t->fd_table[fd].path, entries, VFS_DIRENT_MAX);

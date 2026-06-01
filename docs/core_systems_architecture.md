@@ -1,6 +1,6 @@
 # SageOS Core Systems Architecture Specification
 
-Revision 0.7.2 (Formalized)
+Revision 0.7.3 (Formalized)
 
 Project: "github.com/Night-Traders-Dev/SageOS"
 
@@ -10,7 +10,7 @@ Project: "github.com/Night-Traders-Dev/SageOS"
 
 SageOS is a runtime-centric operating environment built around the SGVM execution substrate. 
 
-Version 0.7 formalizes the **Platform Specification** and granular bootstrap sequence, establishing a stable handshake between the kernel and the language runtime.
+Version 0.7.3 formalizes the **Platform Specification** and granular bootstrap sequence, establishes a stable handshake between the kernel and the language runtime, and introduces **Capability-First VFS** and **Asynchronous Supervision**.
 
 Detailed specifications for core subsystems can be found in:
 - [**Platform Specification**](architecture/platform_spec.md)

@@ -14,8 +14,8 @@ SageOS initialization follows a strictly ordered sequence of stages. Each stage 
 | STAGE_3 | DEVICE_DISCOVERY | Console active, timers running, bus scanning complete. |
 | STAGE_4 | STORAGE_VFS | FAT32/BTRFS mounted, `/etc`, `/boot`, `/dev` available. |
 | STAGE_5 | RUNTIME_BRINGUP | SGVM core initialized, IPC namespace active. |
-| STAGE_6 | SERVICE_ACTIVATION | `runtime_manager.sage` active, system services starting. |
-| STAGE_7 | USERSPACE_SESSION | Shell prompt available, multiuser support active. |
+| STAGE_6 | SERVICE_ACTIVATION | `runtime_manager.sage` active (asynchronous), system services starting. |
+| STAGE_7 | USERSPACE_SESSION | Shell prompt available, multitasking enabled. |
 
 ## 3. Runtime Execution Contract
 The Sage runtime (`SGVM`) distinguishes between three execution modes:

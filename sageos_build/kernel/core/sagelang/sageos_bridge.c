@@ -532,46 +532,6 @@ static Value n_os_spawn_task(int argCount, Value* args) {
     return val_number(t->id);
 }
 
-static Value n_os_get_tasks(int argCount, Value* args) {
-    (void)argCount; (void)args;
-    
-    Value tasks_array = val_array();
-    
-    for (uint32_t i = 0; i < SCHED_MAX_THREADS; i++) {
-        char name[32];
-        thread_state_t state;
-        uint32_t cpu;
-        
-        if (sched_get_thread_info(i, name, &state, &cpu)) {
-            Value task_dict = val_dict();
-            
-            // Add fields to dict
-            dict_set(&task_dict, "id", val_number((double)i));
-            dict_set(&task_dict, "name", val_string(name));
-            dict_set(&task_dict, "state", val_number((double)state));
-            dict_set(&task_dict, "cpu", val_number((double)cpu));
-            
-            array_push(&tasks_array, task_dict);
-        }
-    }
-    
-    return tasks_array;
-}
-
-static Value n_os_set_color(int argCount, Value* args) {
-    if (argCount >= 1 && IS_NUMBER(args[0])) {
-        console_set_fg((uint32_t)AS_NUMBER(args[0]));
-    }
-    return val_nil();
-}
-
-static Value n_os_status_refresh(int argCount, Value* args) {
-    (void)argCount; (void)args;
-    extern void status_refresh(void);
-    status_refresh();
-    return val_nil();
-}
-
 // --- Module Registration ---
 
 void register_sageos_natives(ModuleCache* cache) {
@@ -601,10 +561,6 @@ void register_sageos_natives(ModuleCache* cache) {
     env_define(env, "dmesg_log", 9, val_native(n_os_dmesg_log));
     env_define(env, "os_version_string", 17, val_native(n_os_version));
     env_define(env, "os_spawn_task", 13, val_native(n_os_spawn_task));
-    env_define(env, "os_get_tasks", 12, val_native(n_os_get_tasks));
-    env_define(env, "os_set_color", 12, val_native(n_os_set_color));
-    env_define(env, "status_refresh", 14, val_native(n_os_status_refresh));
-    env_define(env, "os_status_refresh", 17, val_native(n_os_status_refresh));
 
     // Register 'os' module
     Module* os = create_native_module(cache, "os");

@@ -1,0 +1,173 @@
+name: SageOS Multi-Architecture Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SAGE_PATH: ${{ github.workspace }}/sageos_build/sage_lang/core/lib
+
+jobs:
+  build-sagelang:
+    name: Build SageLang Compiler
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Initialize submodules
+        run: ./setup_submodules.sh
+
+      - name: Build SageLang
+        run: |
+          cd sageos_build/sage_lang/core
+          make
+
+      - name: Verify SageLang binary
+        run: |
+          ./sageos_build/sage_lang/core/sage --version || echo "No --version flag"
+          echo 'print "SageLang OK"' > /tmp/test.sage
+          ./sageos_build/sage_lang/core/sage /tmp/test.sage
+
+      - name: Upload SageLang binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-compiler
+          path: sageos_build/sage_lang/core/sage
+          retention-days: 1
+
+  build-kernel:
+    name: Build Kernel (${{ matrix.arch }})
+    needs: build-sagelang
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64, rv64]
+        include:
+          - arch: x64
+            cross_packages: gcc-x86-64-linux-gnu binutils-x86-64-linux-gnu
+            build_arch: x86_64
+          - arch: arm64
+            cross_packages: gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+            build_arch: aarch64
+          - arch: rv64
+            cross_packages: gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu
+            build_arch: riscv64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Initialize submodules
+        run: ./setup_submodules.sh
+
+      - name: Install cross-compilation toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ${{ matrix.cross_packages }} mtools python3
+
+      - name: Download SageLang binary
+        uses: actions/download-artifact@v4
+        with:
+          name: sage-compiler
+          path: sageos_build/sage_lang/core/
+
+      - name: Restore SageLang binary permissions
+        run: chmod +x sageos_build/sage_lang/core/sage
+
+      - name: Recompile Sage components
+        run: |
+          bash scripts/compile_vfs_bridge.sh ./sageos_build/sage_lang/core/sage
+          bash scripts/compile_sage_shell.sh ./sageos_build/sage_lang/core/sage
+
+      - name: Generate build scripts
+        run: |
+          mkdir -p build
+          ./sageos_build/sage_lang/core/sage scripts/build_virt.sage
+
+      - name: Build kernel for ${{ matrix.build_arch }}
+        run: bash build/virt_${{ matrix.build_arch }}/build.sh
+
+      - name: Validate ELF artifact
+        run: |
+          ELF="build/virt_${{ matrix.build_arch }}/kernel.elf"
+          echo "=== ELF Header ==="
+          readelf -h "$ELF"
+          echo ""
+          echo "=== Checking entry point ==="
+          readelf -h "$ELF" | grep -q "Entry point address:" || (echo "FAIL: No entry point"; exit 1)
+          echo "=== Checking file size ==="
+          ls -lh "$ELF"
+          echo "[OK] ${{ matrix.arch }} kernel build validated."
+
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.arch }}
+          path: build/virt_${{ matrix.build_arch }}/kernel.elf
+          retention-days: 7
+
+  rootfs:
+    name: Build RootFS
+    needs: build-sagelang
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Initialize submodules
+        run: ./setup_submodules.sh
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3
+
+      - name: Download SageLang binary
+        uses: actions/download-artifact@v4
+        with:
+          name: sage-compiler
+          path: sageos_build/sage_lang/core/
+
+      - name: Restore SageLang binary permissions
+        run: chmod +x sageos_build/sage_lang/core/sage
+
+      - name: Populate RootFS
+        run: bash scripts/populate_rootfs.sh
+
+      - name: Verify RootFS structure
+        run: |
+          echo "=== RootFS Structure ==="
+          find rootfs -type f | sort | head -60
+          echo ""
+          echo "=== Checking critical files ==="
+          test -f rootfs/etc/sagelang/init.sage || (echo "FAIL: init.sage missing"; exit 1)
+          test -f rootfs/etc/sagelang/runtime_manager.sage || (echo "FAIL: runtime_manager.sage missing"; exit 1)
+          test -f rootfs/etc/sagelang/vfs_bridge.sage || (echo "FAIL: vfs_bridge.sage missing"; exit 1)
+          test -f rootfs/etc/sagelang/sage_shell_combined.sage || (echo "FAIL: shell missing"; exit 1)
+          echo "[OK] RootFS structure validated."
+
+  summary:
+    name: Build Summary
+    needs: [build-kernel, rootfs]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Report results
+        run: |
+          echo "## SageOS Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| SageLang Compiler | ${{ needs.build-sagelang.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Kernel (x64) | ${{ needs.build-kernel.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Kernel (arm64) | ${{ needs.build-kernel.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Kernel (rv64) | ${{ needs.build-kernel.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| RootFS | ${{ needs.rootfs.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY

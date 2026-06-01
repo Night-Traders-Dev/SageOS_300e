@@ -24,12 +24,14 @@ SageOS is a hybrid operating system that combines a low-level C kernel with a hi
 
 ## Documentation
 SageOS documentation is organized into focused architectural specifications:
-- [Platform Specification](docs/architecture/platform_spec.md) - **NEW**
+- [Platform Specification](docs/architecture/platform_spec.md)
 - [Core Systems Architecture](docs/core_systems_architecture.md)
 - [IPC Subsystem Spec](docs/architecture/ipc.md)
+- [Syscall ABI Reference](docs/architecture/syscall_abi.md)
 - [Security Model](docs/architecture/security.md)
 - [Internal API Contracts](docs/architecture/internal_apis.md)
 - [Telemetry & Observability](docs/architecture/telemetry.md)
+- [Changelog](CHANGELOG.md)
 
 ## Why This Repository Exists
 This repository is the central coordination point for SageOS development. It contains:

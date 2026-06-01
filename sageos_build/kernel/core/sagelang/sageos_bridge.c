@@ -117,13 +117,17 @@ void sage_repl_init(void) {
         gc_register_thread(&main_ts);
 
         g_sage_cache = create_module_cache();
+        add_search_path(g_sage_cache, "/lib/sagelang");
+        add_search_path(g_sage_cache, "/etc/sagelang");
         extern ModuleCache* global_module_cache;
         global_module_cache = g_sage_cache;
 
         g_sage_env = env_create(NULL);
         g_global_env = g_sage_env;
         extern void init_stdlib(Env* env);
+        extern void register_stdlib_modules(ModuleCache* cache);
         init_stdlib(g_sage_env);
+        register_stdlib_modules(g_sage_cache);
         register_sageos_natives(g_sage_cache);
 
         // Define ABI version constants for runtime/kernel handshake

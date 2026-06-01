@@ -303,18 +303,23 @@ bool execute_module(Module* module, Environment* global_env) {
 
 // Load a module (create if not in cache)
 Module* load_module(ModuleCache* cache, const char* name) {
+    fprintf(stderr, "DEBUG: load_module('%s') - starting\n", name);
     // Check if module is already in cache
     Module* module = find_module(cache, name);
     if (module) {
+        fprintf(stderr, "DEBUG: Found module '%s' in cache, is_loaded: %d\n", name, module->is_loaded);
         return module;
     }
+    
+    fprintf(stderr, "DEBUG: Module '%s' not found, calling resolve_module_path\n", name);
     
     // Resolve module path
     char* path = resolve_module_path(cache, name);
     if (!path) {
-        fprintf(stderr, "Error: Could not find module '%s'\n", name);
+        fprintf(stderr, "DEBUG: Could not resolve path for module '%s'\n", name);
         return NULL;
     }
+    fprintf(stderr, "DEBUG: Resolved path for '%s' to '%s'\n", name, path);
     
     // Create new module
     module = SAGE_ALLOC(sizeof(Module));
@@ -326,11 +331,16 @@ Module* load_module(ModuleCache* cache, const char* name) {
     module->env = NULL;
     module->is_loaded = false;
     module->is_loading = false;
+    
+    fprintf(stderr, "DEBUG: Added new module '%s' to cache structure\n", name);
+    
     // Add to cache (thread-safe)
     sage_mutex_lock(&module_mutex);
     module->next = cache->modules;
     cache->modules = module;
     sage_mutex_unlock(&module_mutex);
+    
+    fprintf(stderr, "DEBUG: Returning new module '%s'\n", name);
 
     return module;
 }

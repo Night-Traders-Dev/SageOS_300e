@@ -7,6 +7,7 @@ set -e
 
 ROOTFS=${ROOTFS:-"rootfs"}
 BUILD_DIR="sageos_build/kernel"
+LIB_DIR="sageos_build/sage_lang/core/lib"
 SAGE_COMPILER="./sageos_build/sage_lang/core/sage"
 COMPILER="python3 scripts/compile_to_sgvm.py"
 
@@ -23,7 +24,7 @@ mkdir -p "$TMP_BC"
 
 echo "  Compiling system files (.sage -> .sgvm)..."
 
-ALL_SAGE=$(find "$BUILD_DIR" -name "*.sage" | sort -u)
+ALL_SAGE=$(find "$BUILD_DIR" "$LIB_DIR" -name "*.sage" | sort -u)
 
 for f in $ALL_SAGE; do
     [ -e "$f" ] || continue

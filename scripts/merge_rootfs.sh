@@ -5,7 +5,7 @@
 set -e
 
 DISK_IMG=${DISK_IMG:-"virt.img"}
-ROOTFS="rootfs"
+ROOTFS=${ROOTFS:-"rootfs"}
 
 if [ ! -f "$DISK_IMG" ]; then
     echo "Error: $DISK_IMG not found."

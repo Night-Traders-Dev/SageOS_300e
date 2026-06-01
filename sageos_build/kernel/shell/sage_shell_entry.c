@@ -822,6 +822,40 @@ static MetalValue n_os_get_tasks(MetalVM *vm, MetalValue *a, int c) {
     return res;
 }
 
+/* --- read_line: Simple line input for shell --- */
+static MetalValue n_read_line(MetalVM *vm, MetalValue *a, int c) {
+    (void)vm; (void)a; (void)c;
+    
+    char buffer[256];
+    int pos = 0;
+    
+    for (;;) {
+        KeyEvent ev;
+        if (!keyboard_wait_event(&ev)) continue;
+        
+        if (!ev.pressed) continue;
+        
+        int code = key_event_code(&ev);
+        if (code < 0) continue;
+        
+        if (code == 10 || code == 13) {
+            console_putc('\n');
+            break;
+        } else if (code == 8 || code == 127) {
+            if (pos > 0) {
+                pos--;
+                console_write("\b \b");
+            }
+        } else if (code >= 32 && code <= 126 && pos < 255) {
+            buffer[pos++] = (char)code;
+            console_putc((char)code);
+        }
+    }
+    
+    buffer[pos] = '\0';
+    return mv_str(vm, buffer, pos);
+}
+
 static MetalValue n_os_get_mem_stats(MetalVM *vm, MetalValue *a, int c) {
     (void)a;(void)c;
     int d = metal_dict_new(vm);
@@ -1010,6 +1044,7 @@ static void register_natives(MetalVM *vm) {
     REG("os_get_c0",        n_os_get_c0);
     /* New Telemetry */
     REG("os_get_tasks",     n_os_get_tasks);
+    REG("read_line",        n_read_line);
     REG("os_get_mem_stats", n_os_get_mem_stats);
     REG("os_get_dmesg",     n_os_get_dmesg);
     REG("os_vfs_stat",      n_os_vfs_stat);

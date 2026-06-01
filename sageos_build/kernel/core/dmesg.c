@@ -49,7 +49,7 @@ static void append_timestamp(void) {
 }
 
 void dmesg_log(const char *msg) {
-    if (!msg) return;
+    if (!msg || !*msg) return;
 
     if (!dmesg_at_bol) {
         append_char('\n');
@@ -65,6 +65,12 @@ void dmesg_log(const char *msg) {
         char c = *msg++;
         append_char(c);
         if (c == '\n') dmesg_at_bol = 1;
+    }
+
+    // Ensure we end at BOL for the next entry
+    if (!dmesg_at_bol) {
+        append_char('\n');
+        dmesg_at_bol = 1;
     }
 }
 

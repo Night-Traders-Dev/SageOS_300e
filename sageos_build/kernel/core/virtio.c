@@ -39,7 +39,7 @@
 #define REG_USED_HIGH     0x0a4
 
 #define VIRTIO_MAGIC 0x74726976
-#define DEVICE_TYPE_BLOCK 1
+#define DEVICE_TYPE_BLOCK 2
 
 struct virtq_desc {
     uint64_t addr;

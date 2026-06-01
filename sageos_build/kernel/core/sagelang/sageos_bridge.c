@@ -483,6 +483,7 @@ static void serial_dec(uint32_t v) {
 
 static Value n_os_line_redraw(int argCount, Value* args) {
     if (argCount < 4) return val_nil();
+    if (!IS_STRING(args[0]) || !IS_NUMBER(args[1]) || !IS_NUMBER(args[2]) || !IS_STRING(args[3])) return val_nil();
     const char *line = AS_STRING(args[0]);
     int pos = (int)AS_NUMBER(args[1]);
     int erase_len = (int)AS_NUMBER(args[2]);

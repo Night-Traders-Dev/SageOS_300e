@@ -3009,15 +3009,26 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
                     return EVAL_RESULT(val_nil());
                 }
 
-                // Pre-evaluate all provided arguments
+                // Pre-evaluate all provided arguments - use stack buffer to avoid heap thrashing
+                #define MAX_STACK_ARGS 256
+                Value stack_args[MAX_STACK_ARGS];
                 Value* eval_args = NULL;
+                int use_heap = 0;
                 int pushed_args = 0;
+                
                 if (func->param_count > 0) {
-                    eval_args = SAGE_ALLOC(sizeof(Value) * func->param_count);
+                    // Use stack buffer if param_count is small, otherwise allocate
+                    if (func->param_count <= MAX_STACK_ARGS) {
+                        eval_args = stack_args;
+                    } else {
+                        eval_args = SAGE_ALLOC(sizeof(Value) * func->param_count);
+                        use_heap = 1;
+                    }
+                    
                     for (int i = 0; i < expr->as.call.arg_count; i++) {
                         ExecResult arg_result = eval_expr(expr->as.call.args[i], env);
                         if (arg_result.is_throwing) { 
-                            free(eval_args); 
+                            if (use_heap) free(eval_args); 
                             AST_GC_POP_N(1 + pushed_args); 
                             return arg_result; 
                         }
@@ -3030,7 +3041,7 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
                         if (func->defaults && func->defaults[i]) {
                             ExecResult def_result = eval_expr(func->defaults[i], env);
                             if (def_result.is_throwing) { 
-                                free(eval_args); 
+                                if (use_heap) free(eval_args); 
                                 AST_GC_POP_N(1 + pushed_args); 
                                 return def_result; 
                             }
@@ -3047,7 +3058,7 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
 
                 if (callee_value.as.function->is_async) {
 #if SAGE_PLATFORM_PICO
-                    free(eval_args);
+                    if (use_heap) free(eval_args);
                     fprintf(stderr, "Runtime Error: async/await not supported on RP2040.\n");
                     AST_GC_POP_N(1 + pushed_args);
                     return EVAL_RESULT(val_nil());
@@ -3058,7 +3069,7 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
                     for (int i = 0; i < func->param_count; i++) {
                         spawn_args[i + 1] = eval_args[i];
                     }
-                    free(eval_args);
+                    if (use_heap) free(eval_args);
                     // Use thread_spawn_native from stdlib.c (declared as extern)
                     extern Value thread_spawn_native(int argCount, Value* args);
                     Value handle = thread_spawn_native(1 + func->param_count, spawn_args);
@@ -3090,7 +3101,7 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
                     }
                 }
 
-                free(eval_args);
+                if (use_heap) free(eval_args);
 
                 ExecResult res = interpret(func->body, scope);
                 AST_GC_POP_ENV();

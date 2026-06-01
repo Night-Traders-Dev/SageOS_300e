@@ -209,7 +209,12 @@ void timer_poll(void) {
 }
 
 void timer_idle_poll(void) {
-    arch_cpu_relax();
+    // On ARM64 with interrupt-driven timers, we need to poll continuously
+    // without yielding, as yield may prevent timely interrupt detection.
+    // On x86, CPU relax helps reduce power consumption during polling.
+    if (arch_id() != TIMER_ARCH_ARM64) {
+        arch_cpu_relax();
+    }
     timer_poll();
 }
 

@@ -13,7 +13,7 @@ SageOS leverages the SageLang compiler to build its core components and architec
 4.  **Linking**: The linker produces a final ELF binary.
 5.  **Artifact Management**: The `sageos.sh` script moves artifacts to the `build/` directory.
 
-### Hardened Virt Pipeline (v0.7.0)
+### Hardened Virt Pipeline (v0.7.9)
 For cross-platform development, SageOS uses a hardened `virt` target managed by `scripts/build_virt.sage` and `sageos.sh`.
 - **Platform Spec Handshake**: The pipeline now generates `version.h` with `SAGE_ABI_MAJOR/MINOR` constants, enforcing the [Platform Specification](../architecture/platform_spec.md).
 - **Formalized Bootstrap**: Build stages are explicitly linked to kernel initialization paths, ensuring 8-stage granular boot compliance.

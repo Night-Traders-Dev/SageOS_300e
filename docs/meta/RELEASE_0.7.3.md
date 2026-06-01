@@ -1,8 +1,8 @@
-# SageOS Release Notes: v0.7.3 (Active Multitasking)
+# SageOS Release Notes: v0.7.9 (Active Multitasking)
 *Date: June 1, 2026*
 
 ## 1. Overview
-The **v0.7.3** release marks a transition from a simulated boot sequence to a physically integrated, capability-gated multitasking environment. It resolves critical architectural gaps in process supervision, file security, and system stability.
+The **v0.7.9** release marks a transition from a simulated boot sequence to a physically integrated, capability-gated multitasking environment. It resolves critical architectural gaps in process supervision, file security, and system stability.
 
 ## 2. Key Features
 

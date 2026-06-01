@@ -117,7 +117,7 @@ Example: Building and running for ARM64 on QEMU:
 ---
 
 ## 5. Current Status & Roadmap
-SageOS is currently at **v0.7.3 (Active Multitasking)**.
+SageOS is currently at **v0.7.9 (Active Multitasking)**.
 
 ### Achievements:
 *   **Asynchronous PID 1 Supervision**: Supervisor task runs in background, allowing for immediate shell interaction and service health monitoring.

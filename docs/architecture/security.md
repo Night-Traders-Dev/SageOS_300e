@@ -22,7 +22,7 @@ While capabilities govern object-specific access, certain global system operatio
 | `VFS_CAP_ONLY` | Forces mandatory capability gating for all VFS operations. |
 
 ## 4. Capability-First VFS
-As of **v0.7.3**, the Virtual Filesystem is integrated into the capability model.
+As of **v0.7.9**, the Virtual Filesystem is integrated into the capability model.
 
 - **Object Types**: `IPC_OBJ_FILE` and `IPC_OBJ_DIR`.
 - **Rights**: `VFS_READ` and `VFS_WRITE`.

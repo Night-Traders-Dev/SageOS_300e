@@ -1,7 +1,7 @@
-# SageOS v0.7.0 Release Notes
+# SageOS v0.7.9 Release Notes
 
 ## Overview
-SageOS v0.7.0 introduces the **Platform Specification**, a formal architectural contract between the kernel, firmware, and language runtime. This release also features a more granular, documented bootstrap sequence and a stabilized runtime supervisor.
+SageOS v0.7.9 introduces the **Platform Specification**, a formal architectural contract between the kernel, firmware, and language runtime. This release also features a more granular, documented bootstrap sequence and a stabilized runtime supervisor.
 
 ## Key Changes
 
@@ -33,4 +33,4 @@ Removed redundant/duplicate `.sage` source files from the kernel core directory 
 ## Build System Improvements
 - Fixed a bug in `scripts/populate_rootfs.sh` where the SGVM compiler was incorrectly invoked.
 - Corrected executable permissions for maintenance scripts.
-- Version 0.7.0 is now the standard for all `virt` builds.
+- Version 0.7.9 is now the standard for all `virt` builds.

@@ -1,4 +1,4 @@
-# SageOS v0.7.7 - High-Stability Hybrid Operating System
+# SageOS v0.7.9 - High-Stability Hybrid Operating System
 
 SageOS is a hybrid operating system that combines a low-level C kernel with a high-level, SageLang-driven runtime. It is designed to be modular, secure, and fully observable across multiple architectures.
 
@@ -10,7 +10,7 @@ SageOS is a hybrid operating system that combines a low-level C kernel with a hi
 - **Capability-First Security**: Strict authority gating via unforgeable tokens and task-level permissions.
 - **Deep Instrumentation**: System-wide telemetry for real-time observability of scheduler, IPC, and VM events.
 
-## Core Features (v0.7.7)
+## Core Features (v0.7.9)
 - **High-Stability Memory Model**: Coalescing free-list allocator in the kernel's SageLang arena, preventing fragmentation.
 - **Kernel Software Watchdog**: Real-time monitoring of system health; automatically panics on deadlocks or OOM-induced hangs.
 - **AST Leak Mitigation**: Surgical memory management in the interpreter loop, ensuring nodes are reclaimed after execution.

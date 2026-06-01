@@ -1,6 +1,6 @@
 # SageOS Architecture: ARM64
 
-**Status: Active Multitasking (v0.7.3 Standard)**
+**Status: Active Multitasking (v0.7.9 Standard)**
 
 SageOS on ARM64 targets 64-bit ARMv8-A and newer processors. It focuses on modularity and leveraging architecture-specific features like Exception Levels (EL) for security and isolation.
 

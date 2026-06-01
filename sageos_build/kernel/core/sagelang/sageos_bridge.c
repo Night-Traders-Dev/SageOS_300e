@@ -235,6 +235,11 @@ void sage_execute_source(const char* source, const char* name) {
                 break;
             }
 
+            char d_buf[64];
+            extern int sprintf(char* str, const char* format, ...);
+            sprintf(d_buf, "[PARSED STMT type=%d]\n", program->type);
+            console_write(d_buf);
+
             interpret(program, g_sage_env);
 
             // Find the end of the parsed program statement chain

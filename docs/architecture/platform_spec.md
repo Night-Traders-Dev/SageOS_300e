@@ -46,3 +46,5 @@ All system interfaces MUST include versioning headers to ensure compatibility be
 SageOS assumes a **Weakly Ordered** memory model to ensure portability across x86_64, ARM64, and RISC-V.
 - Atomic operations MUST use explicit memory barriers (`smp_mb`, `smp_rmb`, `smp_wmb`).
 - SMP systems MUST ensure cache coherency across cores before STAGE_5.
+## ACPI & Power Management Implementation Status
+The ACPI and Power Management subsystems are currently in transition from stubbed implementations to functional native bindings, leveraging the SGVM-based UEFI/ACPI parser.

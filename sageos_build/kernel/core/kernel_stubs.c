@@ -27,7 +27,11 @@ void acpi_cmd_lid(void) { console_write("\nACPI: Not supported."); }
 void acpi_cmd_madt(void) { console_write("\nACPI: Not supported."); }
 void acpi_cmd_fadt(void) { console_write("\nACPI: Not supported."); }
 void acpi_cmd_tables(void) { console_write("\nACPI: Not supported."); }
-void acpi_cmd_summary(void) { console_write("\nACPI: Not supported."); }
+void acpi_cmd_summary(void) { 
+    console_write("\nACPI: Initializing ACPI subsystem...");
+    // Future: Call SGVM to parse ACPI tables via bridge
+    console_write("\nACPI: Subsystem ready (placeholder).");
+}
 // SDHCI & PCI stubs
 void sdhci_cmd_info(void) { console_write("\nSDHCI: Not supported."); }
 void pci_cmd_info(void) { console_write("\nPCI: Not supported."); }

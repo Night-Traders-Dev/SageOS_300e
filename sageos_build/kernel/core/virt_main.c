@@ -215,6 +215,8 @@ void kmain(SageOSBootInfo *info) {
     console_write("\n[TRACE] Entering multitasking idle loop...");
     while (1) {
         extern void timer_idle_poll(void);
+        extern void sched_watchdog_update(void);
+        sched_watchdog_update();
         timer_idle_poll();
         sched_schedule();
     }

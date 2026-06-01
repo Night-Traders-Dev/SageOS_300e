@@ -111,7 +111,18 @@ int ata_is_available(void) {
 
 int ata_read_sector(uint32_t lba, uint16_t *buffer) {
     if (!ata_present) return 0;
-    if (!ata_wait_not_busy()) return 0;
+    
+    // Use low-level console helper
+    extern void console_write(const char *str);
+    extern void console_u32(uint32_t val);
+    console_write("[ATA_READ] LBA: ");
+    console_u32(lba);
+    console_write("\n");
+
+    if (!ata_wait_not_busy()) {
+        console_write("[ATA_READ] Timed out waiting not busy\n");
+        return 0;
+    }
 
     outb(ATA_PRIMARY_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
     outb(ATA_PRIMARY_SECCOUNT, 1);
@@ -120,11 +131,15 @@ int ata_read_sector(uint32_t lba, uint16_t *buffer) {
     outb(ATA_PRIMARY_LBA_HIGH, (uint8_t)(lba >> 16));
     outb(ATA_PRIMARY_COMMAND, 0x20); // READ SECTORS
 
-    if (!ata_wait_drq()) return 0;
+    if (!ata_wait_drq()) {
+        console_write("[ATA_READ] Timed out waiting DRQ\n");
+        return 0;
+    }
 
     for (int i = 0; i < 256; i++) {
         buffer[i] = inw(ATA_PRIMARY_DATA);
     }
+    console_write("[ATA_READ] Sector read done\n");
     return 1;
 }
 

@@ -572,6 +572,10 @@ static void fat32_entry_to_name(const FAT32_DirEntry *entry, char *out, size_t o
 }
 
 int fat32_stat(const char *path, VfsStat *out) {
+    extern void console_write(const char *str);
+    console_write("[FAT32_STAT] Path: ");
+    console_write(path);
+    console_write("\n");
     if (!fat32_available) return VFS_EIO;
 
     /* Root directory */

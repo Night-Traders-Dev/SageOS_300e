@@ -58,7 +58,8 @@ ld = "x86_64-linux-gnu-ld"
 cflags = "-ffreestanding -nostdinc -fno-stack-protector -fno-pie -mno-red-zone -Isageos_build/kernel/include -Isageos_build/kernel/core/sagelang -Isageos_build/actual_sagelang_build -Isageos_build/actual_sagelang_build/libc -Isageos_build/sage_lang/core/include -Isageos_build/sage_lang/core/include/vm -DSAGE_BARE_METAL -D__sageos__ -DARCH_X86_64 -DSAGE_NO_THREADS -DSAGE_NO_CURL -DSAGE_NO_SSL -DSAGE_NO_VULKAN -DSAGE_NO_OPENGL -DSAGE_NO_GLFW"
 extra_sources = [
     "arch/x64/kernel/syscall_entry.S",
-    "arch/x64/kernel/switch.S"
+    "arch/x64/kernel/switch.S",
+    "arch/x64/kernel/setjmp.S"
 ]
 
 [targets.aarch64]

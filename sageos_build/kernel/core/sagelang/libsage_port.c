@@ -225,6 +225,7 @@ void* dlsym(void* h, const char* s) { (void)h; (void)s; return (void*)0; }
 
 /* 4. Global Variables & Threading */
 int g_repl_mode = 0;
+jmp_buf g_repl_error_jmp;
 int sage_cpu_count = 1;
 int sage_cpu_physical_cores = 1;
 int sage_cpu_has_hyperthreading = 0;

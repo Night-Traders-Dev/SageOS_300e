@@ -111,10 +111,18 @@ int sage_vsnprintf(char *buf, size_t n, const char *fmt, __builtin_va_list ap);
 typedef uint64_t time_t;
 typedef uint64_t clock_t;
 
-/* Stub jmp_buf for repl.h — no real longjmp in kernel */
+/* Stub jmp_buf for repl.h — no real longjmp in kernel by default */
+#ifdef ARCH_X86_64
+typedef uint64_t jmp_buf[16];
+int  setjmp(jmp_buf env);
+void longjmp(jmp_buf env, int val);
+#else
 typedef int jmp_buf[1];
+#undef setjmp
 #define setjmp(b) 0
+#undef longjmp
 #define longjmp(b,v) sage_exit(v)
+#endif
 
 /* Stub FILE for any fprintf references */
 typedef void FILE;

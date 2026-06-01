@@ -110,6 +110,8 @@ void __aarch64_ldadd8_acq_rel(void) {}
 void sage_repl_init(void) {
     sage_gil_acquire();
     if (!g_sage_env) {
+        extern int g_repl_mode;
+        g_repl_mode = 1;
         gc_init();
         static ThreadState main_ts = {0};
         gc_register_thread(&main_ts);
@@ -195,6 +197,7 @@ void sage_gil_acquire(void) {
         sched_yield();
     }
     g_gil_owner = sched_current_thread();
+    console_write("\n[gil acquired]\n");
 }
 
 void sage_gil_release(void) {
@@ -204,26 +207,54 @@ void sage_gil_release(void) {
 }
 
 void sage_execute_source(const char* source, const char* name) {
-    if (!source) return;
-    
+    if (!source) {
+        return;
+    }
+
     sage_gil_acquire();
-    init_lexer(source, name);
-    parser_init();
-    
-    // Check if we are in a REPL-like context or if we should just execute the whole block
-    // For now, we just execute the statements found.
-    if (setjmp(g_repl_error_jmp) == 0) {
+
+    int jmp_result = setjmp(g_repl_error_jmp);
+
+    if (jmp_result == 0) {
+        init_lexer(source, name);
+        parser_init();
+
         while (1) {
             Stmt* program = parse();
-            if (program == NULL) break;
+
+            if (!program) {
+                break;
+            }
+
             interpret(program, g_sage_env);
+
             free_stmt(program);
         }
+
     } else {
+
         console_write("\n[RUNTIME MANAGER EXCEPTION CAUGHT!]\n");
+
+        /*
+         * IMPORTANT:
+         * Any partially allocated AST/interpreter state
+         * from the interrupted execution may now leak.
+         *
+         * Parser/interpreter globals may also now
+         * be inconsistent.
+         */
     }
+
+    /*
+     * These do not currently exist in your snippet,
+     * but you likely need them architecturally.
+     */
+    // parser_cleanup();
+    // lexer_cleanup();
+
     sage_gil_release();
 }
+
 
 int sage_execute_file(const char* path) {
     VfsStat st;

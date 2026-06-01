@@ -77,3 +77,6 @@ benchmark_chart.png
 /getenv.s
 
 # RootFS directory
+rootfs/*.sage
+rootfs/etc/sagelang/*.sage
+rootfs/lib/sagelang/*.sage

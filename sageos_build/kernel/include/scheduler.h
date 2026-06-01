@@ -84,6 +84,9 @@ typedef struct thread {
 
     /* Security Permissions */
     uint32_t  permissions;
+
+    /* Language-specific runtime state (e.g. SageLang GC state) */
+    void     *language_state;
 } thread_t;
 
 #define PERM_NONE           0x00

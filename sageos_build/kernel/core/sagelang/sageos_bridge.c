@@ -149,13 +149,19 @@ extern void sage_execute(const char* mod);
 static void sage_supervisor_thread(void *arg) {
     (void)arg;
     
-    ThreadState ts = {0};
-    gc_register_thread(&ts);
+    ThreadState *ts = (ThreadState*)calloc(1, sizeof(ThreadState));
+    if (!ts) {
+        console_write("\n[SUPERVISOR] Failed to allocate thread state!\n");
+        return;
+    }
+    ts->gas_limit = -1; // unlimited
+    gc_register_thread(ts);
 
     dmesg_log("RUNTIME: Launching System Supervisor (/etc/sagelang/runtime_manager.sage)...");
     sage_execute("/etc/sagelang/runtime_manager.sage");
     
-    gc_unregister_thread(&ts);
+    gc_unregister_thread(ts);
+    free(ts);
 
     extern void sys_exit(int code);
     sys_exit(0);
@@ -530,12 +536,18 @@ static void sage_task_entry(void *arg) {
     char *script_path = (char *)arg;
     extern void sage_execute(const char *path);
     
-    ThreadState ts = {0};
-    gc_register_thread(&ts);
+    ThreadState *ts = (ThreadState*)calloc(1, sizeof(ThreadState));
+    if (ts) {
+        ts->gas_limit = -1;
+        gc_register_thread(ts);
+    }
     
     sage_execute(script_path);
     
-    gc_unregister_thread(&ts);
+    if (ts) {
+        gc_unregister_thread(ts);
+        free(ts);
+    }
     
     free(script_path);
     extern void sys_exit(int code);

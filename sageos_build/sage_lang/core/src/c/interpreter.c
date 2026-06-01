@@ -28,52 +28,67 @@
 #define RESULT_NORMAL(v) ((ExecResult){ (v), 0, 0, 0, 0, sage_nil, 0, NULL, g_gas_used, g_gas_limit })
 
 Environment* g_global_env = NULL;
+
+#ifndef __sageos__
 __thread EnvRootNode* g_gc_root_stack = NULL;
 
 #define AST_GC_TEMP_MAX 1024
 __thread Value g_ast_gc_temps[AST_GC_TEMP_MAX];
 __thread int g_ast_gc_temp_count = 0;
+#endif
+
 #define AST_GC_PUSH(v) do { \
     ThreadState* ts = gc_get_thread_state(); \
     if (ts) { \
         if (ts->ast_gc_temp_count < AST_GC_TEMP_MAX) ts->ast_gc_temps[ts->ast_gc_temp_count++] = (v); \
     } else { \
-        if (g_ast_gc_temp_count < AST_GC_TEMP_MAX) g_ast_gc_temps[g_ast_gc_temp_count++] = (v); \
+        /* Fallback for environments where GC is not initialized yet or not using multitasking */ \
+        static Value fallback_temps[AST_GC_TEMP_MAX]; \
+        static int fallback_count = 0; \
+        if (fallback_count < AST_GC_TEMP_MAX) fallback_temps[fallback_count++] = (v); \
     } \
 } while(0)
+
 #define AST_GC_POP() do { \
     ThreadState* ts = gc_get_thread_state(); \
     if (ts) { if (ts->ast_gc_temp_count > 0) ts->ast_gc_temp_count--; } \
-    else { if (g_ast_gc_temp_count > 0) g_ast_gc_temp_count--; } \
 } while(0)
+
 #define AST_GC_POP_N(n) do { \
     ThreadState* ts = gc_get_thread_state(); \
     if (ts) { ts->ast_gc_temp_count -= (n); if (ts->ast_gc_temp_count < 0) ts->ast_gc_temp_count = 0; } \
-    else { g_ast_gc_temp_count -= (n); if (g_ast_gc_temp_count < 0) g_ast_gc_temp_count = 0; } \
 } while(0)
 
+#ifndef __sageos__
 #define AST_GC_ENV_TEMP_MAX 256
 __thread Env* g_ast_gc_env_temps[AST_GC_ENV_TEMP_MAX];
 __thread int g_ast_gc_env_temp_count = 0;
+#endif
+
 #define AST_GC_PUSH_ENV(e) do { \
     ThreadState* ts = gc_get_thread_state(); \
     if (ts) { \
         if (ts->ast_gc_env_temp_count < AST_GC_ENV_TEMP_MAX) ts->ast_gc_env_temps[ts->ast_gc_env_temp_count++] = (e); \
-    } else { \
-        if (g_ast_gc_env_temp_count < AST_GC_ENV_TEMP_MAX) g_ast_gc_env_temps[g_ast_gc_env_temp_count++] = (e); \
     } \
 } while(0)
+
 #define AST_GC_POP_ENV() do { \
     ThreadState* ts = gc_get_thread_state(); \
     if (ts) { if (ts->ast_gc_env_temp_count > 0) ts->ast_gc_env_temp_count--; } \
-    else { if (g_ast_gc_env_temp_count > 0) g_ast_gc_env_temp_count--; } \
 } while(0)
 
 static Stmt* g_generator_resume_target = NULL;
 
 // Phase 2: Gas tracking globals
+#ifndef __sageos__
 static __thread long g_gas_limit = -1; // -1 means unlimited
 static __thread long g_gas_used = 0;
+#else
+#define g_gas_limit (gc_get_thread_state()->gas_limit)
+#define g_gas_used (gc_get_thread_state()->gas_used)
+#define g_gc_root_stack (gc_get_thread_state()->gc_root_stack)
+#define g_recursion_depth (gc_get_thread_state()->recursion_depth)
+#endif
 
 static ExecResult gas_error(void) {
     return EVAL_EXCEPTION(val_exception("Out of gas"));
@@ -122,10 +137,12 @@ static __attribute__((unused)) int stmt_has_pragma(Stmt* stmt, const char* name)
 }
 // Maximum loop iterations to prevent hangs and stack exhaustion
 #define MAX_LOOP_ITERATIONS 10000000
+#ifndef __sageos__
 #if SAGE_PLATFORM_PICO
 static int g_recursion_depth = 0;  // No TLS on Cortex-M0+
 #else
 static __thread int g_recursion_depth = 0;
+#endif
 #endif
 
 static int stmt_contains_target(Stmt* stmt, Stmt* target) {

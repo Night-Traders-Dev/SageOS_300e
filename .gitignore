@@ -75,3 +75,5 @@ benchmark_chart.png
 *.pyc
 /getenv.s
 
+rootfs/
+rootfs-*/

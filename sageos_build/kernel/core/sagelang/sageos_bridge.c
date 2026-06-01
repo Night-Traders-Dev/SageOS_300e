@@ -166,6 +166,9 @@ static void sage_supervisor_thread(void *arg) {
     dmesg_log("RUNTIME: Launching System Supervisor (/etc/sagelang/runtime_manager.sage)...");
     sage_execute("/etc/sagelang/runtime_manager.sage");
     
+    extern void sageos_set_boot_stage(int stage);
+    sageos_set_boot_stage(7); // STAGE_7_USERSPACE_SESSION
+    
     gc_unregister_thread(ts);
     free(ts);
 

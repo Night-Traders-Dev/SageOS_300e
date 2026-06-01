@@ -5,27 +5,15 @@ let tasks = [
 
 let i = 0
 let t_count = len(tasks)
-print "t_count: "
-print t_count
 
 while i < t_count:
     let t = tasks[i]
     let id = str(t["id"])
-    print "id before format: "
-    print id
     while len(id) < 3: 
-        print "LOOP PULSE id="
-        print id
-        print "len(id)="
-        print len(id)
         id = " " + id
-    print "id after format: "
-    print id
     
     let name = t["name"]
     while len(name) < 16: name = name + " "
-    print "name after format: "
-    print name
     
     let state_val = t["state"]
     let state = "UNKNOWN"
@@ -43,3 +31,6 @@ while i < t_count:
     i = i + 1
 
 print "DONE"
+
+# Spawn interactive userspace shell (Stage 7)
+os_spawn_task("shell", "/etc/sagelang/shell.sage")

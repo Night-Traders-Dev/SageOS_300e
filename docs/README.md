@@ -6,12 +6,13 @@
 - [**IPC Subsystem**](architecture/ipc.md): Formal specification of the communication backbone and capability manager.
 - [**Security Model**](architecture/security.md): Overview of the Capability-First authority gating and system permissions.
 - [**Internal API Contracts**](architecture/internal_apis.md): Documentation of the stable interfaces between kernel subsystems.
+- [**Gap Analysis**](architecture/gap_analysis.md): Assessment of deviations between design specifications and implementation status.
 - [**Telemetry & Observability**](architecture/telemetry.md): Deep dive into the system-wide tracing and event logging infrastructure.
 
 ## Architecture Guides
-- [**x86_64 (x64)**](arch/x64.md)
-- [**ARM64 (AArch64)**](arch/arm64.md)
-- [**RISC-V 64 (RV64)**](arch/rv64.md)
+- [**x86_64 (x64)**](arch/x64.md) (Active Multitasking)
+- [**ARM64 (AArch64)**](arch/arm64.md) (Active Multitasking)
+- [**RISC-V 64 (RV64)**](arch/rv64.md) (Active Multitasking)
 
 ## Developer Guides
 - [**Build Pipeline**](guides/build_pipeline.md): Comprehensive guide to the SageOS build system and cross-compilation.

@@ -23,31 +23,33 @@ Syscalls are invoked via `ecall`. Arguments in: `a0`–`a5`. Syscall number in `
 
 ## 4. POSIX-Compatible Syscalls
 
+All VFS-related syscalls are **capability-gated** if the task has the `PERM_VFS_CAP_ONLY` bit set.
+
 | Number | Name | Signature | Notes |
 |--------|------|-----------|-------|
-| 0 | `read` | `read(fd, buf, count)` | Returns bytes read. stdin (fd=0) returns EOF. |
-| 1 | `write` | `write(fd, buf, count)` | fd 1/2 go directly to console. |
-| 2 | `open` | `open(path, flags, mode)` | Supports `O_CREAT`, `O_TRUNC`, `O_APPEND`, `O_EXCL`. |
+| 0 | `read` | `read(fd, buf, count)` | Returns bytes read. Gated by `VFS_READ`. |
+| 1 | `write` | `write(fd, buf, count)` | Gated by `VFS_WRITE`. fd 1/2 go to console. |
+| 2 | `open` | `open(path, flags, mode)` | Gated by `VFS_READ`/`VFS_WRITE`. |
 | 3 | `close` | `close(fd)` | Invalidates FD entry. |
 | 5 | `fstat` | `fstat(fd, stat*)` | Returns `st_size` and `st_mode`. |
 | 8 | `lseek` | `lseek(fd, offset, whence)` | `SEEK_SET=0`, `SEEK_CUR=1`, `SEEK_END=2`. |
 | 12 | `brk` | `brk(addr)` | Adjusts process heap limit. |
 | 33 | `dup2` | `dup2(oldfd, newfd)` | Duplicates file descriptor. |
-| 35 | `nanosleep` | `nanosleep(req, rem)` | Busy-waits via `timer_delay_ms`. |
+| 35 | `nanosleep` | `nanosleep(req, rem)` | Blocks task via scheduler. |
 | 39 | `getpid` | `getpid()` | Returns current task ID. |
 | 58 | `vfork` | `vfork()` | Clones kernel stack, parent blocks until child exits/execs. |
 | 59 | `execve` | `execve(path, argv, envp)` | Loads and executes ELF64 binary. |
-| 60 | `exit` | `exit(code)` | Terminates current task, restores parent ELF data if applicable. |
-| 61 | `waitpid` | `waitpid(pid, status, options)` | Blocks until child terminates, then reaps. |
+| 60 | `exit` | `exit(code)` | Terminates current task. |
+| 61 | `waitpid` | `waitpid(pid, status, options)` | Blocks until child terminates. |
 | 62 | `kill` | `kill(pid, sig)` | **Stub**: Returns `-EINVAL`. |
 | 79 | `getcwd` | `getcwd(buf, size)` | Returns current working directory string. |
 | 80 | `chdir` | `chdir(path)` | Validates path is a directory via VFS. |
-| 83 | `mkdir` | `mkdir(path, mode)` | Creates directory via VFS. Mode ignored. |
-| 87 | `unlink` | `unlink(path)` | Removes file via VFS. |
+| 83 | `mkdir` | `mkdir(path, mode)` | Gated by `VFS_WRITE`. |
+| 87 | `unlink` | `unlink(path)` | Gated by `VFS_WRITE`. |
 | 96 | `gettimeofday` | `gettimeofday(tv, tz)` | Timezone ignored. Uses `timer_seconds()`. |
 | 100 | `isatty` | `isatty(fd)` | Returns 1 for fd 0–2, 0 otherwise. **SageOS custom number.** |
 | 101 | `times` | `times(tms*)` | Returns timer ticks. Only `tms_utime` populated. |
-| 217 | `getdents64` | `getdents64(fd, dirp, count)` | Linux-compatible `struct linux_dirent64`. |
+| 217 | `getdents64` | `getdents64(fd, dirp, count)` | Gated by `VFS_READ`. |
 
 ## 5. System Control Syscalls
 

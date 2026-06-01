@@ -1,9 +1,22 @@
 # Sage Language - Development Roadmap
 
-> **Last Updated**: May 12, 2026
-> **Current Phase**: v3.4.2 — Sentinel Security & Performance Refinement, all 18 phases complete
+> **Last Updated**: June 1, 2026
+> **Current Phase**: v3.4.3 — Kernel Multitasking & Stabilization
 
 This roadmap outlines the development journey of Sage, from its initial bootstrapping phase to becoming a fully self-hosted systems programming language with low-level capabilities.
+
+---
+
+## v3.4.3: Kernel Multitasking & Stabilization (June 2026)
+
+### Completed
+
+- **SageOS Multitasking**: Implemented `os_spawn_task` FFI for spawning real scheduler threads from SageLang.
+- **Global Interpreter Lock (GIL)**: Thread-safe AST interpreter orchestration, protecting shared lexer/parser state.
+- **MetalVM Preemption**: Injected `timer_poll()` into bytecode step loop, enabling fluid preemption during compute tasks.
+- **Capability-First VFS**: Mandatory capability gating for file access via `IPC_OBJ_FILE` and `IPC_OBJ_DIR`.
+- **Asynchronous Supervisor**: PID 1 supervisor now runs as a persistent background kernel task.
+- **Thread-Safe Allocator**: Standardized bump allocator with synchronization guards for concurrent kernel tasks.
 
 ---
 

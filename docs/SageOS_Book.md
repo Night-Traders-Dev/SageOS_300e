@@ -117,9 +117,14 @@ Example: Building and running for ARM64 on QEMU:
 ---
 
 ## 5. Current Status & Roadmap
-SageOS is currently at **v0.7.2 (Alpha)**.
+SageOS is currently at **v0.7.3 (Active Multitasking)**.
 
 ### Achievements:
+*   **Asynchronous PID 1 Supervision**: Supervisor task runs in background, allowing for immediate shell interaction and service health monitoring.
+*   **Capability-First VFS**: Mandatory capability gating for file access, resolving a major security/POSIX gap.
+*   **Multi-Arch Multitasking**: Unified scheduler support for x86_64, ARM64, and RISC-V 64.
+*   **MetalVM Preemption**: Injected timer polling into the bytecode interpreter, establishing fluid multitasking during heavy VM compute.
+*   **Global Interpreter Lock (GIL)**: Thread-safe orchestration of AST-level SageLang execution.
 *   **Platform Specification**: Formalized architectural contract for cross-layer stability.
 *   **Granular Bootstrap**: 8-stage predictable system bring-up.
 *   **ABI Versioning**: Handshake mechanism between kernel and language runtime.
@@ -135,7 +140,7 @@ SageOS is currently at **v0.7.2 (Alpha)**.
 *   Advanced kernel logging with persistent `bootlog` and ring-buffered `dmesg`.
 
 ### Core Subsystems:
-*   **VFS (Virtual Filesystem)**: Uniform interface for all filesystems.
+*   **VFS (Virtual Filesystem)**: Uniform interface for all filesystems, now mediated by capabilities.
 *   **FAT32**: EFI partition support and logging.
 *   **BTRFS**: Robust root filesystem (Read-only Alpha).
 *   **SWAP**: Memory management infrastructure.
@@ -144,7 +149,7 @@ SageOS is currently at **v0.7.2 (Alpha)**.
 ### Upcoming Milestones:
 *   Expansion of the SageLang standard library for kernel development.
 *   Robust WiFi driver support for the Lenovo 300e.
-*   User-mode process isolation and multitasking.
+*   Hardware-enforced MMU process isolation.
 *   Graphical subsystem (Lumo) integration.
 
 ---

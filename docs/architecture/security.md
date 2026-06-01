@@ -19,8 +19,17 @@ While capabilities govern object-specific access, certain global system operatio
 | `SCHED_CONTROL` | Ability to modify thread priorities or affinity. |
 | `DRIVER_LOAD` | Ability to register new device drivers. |
 | `DEBUG_TRACE` | Ability to access system telemetry and trace logs. |
+| `VFS_CAP_ONLY` | Forces mandatory capability gating for all VFS operations. |
 
-## 4. Managed Execution (SGVM)
+## 4. Capability-First VFS
+As of **v0.7.3**, the Virtual Filesystem is integrated into the capability model.
+
+- **Object Types**: `IPC_OBJ_FILE` and `IPC_OBJ_DIR`.
+- **Rights**: `VFS_READ` and `VFS_WRITE`.
+- **Enforcement**: Syscalls like `open`, `read`, and `write` verify that the task holds a capability covering the target path.
+- **Root Delegation**: The system supervisor (PID 1) holds a root directory capability (`/`) and delegates sub-tree capabilities to specific services.
+
+## 5. Managed Execution (SGVM)
 The SGVM execution substrate enforces security at the instruction level:
 - **Memory Safety**: Bytecode validation prevents out-of-bounds access.
 - **Syscall Mediation**: All syscalls from SGVM are checked against the task's capability table and permission mask.

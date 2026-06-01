@@ -25,8 +25,9 @@ The following are **stable** and will not change without a major version bump:
 6. **Core types**: Nil, Bool, Int, Float, String, Array, Dict, Tuple, Bytes, Function.
 7. **Control flow**: if/elif/else, while, for/in, match/case, try/catch/finally, defer.
 8. **Class model**: Single inheritance, `super.init()` (auto-self), `__str__`, `__eq__`.
-9. **Module system**: `import`, `from X import Y`, dot-path modules.
-10. **Type annotations**: Optional, gradual typing with `sage check`.
+9. Module system: `import`, `from X import Y`, dot-path modules.
+10. Type annotations: Optional, gradual typing with `sage check`.
+11. **Multitasking Safety**: All AST-level execution is serialized via a Global Interpreter Lock (GIL) when running in multitasking environments (like SageOS).
 
 ## Deprecation Policy
 

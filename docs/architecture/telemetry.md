@@ -11,6 +11,8 @@ Each trace entry captures a high-resolution timestamp, the event type, the execu
 | `TRACE_SCHED_SWITCH` | Previous Task ID | Next Task ID |
 | `TRACE_IPC_SEND` | Capability Handle | Flags |
 | `TRACE_IPC_RECV` | Capability Handle | Flags |
+| `TRACE_VFS_READ` | File Offset | Bytes Requested |
+| `TRACE_VFS_WRITE` | File Offset | Bytes Written |
 | `TRACE_VM_EXEC` | Opcode | Instruction Pointer |
 | `TRACE_ALLOC_MALLOC` | Requested Size | Allocated Pointer |
 | `TRACE_ALLOC_FREE` | Freed Pointer | (Unused) |

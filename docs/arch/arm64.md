@@ -1,5 +1,7 @@
 # SageOS Architecture: ARM64
 
+**Status: Active Multitasking (v0.7.3 Standard)**
+
 SageOS on ARM64 targets 64-bit ARMv8-A and newer processors. It focuses on modularity and leveraging architecture-specific features like Exception Levels (EL) for security and isolation.
 
 ## Target Hardware
@@ -7,10 +9,10 @@ SageOS on ARM64 targets 64-bit ARMv8-A and newer processors. It focuses on modul
 - **QEMU `virt` machine**: Primary development and CI target.
 
 ## Execution Environment
-- **EL3**: Typically handled by firmware (e.g., TF-A, RPi bootloader).
-- **EL2**: Hypervisor level (if present).
-- **EL1**: SageOS Kernel (Supervisor mode).
-- **EL0**: User space applications.
+- **Multitasking**: Full kernel-level multitasking enabled.
+- **Preemption**: Cooperative preemption via interpreted bytecode polling.
+- **Privilege**: EL1 (Kernel) and EL0 (User).
+- **Isolation**: Managed via SGVM and hardware MMU (Stage 1/2).
 
 ## Memory Mapping
 SageOS on ARM64 uses a 48-bit or 39-bit virtual address space.

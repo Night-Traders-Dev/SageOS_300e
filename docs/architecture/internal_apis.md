@@ -38,8 +38,13 @@ The SGVM / MetalVM interface for running portable bytecode.
 - `metal_vm_load_binary()`: Load a compiled SGVM artifact.
 - `metal_vm_run()` / `metal_vm_step()`: Execute bytecode.
 - `metal_vm_register_native()`: Bind kernel C functions to SageLang.
+- `sage_gil_acquire()` / `sage_gil_release()`: Serialize access to the AST interpreter state.
 
-## 7. Driver Interface (`driver.h` — Prototypical)
+## 7. FFI & Bridge Extensions (`sageos_bridge.c`)
+- `os_spawn_task()`: Launch a real scheduler thread to run a SageLang script.
+- `os_vfs_stat()`: Capability-aware file metadata retrieval.
+
+## 8. Driver Interface (`driver.h` — Prototypical)
 - `driver_register()`: Announce a new device driver to the system.
 - `device_event_notify()`: Push hardware events into the system event queue.
 - `dma_map_buffer()`: Securely map buffers for hardware DMA.

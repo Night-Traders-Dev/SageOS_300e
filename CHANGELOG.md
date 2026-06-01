@@ -4,6 +4,17 @@ All notable changes to SageOS will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.8] — 2026-06-01
+
+### Added
+- **Multitasking Isolation**: Re-architected SageLang runtime to use per-thread heap-allocated storage (`ThreadState`) instead of Thread Local Storage (TLS). This resolves critical state corruption where concurrent tasks shared GC roots and interpreter globals.
+- **Stack Safety**: Transitioned large `ThreadState` structures (18KB+) to the heap, preventing immediate stack overflow and CPU triple faults on 64KB kernel task stacks.
+- **Kernel-Aware Storage**: Integrated `language_state` hooks into the scheduler's `thread_t` for robust language-specific metadata persistence.
+
+### Fixed
+- **x64 Bootstrap Crash**: Resolved a fatal triple fault during the Supervisor (PID 1) bring-up caused by stack exhaustion.
+- **Rootfs Generation**: Fixed a script error in `populate_rootfs.sh` that halted the build process during bytecode compilation.
+
 ## [0.7.7] — 2026-06-01
 
 ### Added

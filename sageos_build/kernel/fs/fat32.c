@@ -293,49 +293,34 @@ static int fat32_find_entry_in_cluster(uint32_t cluster, const char *name, FAT32
 }
 
 static int fat32_find_root_entry(const char *path, FAT32_DirEntry *out_entry) {
-    if (*path == '/') {
-        path++;
-    }
-
-    if (*path == 0) {
-        return 0;
-    }
+    while (*path == '/') path++;
+    if (*path == '\0') return 0;
 
     uint32_t current_cluster = fat32_root_cluster;
     char segment[256];
-    size_t i = 0;
 
-    while (1) {
-        if (*path == '/' || *path == '\0') {
-            segment[i] = '\0';
-            if (!fat32_find_entry_in_cluster(current_cluster, segment, out_entry)) {
-                return 0;
-            }
-
-            if (*path == '\0') {
-                return 1;
-            }
-
-            if (!(out_entry->attr & FAT32_ATTR_DIRECTORY)) {
-                return 0;
-            }
-
-            uint32_t next_cluster = ((uint32_t)out_entry->first_cluster_hi << 16) | out_entry->first_cluster_lo;
-            if (next_cluster < 2) {
-                return 0;
-            }
-
-            current_cluster = next_cluster;
+    while (*path) {
+        size_t i = 0;
+        while (*path && *path != '/') {
+            if (i < sizeof(segment) - 1) segment[i++] = *path;
             path++;
-            i = 0;
-            continue;
         }
+        segment[i] = '\0';
 
-        if (i < sizeof(segment) - 1) {
-            segment[i++] = *path;
+        if (i > 0) {
+            if (!fat32_find_entry_in_cluster(current_cluster, segment, out_entry)) return 0;
+            
+            if (*path == '/') {
+                if (!(out_entry->attr & FAT32_ATTR_DIRECTORY)) return 0;
+                current_cluster = ((uint32_t)out_entry->first_cluster_hi << 16) | out_entry->first_cluster_lo;
+                if (current_cluster < 2) return 0;
+                while (*path == '/') path++;
+            }
+        } else {
+            while (*path == '/') path++;
         }
-        path++;
     }
+    return 1;
 }
 
 static uint32_t fat32_find_partition(void) {

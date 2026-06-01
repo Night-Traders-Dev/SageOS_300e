@@ -37,7 +37,7 @@ for f in $ALL_SAGE; do
     
     # Try compiling to bytecode
     if $SAGE_COMPILER --emit-vm "$clean_sage" -o "$bc_path" 2>/dev/null; then
-        $COMPILER "$bc_path" -o "$sgvm_path"
+        $COMPILER "$bc_path" "$sgvm_path"
         echo "      Success (.sgvm generated)"
     else
         echo "      Skipped (VM compile unsupported)"

@@ -546,6 +546,73 @@ static Value n_os_status_refresh(int argCount, Value* args) {
     return val_nil();
 }
 
+// --- Scheduler / Task Management ---
+
+static Value n_os_get_tasks(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    Value tasks = val_array();
+    for (uint32_t i = 0; i < SCHED_MAX_THREADS; i++) {
+        char name[32];
+        thread_state_t state;
+        uint32_t cpu_id;
+        if (sched_get_thread_info(i, name, &state, &cpu_id)) {
+            Value task = val_dict();
+            Value id_val = val_number((double)i);
+            Value name_val = val_string(name);
+            Value state_val = val_number((double)state);
+            Value cpu_val = val_number((double)cpu_id);
+            
+            Dict* d = AS_DICT(task);
+            dict_set(d, "id", id_val);
+            dict_set(d, "name", name_val);
+            dict_set(d, "state", state_val);
+            dict_set(d, "cpu", cpu_val);
+            
+            array_push(&tasks, task);
+        }
+    }
+    return tasks;
+}
+
+// --- Input / Line Reading ---
+
+static Value n_read_line(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    
+    // Simple line reading implementation
+    char buffer[256];
+    int pos = 0;
+    
+    for (;;) {
+        KeyEvent ev;
+        if (!keyboard_wait_event(&ev)) continue;
+        
+        if (!ev.pressed) continue;
+        
+        int code = key_event_code(&ev);
+        if (code < 0) continue;
+        
+        if (code == 10 || code == 13) {
+            // Enter key
+            console_putc('\n');
+            break;
+        } else if (code == 8 || code == 127) {
+            // Backspace or Delete
+            if (pos > 0) {
+                pos--;
+                console_write("\b \b");
+            }
+        } else if (code >= 32 && code <= 126 && pos < 255) {
+            // Printable character
+            buffer[pos++] = (char)code;
+            console_putc((char)code);
+        }
+    }
+    
+    buffer[pos] = '\0';
+    return val_string(buffer);
+}
+
 // --- Module Registration ---
 
 void register_sageos_natives(ModuleCache* cache) {
@@ -578,6 +645,8 @@ void register_sageos_natives(ModuleCache* cache) {
     env_define(env, "os_set_color", 12, val_native(n_os_set_color));
     env_define(env, "status_refresh", 14, val_native(n_os_status_refresh));
     env_define(env, "os_status_refresh", 17, val_native(n_os_status_refresh));
+    env_define(env, "os_get_tasks", 12, val_native(n_os_get_tasks));
+    env_define(env, "read_line", 9, val_native(n_read_line));
 
     // Register 'os' module
     Module* os = create_native_module(cache, "os");

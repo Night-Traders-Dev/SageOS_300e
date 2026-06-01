@@ -230,7 +230,7 @@ static int fat32_find_entry_in_cluster(uint32_t cluster, const char *name, FAT32
     while (!fat32_is_end_of_chain(cluster)) {
         for (uint32_t sector_idx = 0; sector_idx < fat32_sectors_per_cluster; sector_idx++) {
             uint32_t lba = fat32_cluster_to_lba(cluster) + sector_idx;
-            fat32_read_sector(lba, sector);
+            if (!fat32_read_sector(lba, sector)) return 0;
 
             for (uint32_t offset = 0; offset < 512; offset += FAT32_ENTRY_SIZE) {
                 FAT32_DirEntry *entry = (FAT32_DirEntry *)(sector + offset);
@@ -248,11 +248,15 @@ static int fat32_find_entry_in_cluster(uint32_t cluster, const char *name, FAT32
                     FAT32_LFNEntry *lfn = (FAT32_LFNEntry *)entry;
                     int order = lfn->order & 0x1F;
                     if (order > 0 && order <= 20) {
-                        fat32_lfn_to_name(lfn, lfn_name, (order - 1) * 13);
+                        int base = (order - 1) * 13;
+                        for (int k = 0; k < 5; k++)  lfn_name[base + k] = (char)(lfn->name1[k] & 0xFF);
+                        for (int k = 0; k < 6; k++)  lfn_name[base + 5 + k] = (char)(lfn->name2[k] & 0xFF);
+                        for (int k = 0; k < 2; k++)  lfn_name[base + 11 + k] = (char)(lfn->name3[k] & 0xFF);
+                        
                         if (lfn->order & 0x40) {
-                            /* Last entry in sequence, ensure null termination */
                             int len = order * 13;
-                            if (len < 256) lfn_name[len] = 0;
+                            if (len > 255) len = 255;
+                            lfn_name[len] = '\0';
                         }
                         lfn_active = 1;
                     }
@@ -261,36 +265,30 @@ static int fat32_find_entry_in_cluster(uint32_t cluster, const char *name, FAT32
 
                 char entry_name[256];
                 if (lfn_active) {
-                    /* Ensure null termination at first 0xFFFF or 0x0000 in Unicode */
-                    /* But our simple lfn_to_name just copies, so we should find the actual end */
                     int len = 0;
                     while (len < 255 && lfn_name[len] != '\0' && (uint8_t)lfn_name[len] != 0xFF) len++;
-                    lfn_name[len] = 0;
+                    lfn_name[len] = '\0';
                     strncpy(entry_name, lfn_name, 255);
                 } else {
                     size_t len = 0;
-                    for (size_t i = 0; i < 8 && entry->name[i] != ' '; i++) entry_name[len++] = entry->name[i];
+                    for (size_t k = 0; k < 8 && entry->name[k] != ' '; k++) entry_name[len++] = entry->name[k];
                     if (entry->ext[0] != ' ') {
                         entry_name[len++] = '.';
-                        for (size_t i = 0; i < 3 && entry->ext[i] != ' '; i++) entry_name[len++] = entry->ext[i];
+                        for (size_t k = 0; k < 3 && entry->ext[k] != ' '; k++) entry_name[len++] = entry->ext[k];
                     }
                     entry_name[len] = 0;
                 }
                 
-                lfn_active = 0; /* Reset for next entry */
+                lfn_active = 0;
 
                 if (streq(entry_name, name)) {
-                    for (size_t i = 0; i < sizeof(FAT32_DirEntry); i++) {
-                        ((uint8_t *)out_entry)[i] = ((uint8_t *)entry)[i];
-                    }
+                    memcpy(out_entry, entry, sizeof(FAT32_DirEntry));
                     return 1;
                 }
             }
         }
-
         cluster = fat32_next_cluster(cluster);
     }
-
     return 0;
 }
 
@@ -868,12 +866,14 @@ extern SageOSBootInfo *kernel_get_boot_info(void);
 
 static void ascii_to_utf16_path(const char *src, uint16_t *dst, int max_len) {
     int i = 0;
-    // Always start with backslash for root volume path
+    // Skip leading slash if present to avoid double backslash
+    if (*src == '/') src++;
+    
     dst[i++] = '\\';
-    while (*src && i < max_len - 2) {
+    while (*src && i < max_len - 1) {
         char c = *src++;
         if (c == '/') c = '\\';
-        dst[i++] = c;
+        dst[i++] = (uint16_t)(uint8_t)c;
     }
     dst[i] = 0;
 }

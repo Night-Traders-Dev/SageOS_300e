@@ -23,7 +23,11 @@ The telemetry buffer is stored in a fixed-size kernel-resident array (`TELEMETRY
 System events can be visualized using the kernel's built-in diagnostic tools:
 - **`trace_dump()`**: Serial-out dump of the entire trace buffer in a human-readable format.
 - **`dmesg` Integration**: High-level events are occasionally mirrored to the kernel log for simplified debugging.
-- **Trace Shell Command**: (Planned) Interactive filtering and searching of trace events from the SageShell.
+- **Trace Shell Command**: Fully implemented in the C kernel. Access via `trace` with subcommands:
+  - `trace dump` — full trace buffer dump
+  - `trace dump <event>` — filtered dump (e.g., `trace dump IPC_SEND`)
+  - `trace stats` — event count summary
+  - `trace clear` — reset trace buffer
 
 ## 5. Usage in Development
 Telemetry is mandatory for all new core logic. Developers should inject `trace_log()` calls at critical state transition points to maintain the system's "observable-by-default" status.

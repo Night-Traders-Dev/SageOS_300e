@@ -1,6 +1,6 @@
 # SageOS Core Systems Architecture Specification
 
-Revision 0.7.0 (Formalized)
+Revision 0.7.2 (Formalized)
 
 Project: "github.com/Night-Traders-Dev/SageOS"
 
@@ -255,7 +255,7 @@ Shared Runtime Region
 Runtime-managed objects are:
 
 - reference tracked
-- optionally garbage collected
+- dynamically garbage collected: a mark-and-sweep GC is triggered upon object pool (array/dict) limits, tracing roots from active stack and environment variables to reclaim slots
 - capability tagged
 
 Kernel memory is never directly writable from SGVM contexts.

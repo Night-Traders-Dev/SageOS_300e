@@ -26,4 +26,5 @@ Builds (if necessary) and runs the kernel in QEMU.
 - `arm64 rpi4`
 - `arm64 virt`
 - `x64 q35`
+- `x64 virt`
 - `rv64 virt`

@@ -117,12 +117,14 @@ Example: Building and running for ARM64 on QEMU:
 ---
 
 ## 5. Current Status & Roadmap
-SageOS is currently at **v0.7.0 (Alpha)**.
+SageOS is currently at **v0.7.2 (Alpha)**.
 
 ### Achievements:
 *   **Platform Specification**: Formalized architectural contract for cross-layer stability.
 *   **Granular Bootstrap**: 8-stage predictable system bring-up.
 *   **ABI Versioning**: Handshake mechanism between kernel and language runtime.
+*   **MetalVM Garbage Collection**: Lightweight mark-and-sweep GC protecting dynamic arrays/dictionaries from pool exhaustion.
+*   **Cooperative PIT Timer Polling**: Resolved x86_64 CPU busy-wait starvation, establishing fluid real-time `dmesg` logs.
 *   Unified block device subsystem supporting **ATA PIO** (x86) and **VirtIO-MMIO** (ARM64/RISC-V).
 *   Functional MetalVM integrated into the kernel core.
 *   Hybrid VFS supporting multiple mounts and Sage-native filesystems.

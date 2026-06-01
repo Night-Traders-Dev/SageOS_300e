@@ -100,12 +100,16 @@ thread_t *sched_create_thread(const char *name, void (*entry)(void *), void *arg
 void sched_schedule(void) {
     if (!g_sched_inited) return;
 
+    static int in_sched = 0;
+    if (in_sched) return;
+    in_sched = 1;
+
     thread_t *prev = g_current_task;
     thread_t *next = NULL;
 
     while (1) {
         /* Simple round robin */
-        int current_idx = prev - g_tasks;
+        int current_idx = (prev && prev >= g_tasks && prev < g_tasks + MAX_TASKS) ? (prev - g_tasks) : 0;
         for (int i = 1; i <= MAX_TASKS; i++) {
             int idx = (current_idx + i) % MAX_TASKS;
             if (g_tasks[idx].state == THREAD_STATE_READY || g_tasks[idx].state == THREAD_STATE_RUNNING) {
@@ -123,7 +127,10 @@ void sched_schedule(void) {
         timer_idle_poll();
     }
 
-    if (next == prev) return;
+    if (next == prev) {
+        in_sched = 0;
+        return;
+    }
 
     trace_log(TRACE_SCHED_SWITCH, (uint64_t)(prev ? prev->id : 0), (uint64_t)next->id);
 
@@ -135,6 +142,7 @@ void sched_schedule(void) {
 
     /* Quiet debug: console_write("[sched] Switching to task..."); */
 
+    in_sched = 0;
     thread_switch(&prev->rsp, &next->rsp);
 }
 

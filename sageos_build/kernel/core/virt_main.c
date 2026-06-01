@@ -112,6 +112,7 @@ static void setup_vectors(void) {
 extern void sage_runtime_init(void);
 
 void kmain(SageOSBootInfo *info) {
+    sched_init();
     static SageOSBootInfo dummy_info;
     if (!info || info->magic != SAGEOS_BOOT_MAGIC) {
         // Construct dummy info for bare-metal boot
@@ -211,6 +212,7 @@ void kmain(SageOSBootInfo *info) {
     console_write("\n[TRACE] After sage_execute_init");
     
     // allow PID 1 to run asynchronously
+    console_write("\n[TRACE] Entering multitasking idle loop...");
     while (1) {
         extern void timer_idle_poll(void);
         timer_idle_poll();

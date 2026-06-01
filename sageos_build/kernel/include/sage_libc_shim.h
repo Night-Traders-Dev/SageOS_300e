@@ -68,8 +68,8 @@ int  sage_snprintf(char *buf, size_t n, const char *fmt, ...);
 
 #define printf(...)       sage_printf(__VA_ARGS__)
 #define fprintf(f,...)    sage_printf(__VA_ARGS__)
-#define sprintf(b,...)    sage_printf(__VA_ARGS__)
 #define snprintf(b,n,...) sage_snprintf(b,n,__VA_ARGS__)
+#define sprintf(b,fmt,...) sage_snprintf(b,1024,fmt,##__VA_ARGS__)
 
 /* Control flow */
 extern volatile int sage_exit_flag;

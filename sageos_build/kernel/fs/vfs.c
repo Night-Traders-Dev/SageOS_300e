@@ -539,27 +539,21 @@ static VfsMount *resolve_mount(const char *norm_path, const char **rel_out) {
  * Core VFS operations
  * ----------------------------------------------------------------------- */
 
+static int g_in_vfs_vm = 0;
+
 int vfs_stat(const char *path, VfsStat *out) {
-    extern void console_write(const char *str);
-    console_write("[VFS_STAT] ");
-    console_write(path);
-    console_write("\n");
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 
-    console_write("[VFS_STAT] Normalize done\n");
     const char *rel = NULL;
-    console_write("[VFS_STAT] Resolving mount...\n");
     VfsMount *m = resolve_mount(norm, &rel);
-    console_write("[VFS_STAT] Resolving mount done\n");
     if (m && m->backend && m->backend->stat) {
-        console_write("[VFS_STAT] Backend stat call...\n");
         int res = m->backend->stat(m->backend, rel, out);
-        console_write("[VFS_STAT] Backend stat call done\n");
-        return res;
+        if (res == VFS_OK) return VFS_OK;
     }
 
-    if (g_vfs_vm_inited) {
+    if (g_vfs_vm_inited && !g_in_vfs_vm) {
+        g_in_vfs_vm = 1;
         int saved_string = g_vfs_vm.string_used;
         int saved_heap = g_vfs_vm.heap_used;
         int saved_arrays = g_vfs_vm.array_count;
@@ -589,16 +583,17 @@ int vfs_stat(const char *path, VfsStat *out) {
                 }
                 ret_val = VFS_OK;
             }
-        } g_vfs_vm.string_used = saved_string;
+        }
+        g_vfs_vm.string_used = saved_string;
         g_vfs_vm.heap_used = saved_heap;
         g_vfs_vm.array_count = saved_arrays;
         g_vfs_vm.dict_count = saved_dicts;
+        g_in_vfs_vm = 0;
 
         if (ret_val == VFS_OK) return VFS_OK;
     }
 
-    if (!m || !m->backend) return VFS_ENOENT;
-    if (!m->backend->stat) return VFS_ENOENT;
+    if (!m || !m->backend || !m->backend->stat) return VFS_ENOENT;
 
     return m->backend->stat(m->backend, rel, out);
 }
@@ -610,10 +605,12 @@ int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
     const char *rel;
     VfsMount *m = resolve_mount(norm, &rel);
     if (m && m->backend && m->backend->readdir) {
-        return m->backend->readdir(m->backend, rel, entries, max_entries);
+        int res = m->backend->readdir(m->backend, rel, entries, max_entries);
+        if (res >= 0) return res;
     }
 
-    if (g_vfs_vm_inited) {
+    if (g_vfs_vm_inited && !g_in_vfs_vm) {
+        g_in_vfs_vm = 1;
         int saved_string = g_vfs_vm.string_used;
         int saved_heap = g_vfs_vm.heap_used;
         int saved_arrays = g_vfs_vm.array_count;
@@ -649,17 +646,18 @@ int vfs_readdir(const char *path, VfsDirEntry *entries, int max_entries) {
                 }
             }
             ret_val = count;
-        } else {
-            /* If VM readdir fails or returns nil, fall back to C mounts */
         }
 
         g_vfs_vm.string_used = saved_string;
         g_vfs_vm.heap_used = saved_heap;
         g_vfs_vm.array_count = saved_arrays;
         g_vfs_vm.dict_count = saved_dicts;
+        g_in_vfs_vm = 0;
 
         if (ret_val >= 0) return ret_val;
     }
+    // ... rest of root directory logic ...
+
 
     /* 
      * Special case: Root directory listing 
@@ -721,10 +719,12 @@ int vfs_read(const char *path, uint64_t offset, void *buffer, size_t size) {
     const char *rel;
     VfsMount *m = resolve_mount(norm, &rel);
     if (m && m->backend && m->backend->read) {
-        return m->backend->read(m->backend, rel, offset, buffer, size);
+        int res = m->backend->read(m->backend, rel, offset, buffer, size);
+        if (res >= 0) return res;
     }
 
-    if (g_vfs_vm_inited) {
+    if (g_vfs_vm_inited && !g_in_vfs_vm) {
+        g_in_vfs_vm = 1;
         int saved_string = g_vfs_vm.string_used;
         int saved_heap = g_vfs_vm.heap_used;
         int saved_arrays = g_vfs_vm.array_count;
@@ -754,12 +754,12 @@ int vfs_read(const char *path, uint64_t offset, void *buffer, size_t size) {
         g_vfs_vm.heap_used = saved_heap;
         g_vfs_vm.array_count = saved_arrays;
         g_vfs_vm.dict_count = saved_dicts;
+        g_in_vfs_vm = 0;
 
         if (ret_val >= 0) return ret_val;
     }
 
-    if (!m || !m->backend) return VFS_ENOENT;
-    if (!m->backend->read) return VFS_ENOENT;
+    if (!m || !m->backend || !m->backend->read) return VFS_ENOENT;
 
     return m->backend->read(m->backend, rel, offset, buffer, size);
 }
@@ -771,25 +771,29 @@ int vfs_write(const char *path, uint64_t offset, const void *data, size_t size) 
     const char *rel;
     VfsMount *m = resolve_mount(norm, &rel);
     if (m && m->backend && m->backend->write) {
-        return m->backend->write(m->backend, rel, offset, data, size);
+        int res = m->backend->write(m->backend, rel, offset, data, size);
+        if (res >= 0) return res;
     }
 
-    if (g_vfs_vm_inited) {
+    if (g_vfs_vm_inited && !g_in_vfs_vm) {
+        g_in_vfs_vm = 1;
         MetalValue args[4];
         args[0] = mv_str(&g_vfs_vm, path, strlen(path));
         args[1] = vfs_mv_dbl((double)offset);
         args[2] = mv_str(&g_vfs_vm, (const char*)data, (int)size);
         args[3] = vfs_mv_dbl((double)size);
         MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_write", args, 4);
+        int ret_val = -1;
         if (res.type == MV_NUM) {
             union { double d; uint64_t u; } v;
             v.u = res.as.num_bits;
-            return (int)v.d;
+            ret_val = (int)v.d;
         }
+        g_in_vfs_vm = 0;
+        if (ret_val >= 0) return ret_val;
     }
 
-    if (!m || !m->backend) return VFS_ENOENT;
-    if (!m->backend->write) return VFS_EROFS;
+    if (!m || !m->backend || !m->backend->write) return VFS_ENOENT;
 
     return m->backend->write(m->backend, rel, offset, data, size);
 }
@@ -801,20 +805,24 @@ int vfs_mkdir(const char *path) {
     const char *rel;
     VfsMount *m = resolve_mount(norm, &rel);
     if (m && m->backend && m->backend->mkdir) {
-        return m->backend->mkdir(m->backend, rel);
+        int res = m->backend->mkdir(m->backend, rel);
+        if (res == VFS_OK) return VFS_OK;
     }
 
-    if (g_vfs_vm_inited) {
+    if (g_vfs_vm_inited && !g_in_vfs_vm) {
+        g_in_vfs_vm = 1;
         MetalValue arg = mv_str(&g_vfs_vm, path, strlen(path));
         MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_mkdir", &arg, 1);
+        int ret_val = -1;
         if (res.type == MV_NUM) {
             union { double d; uint64_t u; } v; v.u = res.as.num_bits;
-            return (int)v.d;
+            ret_val = (int)v.d;
         }
+        g_in_vfs_vm = 0;
+        if (ret_val == VFS_OK) return VFS_OK;
     }
 
-    if (!m || !m->backend) return VFS_ENOENT;
-    if (!m->backend->mkdir) return VFS_EROFS;
+    if (!m || !m->backend || !m->backend->mkdir) return VFS_ENOENT;
 
     return m->backend->mkdir(m->backend, rel);
 }
@@ -826,20 +834,24 @@ int vfs_create(const char *path) {
     const char *rel;
     VfsMount *m = resolve_mount(norm, &rel);
     if (m && m->backend && m->backend->create) {
-        return m->backend->create(m->backend, rel);
+        int res = m->backend->create(m->backend, rel);
+        if (res == VFS_OK) return VFS_OK;
     }
 
-    if (g_vfs_vm_inited) {
+    if (g_vfs_vm_inited && !g_in_vfs_vm) {
+        g_in_vfs_vm = 1;
         MetalValue arg = mv_str(&g_vfs_vm, path, strlen(path));
         MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_create", &arg, 1);
+        int ret_val = -1;
         if (res.type == MV_NUM) {
             union { double d; uint64_t u; } v; v.u = res.as.num_bits;
-            return (int)v.d;
+            ret_val = (int)v.d;
         }
+        g_in_vfs_vm = 0;
+        if (ret_val == VFS_OK) return VFS_OK;
     }
 
-    if (!m || !m->backend) return VFS_ENOENT;
-    if (!m->backend->create) return VFS_EROFS;
+    if (!m || !m->backend || !m->backend->create) return VFS_ENOENT;
 
     return m->backend->create(m->backend, rel);
 }
@@ -851,20 +863,24 @@ int vfs_unlink(const char *path) {
     const char *rel;
     VfsMount *m = resolve_mount(norm, &rel);
     if (m && m->backend && m->backend->unlink) {
-        return m->backend->unlink(m->backend, rel);
+        int res = m->backend->unlink(m->backend, rel);
+        if (res == VFS_OK) return VFS_OK;
     }
 
-    if (g_vfs_vm_inited) {
+    if (g_vfs_vm_inited && !g_in_vfs_vm) {
+        g_in_vfs_vm = 1;
         MetalValue arg = mv_str(&g_vfs_vm, path, strlen(path));
         MetalValue res = metal_vm_call(&g_vfs_vm, "vfs_unlink", &arg, 1);
+        int ret_val = -1;
         if (res.type == MV_NUM) {
             union { double d; uint64_t u; } v; v.u = res.as.num_bits;
-            return (int)v.d;
+            ret_val = (int)v.d;
         }
+        g_in_vfs_vm = 0;
+        if (ret_val == VFS_OK) return VFS_OK;
     }
 
-    if (!m || !m->backend) return VFS_ENOENT;
-    if (!m->backend->unlink) return VFS_EROFS;
+    if (!m || !m->backend || !m->backend->unlink) return VFS_ENOENT;
 
     return m->backend->unlink(m->backend, rel);
 }

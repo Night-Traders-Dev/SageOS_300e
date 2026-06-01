@@ -223,6 +223,8 @@ void sage_execute_source(const char* source, const char* name) {
         init_lexer(source, name);
         parser_init();
 
+        Stmt* first_program = NULL;
+        Stmt* last_program = NULL;
         while (1) {
             Stmt* program = parse();
 
@@ -232,7 +234,22 @@ void sage_execute_source(const char* source, const char* name) {
 
             interpret(program, g_sage_env);
 
-            free_stmt(program);
+            // Find the end of the parsed program statement chain
+            Stmt* end = program;
+            while (end->next != NULL) {
+                end = end->next;
+            }
+
+            if (first_program == NULL) {
+                first_program = program;
+            } else {
+                last_program->next = program;
+            }
+            last_program = end;
+        }
+
+        if (first_program != NULL) {
+            free_stmt(first_program);
         }
 
     } else {

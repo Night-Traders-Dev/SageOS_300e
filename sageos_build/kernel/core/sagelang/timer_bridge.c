@@ -213,14 +213,22 @@ void timer_idle_poll(void) {
     timer_poll();
 }
 
+extern void sched_yield(void);
 void timer_delay_ms(uint32_t ms) {
     int arch = arch_id();
     if (arch == TIMER_ARCH_X86) {
         uint64_t target = g_ticks + (ms / (1000 / PIT_HZ)) + 1;
-        while (g_ticks < target) { timer_poll(); arch_cpu_relax(); }
+        while (g_ticks < target) { 
+            timer_poll(); 
+            arch_cpu_relax(); 
+            sched_yield();
+        }
     } else {
         uint64_t target = arch_timer_count() + (g_timer_freq / 1000) * ms;
-        while (arch_timer_count() < target) { arch_cpu_relax(); }
+        while (arch_timer_count() < target) { 
+            arch_cpu_relax(); 
+            sched_yield();
+        }
     }
 }
 

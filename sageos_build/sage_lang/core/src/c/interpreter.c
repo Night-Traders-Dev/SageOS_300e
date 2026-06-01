@@ -2346,7 +2346,18 @@ static ExecResult eval_binary(BinaryExpr* b, Env* env) {
             double r = AS_NUMBER(right);
             AST_GC_POP();
             if (b->op.type == TOKEN_GT) return EVAL_RESULT(val_bool(l > r));
-            if (b->op.type == TOKEN_LT) return EVAL_RESULT(val_bool(l < r));
+            if (b->op.type == TOKEN_LT) {
+                union { double d; uint64_t u; } l_u, r_u;
+                l_u.d = l;
+                r_u.d = r;
+                uint32_t l_high = (uint32_t)(l_u.u >> 32);
+                uint32_t l_low = (uint32_t)l_u.u;
+                uint32_t r_high = (uint32_t)(r_u.u >> 32);
+                uint32_t r_low = (uint32_t)r_u.u;
+                printf("[DEBUG_LT] l=%d (0x%x_%x), r=%d (0x%x_%x), l < r = %d\n", 
+                       (int)l, l_high, l_low, (int)r, r_high, r_low, l < r);
+                return EVAL_RESULT(val_bool(l < r));
+            }
             if (b->op.type == TOKEN_GTE) return EVAL_RESULT(val_bool(l >= r));
             if (b->op.type == TOKEN_LTE) return EVAL_RESULT(val_bool(l <= r));
         }

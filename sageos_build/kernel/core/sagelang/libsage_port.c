@@ -183,8 +183,15 @@ int closedir(void* d) { (void)d; return 0; }
 int sage_closedir(void* d) { return closedir(d); }
 
 #undef nanosleep
-struct timespec;
-int nanosleep(const void* req, void* rem) { (void)req; (void)rem; return -1; }
+extern void sage_gil_release(void);
+extern void sage_gil_acquire(void);
+extern long sys_nanosleep(const void* req, void* rem);
+int nanosleep(const void* req, void* rem) { 
+    sage_gil_release();
+    long res = sys_nanosleep(req, rem); 
+    sage_gil_acquire();
+    return (int)res;
+}
 int sage_nanosleep(const void* req, void* rem) { return nanosleep(req, rem); }
 
 #undef gettimeofday

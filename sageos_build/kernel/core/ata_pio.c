@@ -55,7 +55,7 @@ void ata_init(void) {
     uint8_t status = inb(ATA_PRIMARY_STATUS);
     if (status == 0xFF) {
         ata_present = 0;
-        console_write("\nata: No Primary Master detected (floating bus)");
+        //console.write("\nata: No Primary Master detected (floating bus)");
         dmesg_log("ata: No Primary Master detected (floating bus)");
         return;
     }
@@ -71,7 +71,7 @@ void ata_init(void) {
     status = inb(ATA_PRIMARY_STATUS);
     if (status == 0) {
         ata_present = 0;
-        console_write("\nata: Primary Master not ready");
+        //console.write("\nata: Primary Master not ready");
         dmesg_log("ata: Primary Master not ready");
         return;
     }
@@ -79,7 +79,7 @@ void ata_init(void) {
     /* Wait for BSY to clear after IDENTIFY */
     if (!ata_wait_not_busy()) {
         ata_present = 0;
-        console_write("\nata: IDENTIFY timed out");
+        //console.write("\nata: IDENTIFY timed out");
         dmesg_log("ata: IDENTIFY timed out");
         return;
     }
@@ -87,7 +87,7 @@ void ata_init(void) {
     status = inb(ATA_PRIMARY_STATUS);
     if (status & (ATA_STATUS_ERR | ATA_STATUS_DF)) {
         ata_present = 0;
-        console_write("\nata: Primary Master IDENTIFY failed");
+        //console.write("\nata: Primary Master IDENTIFY failed");
         dmesg_log("ata: Primary Master IDENTIFY failed");
         return;
     }
@@ -101,7 +101,7 @@ void ata_init(void) {
     }
 
     ata_present = 1;
-    console_write("\nata: Primary Master detected (PIO)");
+    //console.write("\nata: Primary Master detected (PIO)");
     dmesg_log("ata: Primary Master detected (PIO)");
 }
 
@@ -113,14 +113,14 @@ int ata_read_sector(uint32_t lba, uint16_t *buffer) {
     if (!ata_present) return 0;
     
     // Use low-level console helper
-    extern void console_write(const char *str);
-    extern void console_u32(uint32_t val);
-    console_write("[ATA_READ] LBA: ");
-    console_u32(lba);
-    console_write("\n");
+//    extern void console.write(const char *str);
+//    extern void console_u32(uint32_t val);
+    //console.write("[ATA_READ] LBA: ");
+//    console_u32(lba);
+    //console.write("\n");
 
     if (!ata_wait_not_busy()) {
-        console_write("[ATA_READ] Timed out waiting not busy\n");
+        //console.write("[ATA_READ] Timed out waiting not busy\n");
         return 0;
     }
 
@@ -132,14 +132,14 @@ int ata_read_sector(uint32_t lba, uint16_t *buffer) {
     outb(ATA_PRIMARY_COMMAND, 0x20); // READ SECTORS
 
     if (!ata_wait_drq()) {
-        console_write("[ATA_READ] Timed out waiting DRQ\n");
+        //console.write("[ATA_READ] Timed out waiting DRQ\n");
         return 0;
     }
 
     for (int i = 0; i < 256; i++) {
         buffer[i] = inw(ATA_PRIMARY_DATA);
     }
-    console_write("[ATA_READ] Sector read done\n");
+    //console.write("[ATA_READ] Sector read done\n");
     return 1;
 }
 

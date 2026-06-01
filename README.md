@@ -1,4 +1,4 @@
-# SageOS v0.6.2 - Formalized Hybrid Operating System
+# SageOS v0.6.3 - Formalized Hybrid Operating System
 
 SageOS is a hybrid operating system that combines a low-level C kernel with a high-level, SageLang-driven runtime. It is designed to be modular, secure, and fully observable across multiple architectures.
 
@@ -9,13 +9,15 @@ SageOS is a hybrid operating system that combines a low-level C kernel with a hi
 - **Capability-First Security**: Strict authority gating via unforgeable tokens and task-level permissions.
 - **Deep Instrumentation**: System-wide telemetry for real-time observability of scheduler, IPC, and VM events.
 
-## Core Features (v0.6.2)
+## Core Features (v0.6.3)
+- **Hardened Build Pipeline**: Isolated, architecture-specific disk images (`virt-x64.img`, `virt-arm64.img`) to prevent binary and state cross-contamination.
+- **SGVM ABI v2.0**: Robust versioning handshake between the Sage compiler and MetalVM runtime, preventing incompatible bytecode execution.
+- **Optimized Iteration**: Decoupled build and run actions for faster development cycles.
+- **Robust RootFS System**: Explicit directory structure preservation and improved `mtools`-based merging.
 - **Formalized IPC**: Robust communication backbone with strict object lifecycle and capability routing.
 - **Capability Security**: Permission-gated syscalls (reboot, raw IO) and isolated resource access.
 - **System Supervision**: SageLang-native PID 1 supervisor managing the system bootstrap and service health.
 - **Unified Telemetry**: High-performance circular trace buffer providing deep insight into kernel and VM behavior.
-- **Locked Internal APIs**: Stable, documented contracts for all core subsystems.
-- **Architectural Boot Sequence**: Formalized 4-stage boot process (Firmware -> Kernel Init -> Runtime Bring-up -> Service Activation).
 - **Multi-Arch Binary Execution**: Load and execute static ELF64 binaries on x64, ARM64, and RV64.
 - **Native Toolchain Integration**: GCC 14.1.0 pre-installed in the disk image for on-device C development.
 
@@ -61,9 +63,9 @@ Build and run the OS with the management script.
 ```
 
 ### Virtual Disk for Virt builds
-The `virt` builds (x64, arm64, rv64) use a shared virtual disk image `virt.img`. 
-- **Partition 1**: FAT32 (4GB) - Mounted at `/fat32`.
-- **Partition 2**: BTRFS (512MB) - Mounted at `/`.
+The `virt` builds now use architecture-specific virtual disk images (e.g., `virt-x64.img`).
+- **Partition 1**: FAT32 (4GB) - Mounted at `/`. Contains the system root, toolchain, and scripts.
+- **Partition 2**: BTRFS (512MB) - Secondary filesystem support.
 - **Partition 3**: SWAP (512MB) - Registered as a swap device.
 
 ## License

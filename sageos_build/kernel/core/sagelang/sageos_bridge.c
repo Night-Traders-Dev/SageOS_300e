@@ -128,13 +128,13 @@ void sage_runtime_init(void) {
 extern void sage_execute(const char* mod);
 
 void sage_execute_init(void) {
-    dmesg_log("RUNTIME: Launching System Test script (/etc/system/sagelang/test_boot.sage)...");
-    sage_execute("/etc/system/sagelang/test_boot.sage");
+    dmesg_log("RUNTIME: Launching System Test script (/etc/sagelang/test_boot.sage)...");
+    sage_execute("/etc/sagelang/test_boot.sage");
     
-    dmesg_log("RUNTIME: Launching System Supervisor (/etc/system/sagelang/runtime_manager.sage)...");
+    dmesg_log("RUNTIME: Launching System Supervisor (/etc/sagelang/runtime_manager.sage)...");
     /* The runtime manager is our PID 1 supervisor responsible for 
      * orchestration, service lifecycle, and self-healing. */
-    sage_execute("/etc/system/sagelang/runtime_manager.sage");
+    sage_execute("/etc/sagelang/runtime_manager.sage");
 }
 
 void sage_import_module(void* vm, const char* name) {

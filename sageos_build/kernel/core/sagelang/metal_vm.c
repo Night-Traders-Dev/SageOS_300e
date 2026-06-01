@@ -190,17 +190,21 @@ static int load_const_pool(MetalVM* vm, const unsigned char* data, int length, i
 
 int metal_vm_load_binary(MetalVM* vm, const unsigned char* data, int length) {
     int pos = 0;
-    if (length < 8) {
-        console_write("load_binary: length < 8\n");
+    if (length < 9) {
+        console_write("load_binary: length too short\n");
         return 0;
     }
     
-    // Magic "SGVM"
+    // Magic "SGVM" + Version (1 byte)
     if (data[0] != 'S' || data[1] != 'G' || data[2] != 'V' || data[3] != 'M') {
         console_write("load_binary: magic mismatch\n");
         return 0;
     }
-    pos = 4;
+    if (data[4] != 2) {
+        console_write("load_binary: SGVM version mismatch (expected 2)\n");
+        return 0;
+    }
+    pos = 5;
     
     // Main Constants
     vm->main_const_count = load_const_pool(vm, data, length, &pos, vm->main_constants, METAL_CONST_POOL);

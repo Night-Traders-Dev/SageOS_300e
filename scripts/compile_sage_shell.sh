@@ -143,6 +143,7 @@ except Exception as e:
     sys.exit(1)
 
 blob = bytearray(b"SGVM")
+blob.append(2) # Version 2.0
 
 def fnv1a(data):
     h = 2166136261

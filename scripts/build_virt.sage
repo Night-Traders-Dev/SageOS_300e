@@ -176,6 +176,14 @@ proc generate_virt_build(arch):
         ld_flags = ld_flags + " -Wl,--oformat,elf32-i386"
     end
     script = script + "$CC " + ld_flags + " -T " + linker_path + " -o " + elf_path + " " + objects_str + NL
+    
+    # 6. Basic ELF Validation
+    script = script + "if command -v readelf >/dev/null; then" + NL
+    script = script + "  echo '  Validating " + elf_path + "...'" + NL
+    script = script + "  readelf -h " + elf_path + " | grep -q \"Entry point address:\" || (echo \"[FAIL] No entry point found in " + elf_path + "\"; exit 1)" + NL
+    script = script + "  echo '  [OK] ELF header validated.'" + NL
+    script = script + "fi" + NL
+    
     script = script + "echo 'Build complete: " + elf_path + "'" + NL
     
     io.writefile(output_dir + "/build.sh", script)

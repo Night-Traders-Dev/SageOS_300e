@@ -191,6 +191,7 @@ def main():
     functions, chunks = parse_sagebc(src)
     
     blob = bytearray(b"SGVM")
+    blob.append(2) # Version 2.0
     
     # Main chunk
     main_consts = []

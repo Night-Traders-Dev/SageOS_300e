@@ -4,7 +4,7 @@
 
 set -e
 
-DISK_IMG="virt.img"
+DISK_IMG=${DISK_IMG:-"virt.img"}
 ROOTFS="rootfs"
 
 if [ ! -f "$DISK_IMG" ]; then
@@ -19,18 +19,21 @@ fi
 
 echo "Merging $ROOTFS into $DISK_IMG..."
 
-for dir in "$ROOTFS"/*; do
-    if [ -d "$dir" ]; then
-        dname=$(basename "$dir")
-        # Ensure directory exists in the image
-        mmd -D s -i "$DISK_IMG@@1M" "::$dname" 2>/dev/null || true
-        # Copy contents recursively if not empty
-        if [ -n "$(ls -A "$dir")" ]; then
-            mcopy -o -s -i "$DISK_IMG@@1M" "$dir"/* "::$dname/"
-        fi
-    elif [ -f "$dir" ]; then
-        mcopy -o -i "$DISK_IMG@@1M" "$dir" ::/
+# Create the directory structure on the image first
+# Use find -mindepth 1 to skip the root directory itself
+find "$ROOTFS" -mindepth 1 -type d | while read -r dir; do
+    rel_dir=${dir#"$ROOTFS/"}
+    if [ -n "$rel_dir" ]; then
+        echo "  MKDIR ::$rel_dir"
+        mmd -D s -i "$DISK_IMG@@1M" "::$rel_dir" 2>/dev/null || true
     fi
+done
+
+# Copy all files explicitly
+find "$ROOTFS" -type f | while read -r file; do
+    rel_file=${file#"$ROOTFS/"}
+    echo "  COPY $rel_file"
+    mcopy -o -i "$DISK_IMG@@1M" "$file" "::$rel_file"
 done
 
 echo "Merge complete!"

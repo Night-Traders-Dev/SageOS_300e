@@ -5,7 +5,7 @@
 set -e
 
 ARCH=${1:-"x86_64"}
-DISK_IMG="virt.img"
+DISK_IMG=${DISK_IMG:-"virt.img"}
 # Prefer second argument, then environment SAGE_NATIVE_DIST, then a local 'toolchain' folder, then fallback
 NATIVE_DIST=${2:-${SAGE_NATIVE_DIST:-"$(pwd)/toolchain/native"}}
 TOOLCHAIN_TAG="v0.4.0-toolchain"

@@ -4,7 +4,7 @@
 
 set -e
 
-DISK_IMG="virt.img"
+DISK_IMG=${DISK_IMG:-"virt.img"}
 SYS_SRC_DIR="sageos_build/kernel/core/sagelang"
 SYS_DEST_DIR="::/system/sagelang"
 

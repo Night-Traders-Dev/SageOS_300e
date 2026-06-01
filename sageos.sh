@@ -51,6 +51,20 @@ ARCH=$1
 DEVICE=$2
 ACTION=$3
 
+# Architecture-specific disk images and rootfs to avoid cross-contamination
+DISK_IMG="virt-${ARCH}.img"
+ARCH_ROOTFS="rootfs-${ARCH}"
+export DISK_IMG
+export ROOTFS="$ARCH_ROOTFS"
+
+# Cleanup temporary rootfs on exit
+cleanup() {
+    if [[ -d "$ARCH_ROOTFS" ]]; then
+        rm -rf "$ARCH_ROOTFS"
+    fi
+}
+trap cleanup EXIT
+
 # Ensure sage is built
 if [[ ! -f "$SAGE_BIN" ]]; then
     log_info "Building SageLang..."
@@ -64,8 +78,8 @@ recompile_sage() {
 }
 
 # Ensure virt disk image exists
-if [[ ! -f "virt.img" ]]; then
-    log_info "Creating virtual disk image..."
+if [[ ! -f "$DISK_IMG" ]]; then
+    log_info "Creating virtual disk image $DISK_IMG..."
     ./scripts/gen_virt_disk.sh
 fi
 
@@ -99,24 +113,26 @@ case "$ARCH" in
                 ;;
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
-                    log_info "Building actual SageOS Kernel for ARM64 virt..."
-                    recompile_sage
-                    mkdir -p build
-                    $SAGE_BIN scripts/build_virt.sage
-                    bash build/virt_aarch64/build.sh
-                    mkdir -p "$BUILD_DIR/arm64_virt"
-                    cp build/virt_aarch64/kernel.elf "$BUILD_DIR/arm64_virt/kernel.elf"
-                    
-                    log_info "Installing system scripts and toolchain into disk image..."
-                    bash ./scripts/populate_rootfs.sh
-                    bash ./scripts/merge_rootfs.sh
-                    bash ./scripts/install_toolchain.sh arm64
+                    if [[ "$ACTION" == "build" ]] || [[ ! -f "$BUILD_DIR/arm64_virt/kernel.elf" ]]; then
+                        log_info "Building actual SageOS Kernel for ARM64 virt..."
+                        recompile_sage
+                        mkdir -p build
+                        $SAGE_BIN scripts/build_virt.sage
+                        bash build/virt_aarch64/build.sh
+                        mkdir -p "$BUILD_DIR/arm64_virt"
+                        cp build/virt_aarch64/kernel.elf "$BUILD_DIR/arm64_virt/kernel.elf"
+                        
+                        log_info "Installing system scripts and toolchain into disk image..."
+                        bash ./scripts/populate_rootfs.sh
+                        bash ./scripts/merge_rootfs.sh
+                        bash ./scripts/install_toolchain.sh arm64
+                    fi
                 fi
 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running ARM64 virt in QEMU..."
                     qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 4G -display none -serial mon:stdio \
-                        -drive file=virt.img,format=raw,if=none,id=dr0 \
+                        -drive file="$DISK_IMG",format=raw,if=none,id=dr0 \
                         -device virtio-blk-device,drive=dr0 \
                         -kernel "$BUILD_DIR/arm64_virt/kernel.elf"
                 fi
@@ -132,24 +148,27 @@ case "$ARCH" in
         case "$DEVICE" in
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
-                    log_info "Building actual SageOS Kernel for x86_64 virt..."
-                    recompile_sage
-                    mkdir -p build
-                    $SAGE_BIN scripts/build_virt.sage
-                    bash build/virt_x86_64/build.sh
-                    mkdir -p "$BUILD_DIR/x64_virt"
-                    cp build/virt_x86_64/kernel.elf "$BUILD_DIR/x64_virt/kernel.elf"
+                    if [[ "$ACTION" == "build" ]] || [[ ! -f "$BUILD_DIR/x64_virt/kernel.elf" ]]; then
+                        log_info "Building actual SageOS Kernel for x86_64 virt..."
+                        recompile_sage
+                        mkdir -p build
+                        $SAGE_BIN scripts/build_virt.sage
+                        bash build/virt_x86_64/build.sh
+                        mkdir -p "$BUILD_DIR/x64_virt"
+                        cp build/virt_x86_64/kernel.elf "$BUILD_DIR/x64_virt/kernel.elf"
 
-                    log_info "Installing system scripts and toolchain into disk image..."
-                    bash ./scripts/populate_rootfs.sh
-                    bash ./scripts/merge_rootfs.sh
-                    bash ./scripts/install_toolchain.sh x86_64
+                        log_info "Installing system scripts and toolchain into disk image..."
+                        bash ./scripts/populate_rootfs.sh
+                        bash ./scripts/merge_rootfs.sh
+                        bash ./scripts/install_toolchain.sh x86_64
+                    fi
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running x86_64 virt in QEMU..."
+                    # Use pc for legacy IDE/PIO driver support
                     qemu-system-x86_64 -machine pc -m 4G -display none -serial mon:stdio -no-reboot \
-                        -drive file=virt.img,format=raw,index=0,media=disk,file.locking=off \
+                        -drive file="$DISK_IMG",format=raw,index=0,media=disk,file.locking=off \
                         -kernel "$BUILD_DIR/x64_virt/kernel.elf"
                 fi
                 ;;
@@ -172,7 +191,9 @@ case "$ARCH" in
                     fi
                     if [[ "$ACTION" == "run" ]]; then
                         log_info "Running x64 $DEVICE in QEMU..."
-                        qemu-system-x86_64 -machine q35 -m 4G -nographic -kernel "$BUILD_DIR/x64_${DEVICE}_kernel.elf"
+                        QEMU_MACH="$DEVICE"
+                        if [[ "$DEVICE" == "lenovo_300e" ]]; then QEMU_MACH="q35"; fi
+                        qemu-system-x86_64 -machine "$QEMU_MACH" -m 4G -nographic -kernel "$BUILD_DIR/x64_${DEVICE}_kernel.elf"
                     fi
                 fi
                 ;;
@@ -186,46 +207,48 @@ case "$ARCH" in
         case "$DEVICE" in
             virt)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
-                    log_info "Building actual SageOS Kernel for RISCV64 virt..."
-                    recompile_sage
-                    mkdir -p build
-                    $SAGE_BIN scripts/build_virt.sage
-                    bash build/virt_riscv64/build.sh
-                    mkdir -p "$BUILD_DIR/rv64_virt"
-                    cp build/virt_riscv64/kernel.elf "$BUILD_DIR/rv64_virt/kernel.elf"
+                    if [[ "$ACTION" == "build" ]] || [[ ! -f "$BUILD_DIR/rv64_virt/kernel.elf" ]]; then
+                        log_info "Building actual SageOS Kernel for RISCV64 virt..."
+                        recompile_sage
+                        mkdir -p build
+                        $SAGE_BIN scripts/build_virt.sage
+                        bash build/virt_riscv64/build.sh
+                        mkdir -p "$BUILD_DIR/rv64_virt"
+                        cp build/virt_riscv64/kernel.elf "$BUILD_DIR/rv64_virt/kernel.elf"
 
-                    log_info "Installing system scripts and toolchain into disk image..."
-                    bash ./scripts/populate_rootfs.sh
-                    bash ./scripts/merge_rootfs.sh
-                    #bash ./scripts/install_toolchain.sh riscv64
+                        log_info "Installing system scripts and toolchain into disk image..."
+                        bash ./scripts/populate_rootfs.sh
+                        bash ./scripts/merge_rootfs.sh
+                        #bash ./scripts/install_toolchain.sh riscv64
+                    fi
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then
                     log_info "Running RISC-V virt in QEMU..."
                     qemu-system-riscv64 -machine virt -m 4G -display none -serial mon:stdio -bios none -no-reboot \
-                        -drive file=virt.img,format=raw,if=none,id=dr0 \
+                        -drive file="$DISK_IMG",format=raw,if=none,id=dr0 \
                         -device virtio-blk-device,drive=dr0 \
                         -kernel "$BUILD_DIR/rv64_virt/kernel.elf"
                 fi
-
                 ;;
             orangepi_rv2)
                 if [[ "$ACTION" == "build" || "$ACTION" == "run" ]]; then
                     log_info "Generating $DEVICE build environment..."
                     mkdir -p "${DEVICE}_boot"
-                    echo "import io" > gen_rv64.sage
-                    echo "import os.boot.build as bb" >> gen_rv64.sage
-                    echo "let arch = \"$DEVICE\"" >> gen_rv64.sage
-                    echo "if arch == \"virt\": arch = \"riscv64\" end" >> gen_rv64.sage
-                    echo "let build_script = bb.generate_build_script(arch, \"${DEVICE}_boot\", \"SageOS $DEVICE Booting...\")" >> gen_rv64.sage
-                    echo "io.writefile(\"build_rv64.sh\", build_script)" >> gen_rv64.sage
-                    $SAGE_BIN gen_rv64.sage
+                    GEN_SCRIPT="gen_rv64_${DEVICE}.sage"
+                    echo "import io" > "$GEN_SCRIPT"
+                    echo "import os.boot.build as bb" >> "$GEN_SCRIPT"
+                    echo "let arch = \"$DEVICE\"" >> "$GEN_SCRIPT"
+                    echo "if arch == \"virt\": arch = \"riscv64\" end" >> "$GEN_SCRIPT"
+                    echo "let build_script = bb.generate_build_script(arch, \"${DEVICE}_boot\", \"SageOS $DEVICE Booting...\")" >> "$GEN_SCRIPT"
+                    echo "io.writefile(\"build_rv64.sh\", build_script)" >> "$GEN_SCRIPT"
+                    $SAGE_BIN "$GEN_SCRIPT"
                     log_info "Building $DEVICE kernel..."
                     chmod +x build_rv64.sh
                     ./build_rv64.sh
                     rm -rf "$BUILD_DIR/rv64_$DEVICE"
                     mv "${DEVICE}_boot" "$BUILD_DIR/rv64_$DEVICE"
-                    rm build_rv64.sh gen_rv64.sage
+                    rm build_rv64.sh "$GEN_SCRIPT"
                 fi
                 
                 if [[ "$ACTION" == "run" ]]; then

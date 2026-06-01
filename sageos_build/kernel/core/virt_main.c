@@ -116,8 +116,16 @@ void kmain(SageOSBootInfo *info) {
         // Construct dummy info for bare-metal boot
         __builtin_memset(&dummy_info, 0, sizeof(dummy_info));
         dummy_info.magic = SAGEOS_BOOT_MAGIC;
-        // Assume virt-riscv64 base/size (must match linker.ld)
-        dummy_info.kernel_base = 0x80000000;
+        
+        // Architecture-specific defaults (must match linker.ld base addresses)
+#if defined(__x86_64__)
+        dummy_info.kernel_base = 0x100000; // 1MB
+#elif defined(__aarch64__)
+        dummy_info.kernel_base = 0x40000000; // 1GB
+#elif defined(__riscv)
+        dummy_info.kernel_base = 0x80000000; // 2GB
+#endif
+        
         dummy_info.kernel_size = 0x1000000; 
         dummy_info.memory_total = 1024 * 1024 * 1024; // 1GB
         dummy_info.memory_usable = 1024 * 1024 * 1024;

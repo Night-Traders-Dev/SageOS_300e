@@ -13,8 +13,10 @@ SageOS leverages the SageLang compiler to build its core components and architec
 4.  **Linking**: The linker produces a final ELF binary.
 5.  **Artifact Management**: The `sageos.sh` script moves artifacts to the `build/` directory.
 
-### Virt Kernel Builds (New)
-For cross-platform development, SageOS now supports a unified `virt` target across architectures. This is managed by `scripts/build_virt.sage`.
-- **Core Stubs**: Uses `kernel_stubs.c` to provide dummy implementations for non-essential disk and VFS operations.
-- **Runtime Stubbing**: A shared `runtime_stub.c` exposes the `sage_shell_run` entry point, allowing consistent boot-time diagnostics across all virt platforms, even without a full SageVM.
+### Hardened Virt Pipeline (v0.6.3)
+For cross-platform development, SageOS uses a hardened `virt` target managed by `scripts/build_virt.sage` and `sageos.sh`.
+- **Architecture Isolation**: Each target architecture now uses a dedicated disk image (e.g., `virt-x64.img`) to prevent ABI and rootfs cross-contamination.
+- **SGVM ABI Versioning**: The pipeline enforces a version handshake (v2.0) between the compiler and the kernel runtime to prevent execution of incompatible bytecode.
+- **Explicit RootFS Merging**: Uses `mtools` to explicitly recreate directory structures and copy files, ensuring FHS compliance on the FAT32 boot partition.
+- **Automated Validation**: Build scripts include a `readelf` validation phase to verify kernel entry points and linker integrity.
 - **Unified Include Paths**: Centralizes core kernel headers under `sageos_build/sage_lang/core/include/`, ensuring consistent compilation across `aarch64`, `x86_64`, and `riscv64` targets.

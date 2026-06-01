@@ -5,7 +5,7 @@
 
 set -e
 
-ROOTFS="rootfs"
+ROOTFS=${ROOTFS:-"rootfs"}
 BUILD_DIR="sageos_build/kernel"
 SAGE_COMPILER="./sageos_build/sage_lang/core/sage"
 COMPILER="python3 scripts/compile_to_sgvm.py"
@@ -35,27 +35,31 @@ for f in $ALL_SAGE; do
     echo "    Compiling: $(basename "$f")"
     sed 's|//.*||g' "$f" > "$clean_sage"
     
-    # Try compiling; if it fails (e.g. AST fallback not supported), copy raw file
+    # Try compiling to bytecode
     if $SAGE_COMPILER --emit-vm "$clean_sage" -o "$bc_path" 2>/dev/null; then
         $COMPILER "$bc_path" -o "$sgvm_path"
-        echo "      Success"
+        echo "      Success (.sgvm generated)"
     else
-        echo "      Skipped (VM compile unsupported), falling back to raw .sage"
-        cp "$f" "$ROOTFS/lib/sagelang/$(basename "$f")"
+        echo "      Skipped (VM compile unsupported)"
     fi
+    
+    # ALWAYS copy raw .sage to etc/sagelang for kernel AST interpreter
+    cp "$f" "$ROOTFS/etc/sagelang/$(basename "$f")"
+    # Also copy to lib/sagelang for general usage
+    cp "$f" "$ROOTFS/lib/sagelang/$(basename "$f")"
     
     rm -f "$clean_sage" "$bc_path"
 done
 
-# Syncing files
-cp "$TMP_BC/runtime_manager.sgvm" "$ROOTFS/lib/sagelang/" 2>/dev/null || true
-cp "$TMP_BC/core_drivers.sgvm" "$ROOTFS/lib/sagelang/" 2>/dev/null || true
-cp "$TMP_BC/timer.sgvm" "$ROOTFS/lib/sagelang/" 2>/dev/null || true
-cp "$TMP_BC/battery.sgvm" "$ROOTFS/etc/sagelang/" 2>/dev/null || true
-cp "$TMP_BC/bootlog.sgvm" "$ROOTFS/etc/sagelang/" 2>/dev/null || true
-cp "$TMP_BC/status.sgvm" "$ROOTFS/bin/status" 2>/dev/null || true
+# Syncing SGVM files to appropriate locations
+[ -f "$TMP_BC/runtime_manager.sgvm" ] && cp "$TMP_BC/runtime_manager.sgvm" "$ROOTFS/lib/sagelang/"
+[ -f "$TMP_BC/core_drivers.sgvm" ] && cp "$TMP_BC/core_drivers.sgvm" "$ROOTFS/lib/sagelang/"
+[ -f "$TMP_BC/timer.sgvm" ] && cp "$TMP_BC/timer.sgvm" "$ROOTFS/lib/sagelang/"
+[ -f "$TMP_BC/battery.sgvm" ] && cp "$TMP_BC/battery.sgvm" "$ROOTFS/etc/sagelang/"
+[ -f "$TMP_BC/bootlog.sgvm" ] && cp "$TMP_BC/bootlog.sgvm" "$ROOTFS/etc/sagelang/"
+[ -f "$TMP_BC/status.sgvm" ] && cp "$TMP_BC/status.sgvm" "$ROOTFS/bin/status"
 
-# Copy assets
+# Copy precompiled assets
 ASSETS=("$BUILD_DIR/fs/vfs_bridge.bc:lib/vfs_bridge.bc" "$BUILD_DIR/shell/sage_shell.bc:lib/sage_shell.bc")
 for asset in "${ASSETS[@]}"; do
     src="${asset%%:*}"; dst="$ROOTFS/${asset##*:}"

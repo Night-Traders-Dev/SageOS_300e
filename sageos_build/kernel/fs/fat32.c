@@ -308,10 +308,19 @@ static int fat32_find_root_entry(const char *path, FAT32_DirEntry *out_entry) {
         segment[i] = '\0';
 
         if (i > 0) {
-            if (!fat32_find_entry_in_cluster(current_cluster, segment, out_entry)) return 0;
+            console_write("[FAT32] Resolving segment: ");
+            console_write(segment);
+            console_write("\n");
+            if (!fat32_find_entry_in_cluster(current_cluster, segment, out_entry)) {
+                console_write("[FAT32] Segment NOT FOUND\n");
+                return 0;
+            }
             
             if (*path == '/') {
-                if (!(out_entry->attr & FAT32_ATTR_DIRECTORY)) return 0;
+                if (!(out_entry->attr & FAT32_ATTR_DIRECTORY)) {
+                    console_write("[FAT32] Segment is NOT a directory\n");
+                    return 0;
+                }
                 current_cluster = ((uint32_t)out_entry->first_cluster_hi << 16) | out_entry->first_cluster_lo;
                 if (current_cluster < 2) return 0;
                 while (*path == '/') path++;

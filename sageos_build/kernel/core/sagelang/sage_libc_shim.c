@@ -246,6 +246,13 @@ int sage_snprintf(char *buf, size_t n, const char *fmt, ...) {
     return res;
 }
 
+int sage_sprintf(char *buf, const char *fmt, ...) {
+    __builtin_va_list ap; __builtin_va_start(ap, fmt);
+    int res = sage_vsnprintf(buf, 1024, fmt, ap);
+    __builtin_va_end(ap);
+    return res;
+}
+
 /* --- Control flow --- */
 volatile int sage_exit_flag = 0;
 int sage_exit_code = 0;

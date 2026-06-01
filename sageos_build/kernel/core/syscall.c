@@ -189,15 +189,7 @@ long syscall_dispatch(long num, long a1, long a2, long a3,
         break;
     }
 
-    if (num != SYS_write || (a1 != 1 && a1 != 2)) {
-        console_write("[SYSCALL] num=");
-        console_u32((uint32_t)num);
-        console_write(" a1=");
-        console_u32((uint32_t)a1);
-        console_write(" -> ");
-        console_u32((uint32_t)ret);
-        console_write("\n");
-    }
+    /* Optional: dmesg_log("[SYSCALL] num=%d", (int)num); */
     return ret;
 }
 

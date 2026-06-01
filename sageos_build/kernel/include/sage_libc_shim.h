@@ -66,10 +66,12 @@ int   sage_memcmp(const void *a, const void *b, size_t n);
 int  sage_printf(const char *fmt, ...);
 int  sage_snprintf(char *buf, size_t n, const char *fmt, ...);
 
+int  sage_sprintf(char *buf, const char *fmt, ...);
+
 #define printf(...)       sage_printf(__VA_ARGS__)
 #define fprintf(f,...)    sage_printf(__VA_ARGS__)
 #define snprintf(b,n,...) sage_snprintf(b,n,__VA_ARGS__)
-#define sprintf(b,fmt,...) sage_snprintf(b,1024,fmt,##__VA_ARGS__)
+#define sprintf           sage_sprintf
 
 /* Control flow */
 extern volatile int sage_exit_flag;

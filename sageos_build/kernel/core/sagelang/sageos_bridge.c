@@ -41,6 +41,9 @@ extern uint32_t console_get_fg(void);
 
 // --- Sage Interpreter Integration ---
 
+void sage_gil_acquire(void);
+void sage_gil_release(void);
+
 static Env* g_sage_env = NULL;
 static ModuleCache* g_sage_cache = NULL;
 
@@ -103,6 +106,7 @@ void __aarch64_ldadd8_acq_rel(void) {}
 #include "version.h"
 
 void sage_repl_init(void) {
+    sage_gil_acquire();
     if (!g_sage_env) {
         g_sage_cache = create_module_cache();
         extern ModuleCache* global_module_cache;
@@ -118,6 +122,7 @@ void sage_repl_init(void) {
         env_define_const(g_sage_env, "SAGE_ABI_MAJOR", 14, val_number(SAGE_ABI_MAJOR));
         env_define_const(g_sage_env, "SAGE_ABI_MINOR", 14, val_number(SAGE_ABI_MINOR));
     }
+    sage_gil_release();
 }
 
 void sage_runtime_init(void) {
@@ -163,8 +168,26 @@ static Stmt* sage_parse_string(const char* source) {
     return parse();
 }
 
+// --- Global Interpreter Lock (GIL) ---
+static thread_t *g_gil_owner = NULL;
+
+void sage_gil_acquire(void) {
+    while (g_gil_owner != NULL && g_gil_owner != sched_current_thread()) {
+        sched_yield();
+    }
+    g_gil_owner = sched_current_thread();
+}
+
+void sage_gil_release(void) {
+    if (g_gil_owner == sched_current_thread()) {
+        g_gil_owner = NULL;
+    }
+}
+
 void sage_execute_source(const char* source, const char* name) {
     if (!source) return;
+    
+    sage_gil_acquire();
     init_lexer(source, name);
     parser_init();
     
@@ -179,6 +202,7 @@ void sage_execute_source(const char* source, const char* name) {
     } else {
         console_write("\n[RUNTIME MANAGER EXCEPTION CAUGHT!]\n");
     }
+    sage_gil_release();
 }
 
 int sage_execute_file(const char* path) {
@@ -476,6 +500,12 @@ static Value n_os_spawn_task(int argCount, Value* args) {
     }
     const char *name = AS_STRING(args[0]);
     const char *script_path = AS_STRING(args[1]);
+
+    console_write("[TRACE] os_spawn_task: name=");
+    console_write(name);
+    console_write(" path=");
+    console_write(script_path);
+    console_write("\n");
 
     char *path_copy = malloc(strlen(script_path) + 1);
     if (!path_copy) return val_number(-2);

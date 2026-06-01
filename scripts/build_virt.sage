@@ -12,7 +12,12 @@ let version = io.readfile("VERSION")
 version = replace(version, chr(10), "")
 version = replace(version, chr(13), "")
 
-io.writefile("sageos_build/kernel/include/version.h", "#define SAGEOS_VERSION \"" + version + "\"" + NL)
+let v_content = "#define SAGEOS_VERSION \"" + version + "\"" + NL
+v_content = v_content + "/* ABI Versioning for Runtime/Kernel compatibility */" + NL
+v_content = v_content + "#define SAGE_ABI_MAJOR 0" + NL
+v_content = v_content + "#define SAGE_ABI_MINOR 4" + NL
+
+io.writefile("sageos_build/kernel/include/version.h", v_content)
 print "Generated version.h (v" + version + ")"
 
 # Regenerate command embeddings

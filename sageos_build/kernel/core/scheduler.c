@@ -82,8 +82,9 @@ thread_t *sched_create_thread(const char *name, void (*entry)(void *), void *arg
     sp[0] = (uint64_t)arg;    /* We actually need a wrapper to pass arg to entry, 
                                  but for simple fork we copy stack directly. */
 #elif defined(__x86_64__)
-    sp -= 7; /* r15..r12, rbx, rbp, rip */
-    sp[6] = (uint64_t)entry; /* rip */
+    sp -= 8; /* r15..r12, rbx, rbp, rip + dummy return address to align stack to 16n + 8 */
+    sp[6] = (uint64_t)entry; /* rip (popped by ret) */
+    sp[7] = 0;               /* dummy return address (staying on stack) */
 #elif defined(__riscv)
     sp -= 14; /* s0..s11, ra */
     sp[13] = (uint64_t)entry; /* ra */

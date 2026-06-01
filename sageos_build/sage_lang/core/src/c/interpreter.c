@@ -3239,6 +3239,7 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
             }
 
             // Debug: show what was attempted to be called
+            fprintf(stderr, "[DIAGNOSTIC] EXPR_CALL: callee_expr->type=%d\n", expr->as.call.callee ? expr->as.call.callee->type : -1);
             if (expr->as.call.callee && expr->as.call.callee->type == EXPR_VARIABLE) {
                 fprintf(stderr, "Runtime Error: '%.*s' is not callable (type=%d).\n",
                         expr->as.call.callee->as.variable.name.length,

@@ -26,7 +26,9 @@
 #define IPC_CAP_RIGHT_MAP         (1U << 3)   /* shared memory mapping */
 #define IPC_CAP_RIGHT_DUP         (1U << 4)   /* right to duplicate cap */
 #define IPC_CAP_RIGHT_REVOKE      (1U << 5)   /* right to revoke */
-#define IPC_CAP_RIGHTS_ALL        0x3FU
+#define IPC_CAP_RIGHT_VFS_READ    (1U << 6)   /* VFS read permission */
+#define IPC_CAP_RIGHT_VFS_WRITE   (1U << 7)   /* VFS write permission */
+#define IPC_CAP_RIGHTS_ALL        0xFFU
 
 typedef uint64_t ipc_cap_handle_t;
 
@@ -37,6 +39,7 @@ typedef struct {
     uint32_t        ref_count;      /* reference count for GC */
     uint32_t        owner_task;     /* task that holds this cap */
     uint32_t        flags;          /* IPC_CAPF_* */
+    char            path[128];      /* authorized VFS path */
 } ipc_capability_t;
 
 #define IPC_CAPF_KERNEL_OWNED     (1U << 0)   /* kernel retains final ref */
@@ -102,6 +105,8 @@ typedef enum {
     IPC_OBJ_SHARED_MEM,     /* memory-mapped buffer */
     IPC_OBJ_SIGNAL_SET,     /* event/signal broadcasting */
     IPC_OBJ_MONITOR,        /* condition variable + mutex hybrid */
+    IPC_OBJ_FILE,           /* secure file handle */
+    IPC_OBJ_DIR,            /* secure directory handle */
 } ipc_obj_type_t;
 
 /* Lifecycle states */

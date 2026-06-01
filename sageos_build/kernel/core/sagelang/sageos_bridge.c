@@ -9,6 +9,8 @@
 #include "sage_libc_shim.h"
 #include "console.h"
 #include "scheduler.h"
+#include "scheduler_ipc_ext.h"
+#include "ipc.h"
 #include "serial.h"
 #include "keyboard.h"
 #include "ata.h"
@@ -133,11 +135,21 @@ void sage_runtime_init(void) {
 
 extern void sage_execute(const char* mod);
 
-void sage_execute_init(void) {
+static void sage_supervisor_thread(void *arg) {
+    (void)arg;
     dmesg_log("RUNTIME: Launching System Supervisor (/etc/sagelang/runtime_manager.sage)...");
-    /* The runtime manager is our PID 1 supervisor responsible for 
-     * orchestration, service lifecycle, and self-healing. */
     sage_execute("/etc/sagelang/runtime_manager.sage");
+    extern void sys_exit(int code);
+    sys_exit(0);
+}
+
+void sage_execute_init(void) {
+    thread_t *t = sched_create_thread("supervisor", sage_supervisor_thread, NULL, THREAD_PRIORITY_NORMAL);
+    if (t) {
+        dmesg_log("RUNTIME: Successfully spawned System Supervisor (PID 1) in background.");
+    } else {
+        dmesg_log("RUNTIME: FAILED to spawn System Supervisor!");
+    }
 }
 
 void sage_import_module(void* vm, const char* name) {
@@ -164,27 +176,46 @@ void sage_execute_source(const char* source, const char* name) {
             if (program == NULL) break;
             interpret(program, g_sage_env);
         }
+    } else {
+        console_write("\n[RUNTIME MANAGER EXCEPTION CAUGHT!]\n");
     }
 }
 
 int sage_execute_file(const char* path) {
     VfsStat st;
-    if (vfs_stat(path, &st) == VFS_OK && st.type == VFS_FILE) {
-        char* source = (char*)malloc((size_t)st.size + 1);
-        if (!source) {
-            console_write("sage: out of memory reading file\n");
-            return -1;
-        }
-        
-        vfs_read(path, 0, source, (size_t)st.size);
-        source[st.size] = 0;
-        
-        sage_execute_source(source, path);
-        
-        free(source);
-        return 0;
+    int err = vfs_stat(path, &st);
+    if (err != VFS_OK) {
+        char err_buf[64];
+        extern int sprintf(char* str, const char* format, ...);
+        sprintf(err_buf, " (vfs_stat failed: %d)\n", err);
+        console_write(err_buf);
+        return -1;
     }
-    return -1;
+    if (st.type != VFS_FILE) {
+        console_write(" (not a file)\n");
+        return -1;
+    }
+    char sz_buf[64];
+    extern int sprintf(char* str, const char* format, ...);
+    sprintf(sz_buf, " (size: %d bytes)\n", (int)st.size);
+    console_write(sz_buf);
+
+    char* source = (char*)malloc((size_t)st.size + 1);
+    if (!source) {
+        console_write("sage: out of memory reading file\n");
+        return -1;
+    }
+    
+    int read_bytes = vfs_read(path, 0, source, (size_t)st.size);
+    source[st.size] = 0;
+    
+    sprintf(sz_buf, " (read: %d bytes)\n", read_bytes);
+    console_write(sz_buf);
+    
+    sage_execute_source(source, path);
+    
+    free(source);
+    return 0;
 }
 
 void sage_execute(const char* mod) {
@@ -430,6 +461,47 @@ static Value n_os_dmesg_log(int argCount, Value* args) {
     return val_nil();
 }
 
+static void sage_task_entry(void *arg) {
+    char *script_path = (char *)arg;
+    extern void sage_execute(const char *path);
+    sage_execute(script_path);
+    free(script_path);
+    extern void sys_exit(int code);
+    sys_exit(0);
+}
+
+static Value n_os_spawn_task(int argCount, Value* args) {
+    if (argCount < 2 || !IS_STRING(args[0]) || !IS_STRING(args[1])) {
+        return val_number(-1);
+    }
+    const char *name = AS_STRING(args[0]);
+    const char *script_path = AS_STRING(args[1]);
+
+    char *path_copy = malloc(strlen(script_path) + 1);
+    if (!path_copy) return val_number(-2);
+    strcpy(path_copy, script_path);
+
+    thread_t *t = sched_create_thread(name, sage_task_entry, path_copy, THREAD_PRIORITY_NORMAL);
+    if (!t) {
+        free(path_copy);
+        return val_number(-3);
+    }
+
+    t->permissions |= PERM_VFS_CAP_ONLY;
+
+    thread_t *parent = sched_current_thread();
+    if (parent) {
+        thread_ipc_ext_t *parent_ext = thread_ipc_ext(parent);
+        thread_ipc_ext_t *child_ext = thread_ipc_ext(t);
+        for (int i = 0; i < IPC_CAP_MAX_PER_TASK; i++) {
+            child_ext->cap_table.caps[i] = parent_ext->cap_table.caps[i];
+        }
+        child_ext->cap_table.next_free = parent_ext->cap_table.next_free;
+    }
+
+    return val_number(t->id);
+}
+
 // --- Module Registration ---
 
 void register_sageos_natives(ModuleCache* cache) {
@@ -458,11 +530,13 @@ void register_sageos_natives(ModuleCache* cache) {
     env_define(env, "os_dmesg_log", 12, val_native(n_os_dmesg_log));
     env_define(env, "dmesg_log", 9, val_native(n_os_dmesg_log));
     env_define(env, "os_version_string", 17, val_native(n_os_version));
+    env_define(env, "os_spawn_task", 13, val_native(n_os_spawn_task));
 
     // Register 'os' module
     Module* os = create_native_module(cache, "os");
     env_define(os->env, "write_str", 9, val_native(n_os_write_str));
     env_define(os->env, "dmesg_log", 9, val_native(n_os_dmesg_log));
+    env_define(os->env, "spawn_task", 10, val_native(n_os_spawn_task));
 
     // Register 'ipc' module
     Module* ipc = create_native_module(cache, "ipc");

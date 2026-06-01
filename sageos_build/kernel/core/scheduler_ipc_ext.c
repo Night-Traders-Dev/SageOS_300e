@@ -29,7 +29,15 @@ void sched_ipc_init_thread(thread_t *t) {
     for (int i = 0; i < IPC_CAP_MAX_PER_TASK; i++) {
         ext->cap_table.caps[i].object_type = IPC_OBJ_NONE;
         ext->cap_table.caps[i].ref_count = 0;
+        ext->cap_table.caps[i].path[0] = '\0';
     }
+
+    /* Pre-populate slot 0 with VFS Root Directory capability */
+    ext->cap_table.caps[0].object_type = IPC_OBJ_DIR;
+    ext->cap_table.caps[0].rights = IPC_CAP_RIGHT_VFS_READ | IPC_CAP_RIGHT_VFS_WRITE;
+    ext->cap_table.caps[0].ref_count = 1;
+    strcpy(ext->cap_table.caps[0].path, "/");
+    ext->cap_table.next_free = 1;
 
     ext->rpc_reply_cap = (uint32_t)-1;
     ext->rpc_timeout_tick = 0;

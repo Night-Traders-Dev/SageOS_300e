@@ -13,6 +13,7 @@
 #include "swap.h"
 #include "bootlog.h"
 #include "dmesg.h"
+#include "scheduler.h"
 
 void power_reboot(void) {
     console_write("Rebooting...\n");
@@ -208,6 +209,7 @@ void kmain(SageOSBootInfo *info) {
     extern void sage_execute_init(void);
     sage_execute_init();
     console_write("\n[TRACE] After sage_execute_init");
+    sched_yield();
 
     // --- STAGE 7: Userspace Session ---
     sageos_set_boot_stage(STAGE_7_USERSPACE_SESSION);

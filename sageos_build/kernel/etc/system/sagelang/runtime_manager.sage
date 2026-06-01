@@ -9,7 +9,8 @@ let dependencies = {
     "vfs.root": [],
     "net.stack": ["pci.bus"],
     "dev.manager": ["vfs.root"],
-    "shell": ["dev.manager", "vfs.root"]
+    "shell": ["dev.manager", "vfs.root"],
+    "sched": ["vfs.root"]
 }
 
 proc log(msg):
@@ -32,15 +33,23 @@ proc start_service(name):
                 start_service(dep)
             i = i + 1
 
-    # In a real system, we would spawn a process here.
-    # For now, we simulate service activation.
-    services[name] = {"status": "active", "pid": 100 + len(services)}
-    log("Service " + name + " is now active.")
+    # Spawn live task using our new FFI bridge or simulate if it is a platform service
+    let pid = -1
+    if name == "shell":
+        pid = os_spawn_task("shell", "/etc/sagelang/shell.sage")
+    elif name == "sched":
+        pid = os_spawn_task("sched_monitor", "/etc/sagelang/sched.sage")
+    else:
+        # Mock or platform driver
+        pid = 100 + len(services)
+
+    services[name] = {"status": "active", "pid": pid}
+    log("Service " + name + " is now active with PID " + str(pid) + ".")
 
 proc monitor_loop():
     log("Supervisor monitoring loop started.")
     while true:
-        # Simple spin-loop delay as a workaround for timer/sleep unavailability
+        # Delay loop that allows scheduler to run smoothly
         let i = 0
         while i < 1000000:
             let dummy = 1
@@ -52,7 +61,8 @@ log("SageOS Runtime Manager initializing...")
 # Bootstrap critical services in order
 start_service("vfs.root")
 start_service("dev.manager")
+start_service("sched")
 start_service("shell")
 
-# log("System bootstrap complete. Transitioning to monitor mode.")
-# monitor_loop()
+log("System bootstrap complete. Transitioning to monitor mode.")
+monitor_loop()

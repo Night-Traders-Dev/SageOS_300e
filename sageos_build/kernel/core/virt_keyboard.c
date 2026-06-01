@@ -13,7 +13,12 @@ static inline uint8_t inb(uint16_t port) {
 int serial_avail(void) { return inb(UART_BASE + 5) & 1; }
 char serial_getc(void) {
     extern void timer_poll(void);
-    while (!(inb(UART_BASE + 5) & 1)) { timer_poll(); __asm__ volatile("pause"); }
+    extern void sched_yield(void);
+    while (!(inb(UART_BASE + 5) & 1)) { 
+        timer_poll(); 
+        sched_yield(); 
+        __asm__ volatile("pause"); 
+    }
     return (char)inb(UART_BASE);
 }
 #elif defined(__aarch64__)
@@ -21,7 +26,11 @@ char serial_getc(void) {
 int serial_avail(void) { return !(*(volatile uint32_t *)(UART_BASE + 0x18) & 0x10); }
 char serial_getc(void) {
     extern void timer_poll(void);
-    while (*(volatile uint32_t *)(UART_BASE + 0x18) & 0x10) { timer_poll(); }
+    extern void sched_yield(void);
+    while (*(volatile uint32_t *)(UART_BASE + 0x18) & 0x10) { 
+        timer_poll(); 
+        sched_yield(); 
+    }
     return (char)(*(volatile uint32_t *)(UART_BASE) & 0xFF);
 }
 #elif defined(__riscv)
@@ -29,7 +38,11 @@ char serial_getc(void) {
 int serial_avail(void) { return *(volatile uint8_t *)(UART_BASE + 5) & 1; }
 char serial_getc(void) {
     extern void timer_poll(void);
-    while (!(*(volatile uint8_t *)(UART_BASE + 5) & 1)) { timer_poll(); }
+    extern void sched_yield(void);
+    while (!(*(volatile uint8_t *)(UART_BASE + 5) & 1)) { 
+        timer_poll(); 
+        sched_yield(); 
+    }
     return (char)*(volatile uint8_t *)(UART_BASE);
 }
 #endif

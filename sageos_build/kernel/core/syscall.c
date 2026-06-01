@@ -204,6 +204,32 @@ long syscall_dispatch(long num, long a1, long a2, long a3,
 
 /* --- Syscall Implementations --- */
 
+bool task_has_vfs_cap(task_t *t, const char *path, uint32_t required_right) {
+    if (!t) return false;
+    if (!(t->permissions & PERM_VFS_CAP_ONLY)) return true;
+
+    thread_ipc_ext_t *ext = thread_ipc_ext(t);
+    for (int i = 0; i < IPC_CAP_MAX_PER_TASK; i++) {
+        ipc_capability_t *cap = &ext->cap_table.caps[i];
+        if (ipc_cap_is_valid(cap) && (cap->object_type == IPC_OBJ_DIR || cap->object_type == IPC_OBJ_FILE)) {
+            if (!(cap->rights & required_right)) continue;
+            size_t cap_path_len = strlen(cap->path);
+            if (strncmp(path, cap->path, cap_path_len) == 0) {
+                if (cap->object_type == IPC_OBJ_DIR) {
+                    if (path[cap_path_len] == '\0' || path[cap_path_len] == '/' || strcmp(cap->path, "/") == 0) {
+                        return true;
+                    }
+                } else {
+                    if (strcmp(path, cap->path) == 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 long sys_write(int fd, const void *buf, size_t count) {
     task_t *t = current_task();
     if (!buf) return -VFS_EINVAL;
@@ -271,6 +297,12 @@ long sys_open(const char *path, int flags, int mode) {
     task_t *t = current_task();
     if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
     if (!t) return -VFS_EINVAL;
+
+    uint32_t required = (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC)) ? IPC_CAP_RIGHT_VFS_WRITE : IPC_CAP_RIGHT_VFS_READ;
+    if (!task_has_vfs_cap(t, path, required)) {
+        dmesg_log("SECURITY: Denied VFS open access (no capability)");
+        return -VFS_EACCES;
+    }
 
     /* Handle O_CREAT */
     VfsStat st;
@@ -367,7 +399,12 @@ long sys_fstat(int fd, struct stat *st) {
 }
 
 long sys_unlink(const char *path) {
+    task_t *t = current_task();
     if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
+    if (!task_has_vfs_cap(t, path, IPC_CAP_RIGHT_VFS_WRITE)) {
+        dmesg_log("SECURITY: Denied VFS unlink access (no capability)");
+        return -VFS_EACCES;
+    }
     return (long)vfs_unlink(path);
 }
 
@@ -412,7 +449,12 @@ long sys_getdents64(int fd, void *dirp, size_t count) {
 }
 
 long sys_mkdir(const char *path, int mode) {
+    task_t *t = current_task();
     if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
+    if (!task_has_vfs_cap(t, path, IPC_CAP_RIGHT_VFS_WRITE)) {
+        dmesg_log("SECURITY: Denied VFS mkdir access (no capability)");
+        return -VFS_EACCES;
+    }
     (void)mode;
     return (long)vfs_mkdir(path);
 }
@@ -430,6 +472,10 @@ long sys_chdir(const char *path) {
     task_t *t = current_task();
     if (!path || safe_strnlen(path, 1024) >= VFS_MAX_PATH) return -VFS_EINVAL;
     if (!t) return -VFS_EINVAL;
+    if (!task_has_vfs_cap(t, path, IPC_CAP_RIGHT_VFS_READ)) {
+        dmesg_log("SECURITY: Denied VFS chdir access (no capability)");
+        return -VFS_EACCES;
+    }
     VfsStat st;
     if (vfs_stat(path, &st) < 0) return -VFS_ENOENT;
     if (st.type != VFS_DIRECTORY) return -VFS_ENOTDIR;

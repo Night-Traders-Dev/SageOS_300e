@@ -33,4 +33,4 @@ while i < t_count:
 print "DONE"
 
 # Spawn interactive userspace shell (Stage 7)
-os_spawn_task("shell", "/etc/sagelang/shell.sage")
+os_spawn_task("shell", "lib/sagelang/sage_shell_combined.sage")

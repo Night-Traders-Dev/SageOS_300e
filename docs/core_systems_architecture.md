@@ -1,6 +1,6 @@
 # SageOS Core Systems Architecture Specification
 
-Revision 0.6.3 (Formalized)
+Revision 0.7.0 (Formalized)
 
 Project: "github.com/Night-Traders-Dev/SageOS"
 
@@ -10,9 +10,10 @@ Project: "github.com/Night-Traders-Dev/SageOS"
 
 SageOS is a runtime-centric operating environment built around the SGVM execution substrate. 
 
-Version 0.6 formalizes the core communication, security, and supervision layers, establishing a stable foundation for a truly managed operating environment.
+Version 0.7 formalizes the **Platform Specification** and granular bootstrap sequence, establishing a stable handshake between the kernel and the language runtime.
 
 Detailed specifications for core subsystems can be found in:
+- [**Platform Specification**](architecture/platform_spec.md)
 - [**IPC Subsystem**](architecture/ipc.md)
 - [**Security Model**](architecture/security.md)
 - [**Internal API Contracts**](architecture/internal_apis.md)
@@ -59,19 +60,23 @@ The system is designed for:
 
 2.1 Boot Philosophy
 
-Boot is divided into three stages:
+Boot is divided into 8 granular stages, each satisfying specific preconditions before transition:
 
-Firmware
+Firmware (Stage 0)
     ↓
-Bootstrap Loader
+Early MM (Stage 1)
     ↓
-Microkernel Runtime Initialization
+IRQ & System (Stage 2)
     ↓
-SGVM Runtime Bring-up
+Device Discovery (Stage 3)
     ↓
-System Service Activation
+Storage & VFS (Stage 4)
     ↓
-Userspace Session
+Runtime Bring-up (Stage 5)
+    ↓
+Service Activation (Stage 6)
+    ↓
+Userspace Session (Stage 7)
 
 SageOS boot prioritizes:
 
@@ -90,8 +95,9 @@ Stage 0 — Firmware
 Supported:
 
 - UEFI
+- OpenSBI
+- U-Boot
 - Limine
-- future embedded loaders
 
 Responsibilities:
 
@@ -103,58 +109,76 @@ Responsibilities:
 
 ---
 
-Stage 1 — Early Kernel Initialization
+Stage 1 — Early Memory Management
 
 Responsibilities:
 
 - establish identity paging
-- initialize early allocator
-- initialize interrupt handling
-- initialize serial/debug console
-- initialize architecture HAL
+- initialize physical frame allocator (PMM)
+- initialize virtual memory manager (VMM)
 - bring up BSP core
-
-Subsystems initialized:
-
-- PMM
-- VMM
-- scheduler core
-- timer subsystem
-- interrupt routing
 
 ---
 
-Stage 2 — Runtime Bring-up
+Stage 2 — IRQ & System Init
+
+Responsibilities:
+
+- initialize interrupt controller
+- setup exception vectors / traps
+- initialize architecture-specific syscall handling
+
+---
+
+Stage 3 — Device Discovery & IPC
+
+Responsibilities:
+
+- scan hardware buses (PCI, etc.)
+- initialize basic console and timers
+- boot IPC subsystem and capability manager
+
+---
+
+Stage 4 — Storage & VFS Mounting
+
+Responsibilities:
+
+- load storage drivers (ATA, VirtIO)
+- mount root filesystem (FAT32/BTRFS)
+- establish `/etc`, `/boot`, and `/dev` structure
+
+---
+
+Stage 5 — Runtime Bring-up
 
 Responsibilities:
 
 - initialize SGVM core
 - initialize runtime object allocator
-- initialize IPC namespace
-- initialize VFS root
-- initialize service registry
-- initialize capability manager
+- bind IPC namespace to runtime
 
-The SGVM runtime becomes available before userspace launch.
+The SGVM runtime becomes available before system services launch.
 
 ---
 
-Stage 3 — System Service Activation
+Stage 6 — Service Activation
 
-Core services launched:
+Responsibilities:
 
-- VFS service
-- device manager
-- process manager
-- runtime manager
-- security manager
-- shell/session service
+- launch `runtime_manager.sage` (PID 1)
+- bootstrap critical system services
+- establish service registry
 
-Services may execute:
+---
 
-- natively
-- inside SGVM
-- or hybridized
+Stage 7 — Userspace Session
+
+Responsibilities:
+
+- transition to interactive shell
+- enable multiuser support
+- load optional desktop/UI components
 
 ---
 

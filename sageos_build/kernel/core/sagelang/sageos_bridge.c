@@ -98,6 +98,8 @@ void __aarch64_cas8_acq_rel(void) {}
 void __aarch64_ldadd8_acq_rel(void) {}
 #endif
 
+#include "version.h"
+
 void sage_repl_init(void) {
     if (!g_sage_env) {
         g_sage_cache = create_module_cache();
@@ -109,6 +111,10 @@ void sage_repl_init(void) {
         extern void init_stdlib(Env* env);
         init_stdlib(g_sage_env);
         register_sageos_natives(g_sage_cache);
+
+        // Define ABI version constants for runtime/kernel handshake
+        env_define_const(g_sage_env, "SAGE_ABI_MAJOR", 14, val_number(SAGE_ABI_MAJOR));
+        env_define_const(g_sage_env, "SAGE_ABI_MINOR", 14, val_number(SAGE_ABI_MINOR));
     }
 }
 
@@ -148,63 +154,13 @@ static Stmt* sage_parse_string(const char* source) {
     return parse();
 }
 
-void sage_execute(const char* mod) {
-    sage_repl_init();
-    
-    if (mod == NULL || *mod == 0) {
-        // ... (REPL logic)
-        return;
-    }
-    
-    // Check if mod is a file path
-    VfsStat st;
-    console_write("\nsage: executing ");
-    if (mod) console_write(mod);
-    if (vfs_stat(mod, &st) == VFS_OK && st.type == VFS_FILE) {
-        console_write(" (file found, size: ");
-        char szbuf[16]; snprintf(szbuf, 16, "%d", (int)st.size);
-        console_write(szbuf);
-        console_write(")\n");
-        char* source = (char*)malloc((size_t)st.size + 1);
-        if (source) {
-            vfs_read(mod, 0, source, (size_t)st.size);
-            source[st.size] = 0;
-
-            console_write("sage: first 20 bytes: [");
-            for(int i=0; i<20 && i<st.size; i++) {
-                if(source[i] >= 32 && source[i] <= 126) console_putc(source[i]);
-                else console_putc('.');
-            }
-            console_write("]\n");
-
-            init_lexer(source, mod);
-            parser_init();
-
-            bool found_any = false;
-            while (1) {
-                Stmt* program = parse();
-                if (program == NULL) break;
-                found_any = true;
-                interpret(program, g_sage_env);
-            }
-
-            if (!found_any) {
-                console_write("sage: parse error or empty file\n");
-            }
-            free(source);
-        } else {
-            console_write("sage: out of memory\n");
-        }
-        return;
-    }
-
-    console_write(" (file not found)\n");
-
-    // Otherwise treat as direct code
-    dmesg_printf("sage_execute: treating %s as direct code", mod);
-    init_lexer(mod, "direct_code");
+void sage_execute_source(const char* source, const char* name) {
+    if (!source) return;
+    init_lexer(source, name);
     parser_init();
-    g_repl_mode = 1;
+    
+    // Check if we are in a REPL-like context or if we should just execute the whole block
+    // For now, we just execute the statements found.
     if (setjmp(g_repl_error_jmp) == 0) {
         while (1) {
             Stmt* program = parse();
@@ -212,7 +168,53 @@ void sage_execute(const char* mod) {
             interpret(program, g_sage_env);
         }
     }
-    g_repl_mode = 0;
+}
+
+int sage_execute_file(const char* path) {
+    VfsStat st;
+    if (vfs_stat(path, &st) == VFS_OK && st.type == VFS_FILE) {
+        char* source = (char*)malloc((size_t)st.size + 1);
+        if (!source) {
+            console_write("sage: out of memory reading file\n");
+            return -1;
+        }
+        
+        vfs_read(path, 0, source, (size_t)st.size);
+        source[st.size] = 0;
+        
+        sage_execute_source(source, path);
+        
+        free(source);
+        return 0;
+    }
+    return -1;
+}
+
+void sage_execute(const char* mod) {
+    sage_repl_init();
+    
+    if (mod == NULL || *mod == 0) {
+        // REPL mode (not fully implemented here as a block, usually handled via sage_repl_step)
+        return;
+    }
+    
+    // Heuristic to decide if this is a file path or direct code
+    bool is_path = (mod[0] == '/' || mod[0] == '.' || strstr(mod, ".sage") != NULL);
+    
+    console_write("\nsage: executing ");
+    if (mod) console_write(mod);
+
+    if (is_path) {
+        if (sage_execute_file(mod) == 0) {
+            console_write(" (ok)\n");
+            return;
+        }
+        console_write(" (file not found or error)\n");
+        return; // DO NOT fall through if it was clearly meant to be a path
+    }
+
+    console_write(" (direct code)\n");
+    sage_execute_source(mod, "direct_code");
 }
 
 // --- Input Helpers ---

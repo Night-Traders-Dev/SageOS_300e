@@ -132,8 +132,8 @@ void kmain(SageOSBootInfo *info) {
         info = &dummy_info;
     }
 
-    // --- STAGE 1: Early Kernel Initialization ---
-    sageos_set_boot_stage(STAGE_1_KERNEL_INIT);
+    // --- STAGE 1: Early Memory Management ---
+    sageos_set_boot_stage(STAGE_1_EARLY_MM);
     
     serial_init();
     
@@ -144,27 +144,33 @@ void kmain(SageOSBootInfo *info) {
     console_init(info);
     console_clear();
     console_write("SageOS Virt Kernel Booting...\n");
+    
+    phys_init(info);
+    vmm_init();
+
+    // --- STAGE 2: IRQ & System Init ---
+    sageos_set_boot_stage(STAGE_2_IRQ_INIT);
 
 #if defined(__x86_64__)
     x86_64_syscall_init();
 #elif defined(__aarch64__)
     setup_vectors();
 #endif
-    
-    phys_init(info);
-    vmm_init();
+
+    // --- STAGE 3: Device Discovery & IPC ---
+    sageos_set_boot_stage(STAGE_3_DEVICE_DISCOVERY);
     
     extern void ipc_subsystem_init(void);
     ipc_subsystem_init();
     
     keyboard_init();
-    vfs_init();
-
     extern void sage_timer_init(void);
     sage_timer_init();
-
-    // Initialize block device subsystem (ATA/Virtio)
     ata_init();
+
+    // --- STAGE 4: Storage & VFS Mounting ---
+    sageos_set_boot_stage(STAGE_4_STORAGE_VFS);
+    vfs_init();
 
     // Initialize and mount filesystems
     if (fat32_init()) {
@@ -188,24 +194,23 @@ void kmain(SageOSBootInfo *info) {
     bootlog_init(info);
     console_write("\n[TRACE] After bootlog_init");
     
-    // --- STAGE 2: Runtime Bring-up ---
-    sageos_set_boot_stage(STAGE_2_RUNTIME_BRINGUP);
-    console_write("\n[TRACE] After stage 2 set");
+    // --- STAGE 5: Runtime Bring-up ---
+    sageos_set_boot_stage(STAGE_5_RUNTIME_BRINGUP);
+    console_write("\n[TRACE] After stage 5 set");
     sage_runtime_init();
     console_write("\n[TRACE] After sage_runtime_init");
 
     dmesg_log("SageOS Virt Kernel initialization complete.");
     
-    // --- STAGE 3: System Service Activation ---
-    sageos_set_boot_stage(STAGE_3_SERVICE_ACTIVATION);
-    console_write("\n[TRACE] After stage 3 set");
-    // Future: launch VFS service, device manager, etc.
+    // --- STAGE 6: System Service Activation ---
+    sageos_set_boot_stage(STAGE_6_SERVICE_ACTIVATION);
+    console_write("\n[TRACE] After stage 6 set");
     extern void sage_execute_init(void);
     sage_execute_init();
     console_write("\n[TRACE] After sage_execute_init");
 
-    // --- Userspace Session ---
-    sageos_set_boot_stage(STAGE_USERSPACE_SESSION);
+    // --- STAGE 7: Userspace Session ---
+    sageos_set_boot_stage(STAGE_7_USERSPACE_SESSION);
 
     // Launch interactive C shell
     shell_run();

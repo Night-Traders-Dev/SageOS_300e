@@ -1,15 +1,18 @@
-# SageOS v0.6.3 - Formalized Hybrid Operating System
+# SageOS v0.7.0 - Formalized Hybrid Operating System
 
 SageOS is a hybrid operating system that combines a low-level C kernel with a high-level, SageLang-driven runtime. It is designed to be modular, secure, and fully observable across multiple architectures.
 
 ## What SageOS Provides
 - **Hybrid kernel architecture**: C for performance, SageLang for system services, shell logic, and runtime extensions.
 - **Multi-architecture support**: Native ports for x86_64, ARM64 (AArch64), and RISC-V 64.
+- **Formalized Bootstrap Sequence**: 8 granular stages ensuring predictable system bring-up.
 - **Self-Healing Runtime Supervision**: Managed by `runtime_manager.sage` (PID 1) with auto-restart and dependency orchestration.
 - **Capability-First Security**: Strict authority gating via unforgeable tokens and task-level permissions.
 - **Deep Instrumentation**: System-wide telemetry for real-time observability of scheduler, IPC, and VM events.
 
-## Core Features (v0.6.3)
+## Core Features (v0.7.0)
+- **Platform Specification**: Canonical architectural contract defining boot stages, runtime ownership, and ABI guarantees.
+- **Granular Boot Stages**: Explicit state machine (Firmware -> MM -> IRQ -> Device -> VFS -> Runtime -> Service -> Userspace).
 - **Hardened Build Pipeline**: Isolated, architecture-specific disk images (`virt-x64.img`, `virt-arm64.img`) to prevent binary and state cross-contamination.
 - **SGVM ABI v2.0**: Robust versioning handshake between the Sage compiler and MetalVM runtime, preventing incompatible bytecode execution.
 - **Optimized Iteration**: Decoupled build and run actions for faster development cycles.
@@ -18,11 +21,10 @@ SageOS is a hybrid operating system that combines a low-level C kernel with a hi
 - **Capability Security**: Permission-gated syscalls (reboot, raw IO) and isolated resource access.
 - **System Supervision**: SageLang-native PID 1 supervisor managing the system bootstrap and service health.
 - **Unified Telemetry**: High-performance circular trace buffer providing deep insight into kernel and VM behavior.
-- **Multi-Arch Binary Execution**: Load and execute static ELF64 binaries on x64, ARM64, and RV64.
-- **Native Toolchain Integration**: GCC 14.1.0 pre-installed in the disk image for on-device C development.
 
 ## Documentation
 SageOS documentation is organized into focused architectural specifications:
+- [Platform Specification](docs/architecture/platform_spec.md) - **NEW**
 - [Core Systems Architecture](docs/core_systems_architecture.md)
 - [IPC Subsystem Spec](docs/architecture/ipc.md)
 - [Security Model](docs/architecture/security.md)

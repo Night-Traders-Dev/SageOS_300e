@@ -6,15 +6,19 @@ static SageOSBootStage g_current_stage = STAGE_0_FIRMWARE;
 
 const char* stage_names[] = {
     "STAGE 0: Firmware",
-    "STAGE 1: Early Kernel Initialization",
-    "STAGE 2: SGVM Runtime Bring-up",
-    "STAGE 3: System Service Activation",
-    "Userspace Session"
+    "STAGE 1: Early Memory Management",
+    "STAGE 2: IRQ & System Init",
+    "STAGE 3: Device Discovery & IPC",
+    "STAGE 4: Storage & VFS Mounting",
+    "STAGE 5: Runtime Bring-up",
+    "STAGE 6: Service Activation",
+    "STAGE 7: Userspace Session",
+    "System Halt"
 };
 
 void sageos_set_boot_stage(SageOSBootStage stage) {
     g_current_stage = stage;
-    if (stage <= STAGE_USERSPACE_SESSION) {
+    if (stage <= STAGE_HALT) {
         dmesg_printf("BOOT: Transitioning to %s", stage_names[stage]);
     }
 }

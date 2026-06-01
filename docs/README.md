@@ -1,6 +1,7 @@
 # SageOS Documentation Index
 
 ## Architectural Specifications
+- [**Platform Specification**](architecture/platform_spec.md): Canonical contract defining boot stages, runtime ownership, and ABI guarantees.
 - [**Core Systems Architecture**](core_systems_architecture.md): The high-level philosophy and design of the SageOS hybrid kernel.
 - [**IPC Subsystem**](architecture/ipc.md): Formal specification of the communication backbone and capability manager.
 - [**Security Model**](architecture/security.md): Overview of the Capability-First authority gating and system permissions.

@@ -14,7 +14,7 @@ let dependencies = {
 
 proc log(msg):
     print "[SUPERVISOR] " + msg
-    dmesg_log("[SUPERVISOR] " + msg)
+    os_dmesg_log("[SUPERVISOR] " + msg)
 
 proc start_service(name):
     if dict_has(services, name):

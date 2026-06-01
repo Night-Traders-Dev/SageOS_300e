@@ -1,6 +1,6 @@
 # SageOS Core Systems Architecture Specification
 
-Revision 0.6.2 (Formalized)
+Revision 0.6.3 (Formalized)
 
 Project: "github.com/Night-Traders-Dev/SageOS"
 

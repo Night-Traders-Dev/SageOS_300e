@@ -654,6 +654,31 @@ static Value n_os_set_color(int argCount, Value* args) {
     return val_nil();
 }
 
+extern int battery_percent(void);
+extern uint32_t timer_cpu_percent(void);
+extern uint64_t ram_used_bytes(void);
+extern uint64_t ram_total_bytes(void);
+
+static Value n_os_battery_percent(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    return val_number((double)battery_percent());
+}
+
+static Value n_os_cpu_percent(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    return val_number((double)timer_cpu_percent());
+}
+
+static Value n_os_ram_used_mb(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    return val_number((double)(ram_used_bytes()/1024/1024));
+}
+
+static Value n_os_ram_total_mb(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    return val_number((double)(ram_total_bytes()/1024/1024));
+}
+
 static Value n_os_status_refresh(int argCount, Value* args) {
     (void)argCount; (void)args;
     extern void status_refresh(void);
@@ -764,6 +789,10 @@ void register_sageos_natives(ModuleCache* cache) {
     env_define(env, "os_status_refresh", 17, val_native(n_os_status_refresh));
     env_define(env, "os_get_tasks", 12, val_native(n_os_get_tasks));
     env_define(env, "read_line", 9, val_native(n_read_line));
+    env_define(env, "os_battery_percent", 18, val_native(n_os_battery_percent));
+    env_define(env, "os_cpu_percent", 14, val_native(n_os_cpu_percent));
+    env_define(env, "os_ram_used_mb", 14, val_native(n_os_ram_used_mb));
+    env_define(env, "os_ram_total_mb", 15, val_native(n_os_ram_total_mb));
 
     // Register 'os' module
     Module* os = create_native_module(cache, "os");

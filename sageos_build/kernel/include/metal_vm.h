@@ -29,15 +29,15 @@ extern "C" {
 #endif
 
 #ifndef METAL_POOL_SIZE
-#define METAL_POOL_SIZE       2048    // Object pool entries
+#define METAL_POOL_SIZE       4096    // Object pool entries
 #endif
 
 #ifndef METAL_STRING_POOL
-#define METAL_STRING_POOL     1048576 // String storage bytes (1MB)
+#define METAL_STRING_POOL     2097152 // String storage bytes (2MB)
 #endif
 
 #ifndef METAL_HEAP_SIZE
-#define METAL_HEAP_SIZE       4194304 // General heap bytes (4MB)
+#define METAL_HEAP_SIZE       8388608 // General heap bytes (8MB)
 #endif
 
 #ifndef METAL_CONST_POOL

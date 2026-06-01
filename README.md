@@ -1,4 +1,4 @@
-# SageOS v0.7.3 - Formalized Hybrid Operating System
+# SageOS v0.7.7 - High-Stability Hybrid Operating System
 
 SageOS is a hybrid operating system that combines a low-level C kernel with a high-level, SageLang-driven runtime. It is designed to be modular, secure, and fully observable across multiple architectures.
 
@@ -7,19 +7,22 @@ SageOS is a hybrid operating system that combines a low-level C kernel with a hi
 - **Multi-architecture support**: Native ports for x86_64, ARM64 (AArch64), and RISC-V 64.
 - **Formalized Bootstrap Sequence**: 8 granular stages ensuring predictable system bring-up.
 - **Asynchronous Runtime Supervision**: Managed by `runtime_manager.sage` (PID 1) running as a persistent background kernel task.
-- **Capability-First Security**: Strict authority gating via unforgeable tokens and task-level permissions, now including **VFS Capability Gating**.
+- **Capability-First Security**: Strict authority gating via unforgeable tokens and task-level permissions.
 - **Deep Instrumentation**: System-wide telemetry for real-time observability of scheduler, IPC, and VM events.
 
-## Core Features (v0.7.3)
+## Core Features (v0.7.7)
+- **High-Stability Memory Model**: Coalescing free-list allocator in the kernel's SageLang arena, preventing fragmentation.
+- **Kernel Software Watchdog**: Real-time monitoring of system health; automatically panics on deadlocks or OOM-induced hangs.
+- **AST Leak Mitigation**: Surgical memory management in the interpreter loop, ensuring nodes are reclaimed after execution.
+- **Managed Memory pressure**: Periodic background GC cycles and explicit collection points in critical system services.
 - **Platform Specification**: Canonical architectural contract defining boot stages, runtime ownership, and ABI guarantees.
 - **Granular Boot Stages**: Explicit state machine (Firmware -> MM -> IRQ -> Device -> VFS -> Runtime -> Service -> Userspace).
 - **Asynchronous Boot**: Service activation (Stage 6) now launches the supervisor in the background, allowing for immediate multitasking.
 - **Capability-First VFS**: Secure file and directory access mediated by IPC capabilities (`IPC_OBJ_FILE`, `IPC_OBJ_DIR`).
 - **Cooperative Preemption**: Integrated timer polling within the MetalVM runtime to prevent execution lockups.
 - **Dynamic Task Spawning**: FFI-driven process management via `os_spawn_task`.
-- **Hardened Build Pipeline**: Isolated, architecture-specific disk images (`virt-x64.img`, `virt-arm64.img`) to prevent binary and state cross-contamination.
-- **SGVM ABI v2.0**: Robust versioning handshake between the Sage compiler and MetalVM runtime, preventing incompatible bytecode execution.
-- **Optimized Iteration**: Decoupled build and run actions for faster development cycles.
+- **Hardened Build Pipeline**: Isolated, architecture-specific disk images (`virt-x64.img`, `virt-arm64.img`) to prevent cross-contamination.
+- **SGVM ABI v2.0**: Robust versioning handshake between the Sage compiler and MetalVM runtime.
 - **Robust RootFS System**: Explicit directory structure preservation and improved `mtools`-based merging.
 - **Formalized IPC**: Robust communication backbone with strict object lifecycle and capability routing.
 - **Unified Telemetry**: High-performance circular trace buffer providing deep insight into kernel and VM behavior.

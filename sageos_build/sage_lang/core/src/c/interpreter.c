@@ -3284,8 +3284,10 @@ static ExecResult interpret_inner(Stmt* stmt, Env* env) {
         stmt_count = 0;
         extern void timer_poll(void);
         extern void sched_yield(void);
+        extern void gc_collect(void);
         timer_poll();
         sched_yield();
+        gc_collect();
     }
 #endif
 

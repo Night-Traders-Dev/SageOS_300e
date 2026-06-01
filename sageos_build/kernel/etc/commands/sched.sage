@@ -37,5 +37,8 @@ proc main():
 
     os_write_str("\n\033[1;36m+-----+------------------+----------+-----+\033[0m")
     os_write_str("\nTotal threads: " + os_num_to_str(t_count) + "\n")
+    
+    # Help management side by triggering a GC cycle after heavy string work
+    os_gc_collect()
 
 main()

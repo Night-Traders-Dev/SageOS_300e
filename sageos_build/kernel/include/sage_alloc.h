@@ -19,7 +19,7 @@
 #include <stdint.h>
 
 /* Arena size: 8 MB */
-#define SAGE_ARENA_SIZE  (8 * 1024 * 1024)
+#define SAGE_ARENA_SIZE  (32 * 1024 * 1024)
 
 /* Subsystem allocation tags */
 typedef enum {

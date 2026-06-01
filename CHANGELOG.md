@@ -4,6 +4,26 @@ All notable changes to SageOS will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.7] — 2026-06-01
+
+### Added
+- **Stability & Memory Resilience**: Major overhaul of the SageLang kernel runtime memory management to prevent OOM crashes during system bootstrap.
+- **Coalescing Free List Allocator**: Upgraded `sage_alloc.c` to a modern free-list allocator with block coalescing, significantly reducing heap fragmentation in the kernel's Sage arena.
+- **Software Watchdog**: Implemented a kernel-level software watchdog in the scheduler (`scheduler.c`) to detect and panic on deadlocks or OOM-induced kernel hangs.
+- **GC Observability & Control**: Exposed `os_gc_collect()` and `os_arena_reset()` to SageLang as native functions.
+- **Improved GC Accuracy**: Implemented per-thread GC root tracking in the kernel, ensuring temporary values on the C stack are correctly protected from collection.
+- **Periodic GC Triggers**: Integrated automatic GC cycles into the AST interpreter loop (every 100 statements) to manage memory pressure proactively.
+
+### Changed
+- **Increased Capacity**: Doubled MetalVM object pools (`METAL_POOL_SIZE` to 4096) and increased the SageLang arena to 32MB.
+- **Scheduler Scaling**: Increased `MAX_TASKS` from 64 to 128 to accommodate more background services.
+- **System Services**: Updated `runtime_manager.sage` and `sched.sage` to explicitly trigger GC cycles during idle periods.
+
+### Fixed
+- **AST Node Leak**: Fixed a critical memory leak in `sageos_bridge.c` where AST statement nodes were not freed after interpretation.
+- **Linker Error**: Resolved an undefined reference to `g_current_task` in `syscall.c` by restoring its global visibility.
+- **Missing Native**: Implemented the missing `os_num_to_str` native function required by several system scripts.
+
 ## [0.7.3] — 2026-06-01
 
 ### Added

@@ -29,6 +29,8 @@
 #include "version.h"
 #include "dmesg.h"
 #include "metal_vm.h"
+#include "ast.h"
+#include "gc.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -108,6 +110,10 @@ void __aarch64_ldadd8_acq_rel(void) {}
 void sage_repl_init(void) {
     sage_gil_acquire();
     if (!g_sage_env) {
+        gc_init();
+        static ThreadState main_ts = {0};
+        gc_register_thread(&main_ts);
+
         g_sage_cache = create_module_cache();
         extern ModuleCache* global_module_cache;
         global_module_cache = g_sage_cache;
@@ -142,8 +148,15 @@ extern void sage_execute(const char* mod);
 
 static void sage_supervisor_thread(void *arg) {
     (void)arg;
+    
+    ThreadState ts = {0};
+    gc_register_thread(&ts);
+
     dmesg_log("RUNTIME: Launching System Supervisor (/etc/sagelang/runtime_manager.sage)...");
     sage_execute("/etc/sagelang/runtime_manager.sage");
+    
+    gc_unregister_thread(&ts);
+
     extern void sys_exit(int code);
     sys_exit(0);
 }
@@ -198,6 +211,7 @@ void sage_execute_source(const char* source, const char* name) {
             Stmt* program = parse();
             if (program == NULL) break;
             interpret(program, g_sage_env);
+            free_stmt(program);
         }
     } else {
         console_write("\n[RUNTIME MANAGER EXCEPTION CAUGHT!]\n");
@@ -304,6 +318,19 @@ static Value n_os_version(int argCount, Value* args) {
     return val_string(SAGEOS_VERSION);
 }
 
+static Value n_os_gc_collect(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    gc_collect();
+    return val_nil();
+}
+
+static Value n_os_arena_reset(int argCount, Value* args) {
+    (void)argCount; (void)args;
+    // VERY DANGEROUS - only call if you know what you're doing
+    sage_arena_reset();
+    return val_nil();
+}
+
 static Value n_os_write_char(int argCount, Value* args) {
     if (argCount >= 1 && IS_NUMBER(args[0])) {
         console_putc((char)AS_NUMBER(args[0]));
@@ -316,6 +343,20 @@ static Value n_os_write_str(int argCount, Value* args) {
         console_write(AS_STRING(args[0]));
     }
     return val_nil();
+}
+
+static Value n_os_num_to_str(int argCount, Value* args) {
+    if (argCount < 1 || !IS_NUMBER(args[0])) return val_nil();
+    char buf[32];
+    double d = AS_NUMBER(args[0]);
+    if (d == (double)(long long)d) {
+        sage_snprintf(buf, sizeof(buf), "%lld", (long long)d);
+    } else {
+        // Fallback to minimal fixed point or just assume integer for now if %g missing
+        // sage_libc_shim snprintf only supports %d/%lld
+        sage_snprintf(buf, sizeof(buf), "%lld", (long long)d);
+    }
+    return val_string(buf);
 }
 
 static Value n_os_read_char(int argCount, Value* args) {
@@ -488,7 +529,14 @@ static Value n_os_dmesg_log(int argCount, Value* args) {
 static void sage_task_entry(void *arg) {
     char *script_path = (char *)arg;
     extern void sage_execute(const char *path);
+    
+    ThreadState ts = {0};
+    gc_register_thread(&ts);
+    
     sage_execute(script_path);
+    
+    gc_unregister_thread(&ts);
+    
     free(script_path);
     extern void sys_exit(int code);
     sys_exit(0);
@@ -562,11 +610,10 @@ static Value n_os_get_tasks(int argCount, Value* args) {
             Value state_val = val_number((double)state);
             Value cpu_val = val_number((double)cpu_id);
             
-            Dict* d = AS_DICT(task);
-            dict_set(d, "id", id_val);
-            dict_set(d, "name", name_val);
-            dict_set(d, "state", state_val);
-            dict_set(d, "cpu", cpu_val);
+            dict_set(&task, "id", id_val);
+            dict_set(&task, "name", name_val);
+            dict_set(&task, "state", state_val);
+            dict_set(&task, "cpu", cpu_val);
             
             array_push(&tasks, task);
         }
@@ -621,6 +668,9 @@ void register_sageos_natives(ModuleCache* cache) {
 
     env_define(env, "os_write_char", 13, val_native(n_os_write_char));
     env_define(env, "os_write_str", 12, val_native(n_os_write_str));
+    env_define(env, "os_gc_collect", 13, val_native(n_os_gc_collect));
+    env_define(env, "os_arena_reset", 14, val_native(n_os_arena_reset));
+    env_define(env, "os_num_to_str", 13, val_native(n_os_num_to_str));
     env_define(env, "os_read_char", 12, val_native(n_os_read_char));
     env_define(env, "os_read_key", 11, val_native(n_os_read_key));
     env_define(env, "os_poll_char", 12, val_native(n_os_poll_char));
@@ -651,6 +701,8 @@ void register_sageos_natives(ModuleCache* cache) {
     // Register 'os' module
     Module* os = create_native_module(cache, "os");
     env_define(os->env, "write_str", 9, val_native(n_os_write_str));
+    env_define(os->env, "gc_collect", 10, val_native(n_os_gc_collect));
+    env_define(os->env, "num_to_str", 10, val_native(n_os_num_to_str));
     env_define(os->env, "dmesg_log", 9, val_native(n_os_dmesg_log));
     env_define(os->env, "spawn_task", 10, val_native(n_os_spawn_task));
 

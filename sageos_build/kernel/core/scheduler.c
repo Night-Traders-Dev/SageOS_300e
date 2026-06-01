@@ -4,11 +4,60 @@
 #include "console.h"
 #include <string.h>
 
-#define MAX_TASKS 64
+#define MAX_TASKS 128
+#define WATCHDOG_TIMEOUT_TICKS 500 /* 5 seconds at 100Hz */
 
 static thread_t g_tasks[MAX_TASKS];
 thread_t *g_current_task = NULL;
 static int g_sched_inited = 0;
+static uint64_t g_watchdog_counter = 0;
+static uint64_t g_last_watchdog_update = 0;
+
+void sched_watchdog_update(void) {
+    g_watchdog_counter++;
+}
+
+static void kernel_panic(const char* msg) {
+    console_write("\n\033[1;31m!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\033[0m\n");
+    console_write("\033[1;31m!!                      KERNEL PANIC                          !!\033[0m\n");
+    console_write("\033[1;31m!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\033[0m\n");
+    console_write("Reason: ");
+    console_write(msg);
+    console_write("\n\nHalting CPU.\n");
+
+#if defined(__x86_64__) || defined(__i386__)
+
+    while (1) {
+        __asm__ volatile("cli; hlt");
+    }
+
+#elif defined(__aarch64__)
+
+    while (1) {
+        __asm__ volatile(
+            "msr daifset, #0xf\n" // mask interrupts
+            "wfi\n"               // wait for interrupt
+        );
+    }
+
+#elif defined(__riscv)
+
+    while (1) {
+        __asm__ volatile(
+            "csrci mstatus, 8\n" // clear MIE bit (disable interrupts)
+            "wfi\n"              // wait for interrupt
+        );
+    }
+
+#else
+
+    while (1) {
+        __asm__ volatile("" ::: "memory");
+    }
+
+#endif
+}
+
 static uint32_t g_next_pid = 1;
 
 extern void thread_switch(uint64_t *prev_rsp_ptr, uint64_t *next_rsp_ptr);
@@ -17,6 +66,7 @@ static void idle_task(void *arg) {
     (void)arg;
     extern void timer_idle_poll(void);
     while (1) {
+        sched_watchdog_update();
         timer_idle_poll();
         sched_schedule();
     }
@@ -142,6 +192,7 @@ void sched_schedule(void) {
          * But wait, in a cooperative system without interrupts, this is a deadlock.
          * For SageOS virt, we yield via timer_idle_poll(). */
         extern void timer_idle_poll(void);
+        sched_watchdog_update();
         timer_idle_poll();
     }
 
@@ -212,6 +263,20 @@ uint32_t sched_cpu_id(void) {
 }
 
 void sched_timer_tick(void) {
+    /* Watchdog check */
+    static uint64_t last_counter = 0;
+    static uint64_t ticks_since_update = 0;
+
+    if (g_watchdog_counter == last_counter) {
+        ticks_since_update++;
+        if (ticks_since_update > WATCHDOG_TIMEOUT_TICKS) {
+            kernel_panic("WATCHDOG TIMEOUT - Kernel hung or deadlock detected");
+        }
+    } else {
+        last_counter = g_watchdog_counter;
+        ticks_since_update = 0;
+    }
+
     /* Called by timer IRQ. Preemption logic via yield. */
     sched_yield();
 }

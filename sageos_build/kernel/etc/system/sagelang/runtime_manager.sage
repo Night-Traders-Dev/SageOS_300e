@@ -56,6 +56,7 @@ proc monitor_loop():
             i = i + 1
         log("Pulse...")
         # Yield to allow other tasks and GC to run
+        os_gc_collect()
         yield()
 
 log("SageOS Runtime Manager initializing...")

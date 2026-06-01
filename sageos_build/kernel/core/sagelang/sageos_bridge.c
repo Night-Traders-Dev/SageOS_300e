@@ -610,7 +610,18 @@ static void sage_task_entry(void *arg) {
 }
 
 static Value n_os_spawn_task(int argCount, Value* args) {
-    if (argCount < 2 || !IS_STRING(args[0]) || !IS_STRING(args[1])) {
+    console_write("[TRACE] Entering n_os_spawn_task...\n");
+    if (argCount < 2) {
+        console_write("[TRACE] n_os_spawn_task: argCount < 2\n");
+        return val_number(-1);
+    }
+    if (!IS_STRING(args[0])) {
+        console_write("[TRACE] n_os_spawn_task: args[0] is not a string\n");
+    }
+    if (!IS_STRING(args[1])) {
+        console_write("[TRACE] n_os_spawn_task: args[1] is not a string\n");
+    }
+    if (!IS_STRING(args[0]) || !IS_STRING(args[1])) {
         return val_number(-1);
     }
     const char *name = AS_STRING(args[0]);

@@ -25,12 +25,30 @@ static void idle_task(void *arg) {
 extern uint8_t stack_bottom[];
 extern uint8_t stack_top_sym[]; // to avoid conflict if any
 
+static void sched_trampoline(void) {
+    /* The newly switched-to task starts here. 
+     * Registers x19/rbx/s0 were used to store entry and arg. */
+    thread_t *t = g_current_task;
+    void (*entry)(void *) = t->entry;
+    void *arg = t->arg;
+    
+    /* Release scheduler lock if we had one (we don't yet) */
+    
+    if (entry) {
+        entry(arg);
+    }
+    
+    /* Thread finished */
+    extern void sys_exit(int code);
+    sys_exit(0);
+}
+
 void sched_init(void) {
     memset(g_tasks, 0, sizeof(g_tasks));
     
-    /* Initialize task 0 as idle task */
+    /* Initialize task 0 as boot/idle task */
     g_tasks[0].id = 0;
-    g_tasks[0].state = THREAD_STATE_READY;
+    g_tasks[0].state = THREAD_STATE_RUNNING;
     g_tasks[0].priority = THREAD_PRIORITY_LOW;
     strncpy(g_tasks[0].name, "idle", 31);
     strcpy(g_tasks[0].cwd, "/");
@@ -65,6 +83,8 @@ thread_t *sched_create_thread(const char *name, void (*entry)(void *), void *arg
     t->id = g_next_pid++;
     t->state = THREAD_STATE_READY;
     t->priority = priority;
+    t->entry = entry;
+    t->arg = arg;
     strncpy(t->name, name, 31);
     strcpy(t->cwd, "/");
     
@@ -73,21 +93,19 @@ thread_t *sched_create_thread(const char *name, void (*entry)(void *), void *arg
     t->stack_base = (uint64_t)sage_malloc(SCHED_STACK_SIZE);
     t->stack_top = t->stack_base + SCHED_STACK_SIZE;
     
-    /* Setup initial stack for thread_switch */
+    /* Setup initial stack for thread_switch to start at trampoline */
     uint64_t *sp = (uint64_t *)t->stack_top;
     
 #if defined(__aarch64__)
-    sp -= 12; /* 12 registers: x19..x30 */
-    sp[11] = (uint64_t)entry; /* x30 (LR) */
-    sp[0] = (uint64_t)arg;    /* We actually need a wrapper to pass arg to entry, 
-                                 but for simple fork we copy stack directly. */
+    sp -= 12; /* x19..x30 */
+    sp[11] = (uint64_t)sched_trampoline; /* x30 (LR) */
 #elif defined(__x86_64__)
-    sp -= 8; /* r15..r12, rbx, rbp, rip + dummy return address to align stack to 16n + 8 */
-    sp[6] = (uint64_t)entry; /* rip (popped by ret) */
-    sp[7] = 0;               /* dummy return address (staying on stack) */
+    sp -= 8; /* r15..r12, rbx, rbp, rip + dummy */
+    sp[6] = (uint64_t)sched_trampoline; /* rip */
+    sp[7] = 0;
 #elif defined(__riscv)
     sp -= 14; /* s0..s11, ra */
-    sp[13] = (uint64_t)entry; /* ra */
+    sp[13] = (uint64_t)sched_trampoline; /* ra */
 #endif
 
     t->rsp = (uint64_t)sp;

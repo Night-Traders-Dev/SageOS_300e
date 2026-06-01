@@ -15,30 +15,17 @@
 
 static uint8_t sage_heap[SAGE_ARENA_SIZE] __attribute__((aligned(16)));
 static size_t sage_bump = 0;
-
-/* Per-tag statistics */
-static alloc_stats_t g_alloc_stats[ALLOC_TAG_MAX];
-
-/* Allocation header layout (16 bytes total, maintains 16-byte alignment):
- *   [0..7]  size (size_t)
- *   [8..11] tag  (alloc_tag_t / uint32_t)
- *   [12..15] reserved / padding
- */
-#define ALLOC_HEADER_SIZE 16
-
-static const char *g_tag_names[] = {
-    "kernel",
-    "vm",
-    "vfs",
-    "ipc",
-    "parser",
-    "shell",
-    "other"
-};
+static int g_alloc_lock = 0;
 
 void *sage_malloc_tagged(size_t size, alloc_tag_t tag) {
     if (size == 0) return NULL;
     
+    while (__sync_lock_test_and_set(&g_alloc_lock, 1)) {
+        /* Spin or yield. In a cooperative kernel, we must yield. */
+        extern void sched_yield(void);
+        sched_yield();
+    }
+
     size_t raw_size = size;
     /* Align to 16 bytes */
     size = (size + 15) & ~(size_t)15;
@@ -51,6 +38,7 @@ void *sage_malloc_tagged(size_t size, alloc_tag_t tag) {
             console_write(g_tag_names[tag]);
         }
         console_write(")\n");
+        __sync_lock_release(&g_alloc_lock);
         return NULL;
     }
     
@@ -71,6 +59,7 @@ void *sage_malloc_tagged(size_t size, alloc_tag_t tag) {
     
     trace_log(TRACE_ALLOC_MALLOC, (uint64_t)raw_size, (uint64_t)ptr);
     
+    __sync_lock_release(&g_alloc_lock);
     return ptr;
 }
 

@@ -67,5 +67,9 @@ for asset in "${ASSETS[@]}"; do
     if [ -f "$src" ]; then cp "$src" "$dst"; fi
 done
 
+# Ensure the correct interactive shell.sage is placed in etc/sagelang and lib/sagelang
+cp "sageos_build/kernel/shell/sage_shell/shell.sage" "$ROOTFS/etc/sagelang/"
+cp "sageos_build/kernel/shell/sage_shell/shell.sage" "$ROOTFS/lib/sagelang/"
+
 rm -rf "$TMP_BC"
 echo "Rootfs population complete!"

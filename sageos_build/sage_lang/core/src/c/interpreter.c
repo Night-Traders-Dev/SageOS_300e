@@ -21,6 +21,7 @@
 #include "ast.h"
 #include "module.h"  // Phase 8: Module system
 #include "repl.h"    // Phase 12: REPL error recovery
+#include "scheduler.h"
 
 // Helper macro for creating normal expression results
 #define EVAL_RESULT(v) ((ExecResult){ (v), 0, 0, 0, 0, sage_nil, 0, NULL, g_gas_used, g_gas_limit })
@@ -3239,7 +3240,11 @@ static ExecResult eval_expr(Expr* expr, Env* env) {
             }
 
             // Debug: show what was attempted to be called
-            fprintf(stderr, "[DIAGNOSTIC] EXPR_CALL: callee_expr->type=%d\n", expr->as.call.callee ? expr->as.call.callee->type : -1);
+            extern thread_t *sched_current_thread(void);
+            thread_t *curr_t = sched_current_thread();
+            fprintf(stderr, "[DIAGNOSTIC] EXPR_CALL: thread=%s expr=%p callee_expr=%p callee_expr->type=%d\n",
+                    curr_t ? curr_t->name : "none", (void*)expr, (void*)expr->as.call.callee,
+                    expr->as.call.callee ? expr->as.call.callee->type : -1);
             if (expr->as.call.callee && expr->as.call.callee->type == EXPR_VARIABLE) {
                 fprintf(stderr, "Runtime Error: '%.*s' is not callable (type=%d).\n",
                         expr->as.call.callee->as.variable.name.length,

@@ -4,6 +4,7 @@
 #include "console.h"
 #include "sage_libc_shim.h"
 #include "telemetry.h"
+#include "scheduler.h"
 
 /* 
  * sage_alloc.c — Explicit Free List Allocator with Coalescing
@@ -102,6 +103,22 @@ void *sage_malloc_tagged(size_t size, alloc_tag_t tag) {
         g_alloc_stats[tag].alloc_count++;
         g_alloc_stats[tag].bytes_total += raw_size;
     }
+
+    if (tag == ALLOC_TAG_PARSER) {
+        thread_t *curr_t = sched_current_thread();
+        console_write("[DEBUG_ALLOC_PARSER] thread=");
+        if (curr_t) {
+            console_write(curr_t->name);
+        } else {
+            console_write("none");
+        }
+        console_write(" ptr=");
+        console_hex64((uint64_t)ptr);
+        console_write(" size=");
+        console_u64((uint64_t)needed - ALLOC_HEADER_SIZE);
+        console_write("\n");
+    }
+
     trace_log(TRACE_ALLOC_MALLOC, (uint64_t)raw_size, (uint64_t)ptr);
     unlock_alloc();
     return ptr;
@@ -117,6 +134,25 @@ void sage_free(void *ptr) {
 
     uint8_t *header = (uint8_t *)ptr - ALLOC_HEADER_SIZE;
     size_t user_size = *(size_t *)header;
+    alloc_tag_t tag = (alloc_tag_t)(*(uint32_t *)(header + 8));
+
+    if (tag == ALLOC_TAG_PARSER) {
+        thread_t *curr_t = sched_current_thread();
+        console_write("[DEBUG_FREE_PARSER] thread=");
+        if (curr_t) {
+            console_write(curr_t->name);
+        } else {
+            console_write("none");
+        }
+        console_write(" ptr=");
+        console_hex64((uint64_t)ptr);
+        console_write(" size=");
+        console_u64((uint64_t)user_size);
+        console_write(" caller=");
+        console_hex64((uint64_t)__builtin_return_address(0));
+        console_write("\n");
+    }
+
     size_t total_size = ALIGN(user_size + ALLOC_HEADER_SIZE);
 
     lock_alloc();

@@ -2468,7 +2468,14 @@ static ExecResult eval_binary(BinaryExpr* b, Env* env) {
 // atomic increments per expression evaluation in the critical path.
 static ExecResult eval_expr(Expr* expr, Env* env) {
     switch (expr->type) {
-        case EXPR_NUMBER: return EVAL_RESULT(val_number(expr->as.number.value));
+        case EXPR_NUMBER: {
+            union { double d; uint64_t u; } num;
+            num.d = expr->as.number.value;
+            uint32_t num_high = (uint32_t)(num.u >> 32);
+            uint32_t num_low = (uint32_t)num.u;
+            printf("[DEBUG_NUMBER] val=%d (0x%x_%x)\n", (int)expr->as.number.value, num_high, num_low);
+            return EVAL_RESULT(val_number(expr->as.number.value));
+        }
         case EXPR_STRING: return EVAL_RESULT(val_string(expr->as.string.value));
         case EXPR_BOOL:   return EVAL_RESULT(val_bool(expr->as.boolean.value));
         case EXPR_NIL:    return EVAL_RESULT(val_nil());

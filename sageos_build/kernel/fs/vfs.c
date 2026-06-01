@@ -540,13 +540,23 @@ static VfsMount *resolve_mount(const char *norm_path, const char **rel_out) {
  * ----------------------------------------------------------------------- */
 
 int vfs_stat(const char *path, VfsStat *out) {
+    extern void console_write(const char *str);
+    console_write("[VFS_STAT] ");
+    console_write(path);
+    console_write("\n");
     char norm[VFS_MAX_PATH];
     vfs_normalize_path(path, norm, VFS_MAX_PATH);
 
-    const char *rel;
+    console_write("[VFS_STAT] Normalize done\n");
+    const char *rel = NULL;
+    console_write("[VFS_STAT] Resolving mount...\n");
     VfsMount *m = resolve_mount(norm, &rel);
+    console_write("[VFS_STAT] Resolving mount done\n");
     if (m && m->backend && m->backend->stat) {
-        return m->backend->stat(m->backend, rel, out);
+        console_write("[VFS_STAT] Backend stat call...\n");
+        int res = m->backend->stat(m->backend, rel, out);
+        console_write("[VFS_STAT] Backend stat call done\n");
+        return res;
     }
 
     if (g_vfs_vm_inited) {

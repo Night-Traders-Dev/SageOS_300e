@@ -92,6 +92,7 @@ typedef struct thread {
 #define PERM_SCHED_CTL      (1U << 2)
 #define PERM_DRIVER_LOAD    (1U << 3)
 #define PERM_DEBUG_TRACE    (1U << 4)
+#define PERM_VFS_CAP_ONLY   (1U << 5)
 #define PERM_ALL            0xFFFFFFFFU
 
 typedef struct {

@@ -3267,6 +3267,17 @@ ExecResult interpret(Stmt* stmt, Env* env) {
     return result;
 }
 static ExecResult interpret_inner(Stmt* stmt, Env* env) {
+#ifdef __sageos__
+    static int stmt_count = 0;
+    if (++stmt_count >= 100) {
+        stmt_count = 0;
+        extern void timer_poll(void);
+        extern void sched_yield(void);
+        timer_poll();
+        sched_yield();
+    }
+#endif
+
     // Phase 2: Consume gas for each statement
     if (!consume_gas(10)) return gas_error();
 
